@@ -1,1 +1,1 @@
-# Parallel-Waze-System-Parallel-Programming-Project
+# Parallel-Waze-System-Project
