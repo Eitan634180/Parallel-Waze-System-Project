@@ -1,4 +1,4 @@
-import { DEFAULT_SPEED_LIMIT } from "./config.js"
+import { DEFAULT_SPEED_LIMIT } from '../core/config.js';
 
 export function formatDuration(seconds) {
     if (!seconds || seconds < 0) return '--';

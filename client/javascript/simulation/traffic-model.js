@@ -1,4 +1,4 @@
-import { DEFAULT_SPEED_LIMIT } from './config.js';
+import { DEFAULT_SPEED_LIMIT } from '../core/config.js';
 
 const MIN_DELAY_MS = 250;
 

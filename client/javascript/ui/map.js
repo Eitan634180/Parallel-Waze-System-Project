@@ -1,4 +1,4 @@
-import { flipCoords } from './utils.js';
+import { flipCoords } from '../utils/utils.js';
 
 class MapManager {
     constructor() {

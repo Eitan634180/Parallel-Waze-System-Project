@@ -85,9 +85,5 @@ timeout /t 3 /nobreak >nul
 echo Opening browser...
 start "" "%CLIENT_URL%"
 
-echo.
-echo The server can take around 2 minutes to load the graph before it starts responding.
-echo Watch the "Navigation Server" window for "Listening on :8080".
-echo Leave both new windows open while testing.
-echo.
-pause
+echo My job here is done.
+exit
