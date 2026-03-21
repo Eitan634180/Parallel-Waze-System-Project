@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"nav-system/internal/session"
 )
 
 type routeRequest struct {
@@ -22,6 +24,8 @@ type routeWithID struct {
 	Steps        interface{} `json:"steps"`
 	TotalDistM   float32     `json:"total_dist_m"`
 	TotalTimeSec float32     `json:"total_time_sec"`
+	CongestionAhead bool     `json:"congestion_ahead"`
+	CongestedEdges  int      `json:"congested_edges"`
 }
 
 func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
@@ -53,6 +57,7 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 	// Assign stable UUIDs for routes that will be referenced by POST /session.
 	resp := routeResponse{Routes: make([]routeWithID, len(routes))}
 	for i, rt := range routes {
+		rt.CongestionAhead, rt.CongestedEdges = session.RouteCongestionSummary(rt, s.store, s.g)
 		rt = s.prepareRoute(rt)
 		routes[i] = rt
 		resp.Routes[i] = routeWithID{
@@ -60,6 +65,8 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 			Steps:        rt.Steps,
 			TotalDistM:   rt.TotalDistM,
 			TotalTimeSec: rt.TotalTimeSec,
+			CongestionAhead: rt.CongestionAhead,
+			CongestedEdges:  rt.CongestedEdges,
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")

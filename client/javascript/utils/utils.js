@@ -47,6 +47,8 @@ export function processRawRoute(route) {
         pathCoords: steps.map(step => [step.lon, step.lat]),
         distance: route.total_dist_m || 0,
         dynamicETA: route.total_time_sec || 0,
+        congestionAhead: Boolean(route.congestion_ahead),
+        congestedEdges: route.congested_edges || 0,
     };
 }
 

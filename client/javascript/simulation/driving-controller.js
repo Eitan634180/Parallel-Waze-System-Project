@@ -10,7 +10,7 @@ import { ensureSimulationFeed, getLatestSimulationCars } from './debug-cars.js';
 import { processRawRoute, projectPositionOntoRoute } from '../utils/utils.js';
 import { advanceSpeedKmh, createDriverProfile, createMotionState, resolveTargetSpeedKmh } from './traffic-model.js';
 import { calculateNewPosition, limitMovementByTraffic, calculateBearing } from './driving-physics.js';
-import { computeTrafficStatus } from './traffic-evaluator.js';
+import { computeTrafficStatus, getRouteTrafficStatus } from './traffic-evaluator.js';
 
 let drivingWorker = null;
 let pingElapsedMs = 0;
@@ -219,7 +219,12 @@ export async function stopDriving() {
     const sessionId = state.drive.sessionId;
     resetDrivingSession();
     renderMainCarDebug(null);
-    updateTrafficStatus('normal');
+    if (state.routing.activeObj) {
+        const traffic = getRouteTrafficStatus(state.routing.activeObj);
+        updateTrafficStatus(traffic.level, traffic.detail);
+    } else {
+        updateTrafficStatus('normal');
+    }
 
     if (sessionId) {
         try {

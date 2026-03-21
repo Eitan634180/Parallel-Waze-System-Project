@@ -8,6 +8,7 @@ import { updateETA, updateDistance, updateTrafficStatus } from './ui/ui-hud.js';
 import { renderEdgeDebugInfo, setRouteInspectorButtonState } from './ui/ui-debug.js';
 import { setupDebugTools } from './ui/debug-controller.js';
 import { startDriving, stopDriving } from './simulation/driving-controller.js';
+import { getRouteTrafficStatus } from './simulation/traffic-evaluator.js';
 import { processRawRoute } from './utils/utils.js';
 
 async function handleCalculateRoute() {
@@ -47,7 +48,8 @@ function handleRouteSelection(index) {
 
     updateETA(route.dynamicETA);
     updateDistance(route.distance);
-    updateTrafficStatus('normal');
+    const traffic = getRouteTrafficStatus(route);
+    updateTrafficStatus(traffic.level, traffic.detail);
 
     mapInstance.drawRoute(route.pathCoords, state.routing.source, state.routing.dest)
     mapInstance.drawAlternatives(state.routing.allRoutes.filter((_, i) => i !== index));
