@@ -4,7 +4,7 @@ import { mapInstance } from '../ui/map.js';
 
 let activeCount = 0;
 let simulationReadyPromise = null;
-let latestCars = [];
+let cars = [];
 let onUpdateCallback = null;
 
 export function setDebugCarCallback(callback) {
@@ -16,10 +16,10 @@ export async function ensureSimulationFeed() {
     if (simulationReadyPromise) return simulationReadyPromise;
 
     simulationReadyPromise = connectToSimulation({
-        onSnapshot: (cars) => {
-            latestCars = cars || [];
-            activeCount = latestCars.length;
-            mapInstance.syncDebugCars(cars);
+        onSnapshot: (snapshotCars) => {
+            cars = snapshotCars || [];
+            activeCount = cars.length;
+            mapInstance.syncDebugCars(snapshotCars);
             if (onUpdateCallback) onUpdateCallback({ active: activeCount });
         },
     }).catch((err) => {
@@ -48,19 +48,20 @@ export async function spawnRandomDebugCars(count) {
 
 export async function clearDebugCars() {
     await clearSimulationCars();
+    cars = [];
     activeCount = 0;
     mapInstance.clearDebugCars();
     if (onUpdateCallback) onUpdateCallback({ active: activeCount });
 }
 
 export function getLatestSimulationCars() {
-    return latestCars.slice();
+    return cars.slice();
 }
 
 export function disconnectDebugCars() {
     disconnectSimulation();
     simulationReadyPromise = null;
-    latestCars = [];
+    cars = [];
     activeCount = 0;
     mapInstance.clearDebugCars();
     if (onUpdateCallback) onUpdateCallback({ active: activeCount });
