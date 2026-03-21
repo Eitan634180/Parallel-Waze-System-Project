@@ -655,25 +655,30 @@ button {
   top: 64px;
   right: 24px;
   z-index: 1001;
-  width: 320px;
+  width: 360px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 18px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .debug-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
 }
 
 .debug-header h3 {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
+  letter-spacing: -0.2px;
 }
 
 #close-debug {
@@ -684,53 +689,99 @@ button {
   line-height: 1;
 }
 
+.debug-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(242, 244, 245, 0.88);
+  border: 1px solid rgba(229, 233, 234, 0.9);
+  border-radius: 18px;
+}
+
+.debug-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  color: var(--text-secondary);
+}
+
 .debug-tool-btn {
   width: 100%;
   border: none;
   border-radius: 14px;
   padding: 12px 14px;
-  background: var(--bg-main);
+  background: white;
+  border: 1px solid var(--border-light);
   color: var(--text-primary);
   font-weight: 800;
   text-align: left;
   transition: var(--transition);
 }
 
+.debug-tool-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(3, 28, 48, 0.08);
+}
+
 .debug-tool-btn.active {
   background: var(--accent);
+  border-color: transparent;
   color: white;
   box-shadow: 0 8px 20px var(--accent-glow);
 }
 
 .debug-tool-btn.danger {
   background: #ffe8e2;
+  border-color: #ffd4c7;
   color: var(--danger);
+}
+
+.debug-secondary-btn {
+  margin-top: 2px;
 }
 
 .debug-status,
 .debug-edge-info {
-  margin-top: 12px;
   border-radius: 14px;
-  background: var(--bg-main);
+  background: white;
+  border: 1px solid var(--border-light);
   padding: 12px;
   font-size: 13px;
   line-height: 1.45;
 }
 
 .debug-status {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
+.debug-status strong,
 .debug-edge-info strong {
-  display: block;
-  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.debug-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
 }
 
 .debug-spawn-controls {
   display: grid;
-  grid-template-columns: 90px 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 12px;
+}
+
+.debug-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
 }
 
 .debug-spawn-controls input {
@@ -741,6 +792,24 @@ button {
   background: white;
   font: inherit;
   font-weight: 700;
+}
+
+.debug-spawn-controls .debug-input-group {
+  grid-column: 1 / -1;
+}
+
+.debug-spawn-controls .danger {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 768px) {
+  #debug-panel {
+    top: 72px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100vh - 96px);
+  }
 }
 
 #driving-hud {

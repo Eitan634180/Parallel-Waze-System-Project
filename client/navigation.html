@@ -175,35 +175,43 @@
             <button id="close-debug" title="Close">&times;</button>
         </div>
 
-        <button id="toggle-route-inspector-btn" class="debug-tool-btn">
-            Inspect Route Edges
-        </button>
-
-        <div id="debug-edge-info" class="debug-edge-info">
-            Click an edge to see its details.
+        <div class="debug-section">
+            <div class="debug-section-title">Route Inspector</div>
+            <button id="toggle-route-inspector-btn" class="debug-tool-btn">
+                Inspect Route Edges
+            </button>
+            <div id="debug-edge-info" class="debug-edge-info">
+                Click an edge to see its details.
+            </div>
         </div>
 
-        <div class="debug-spawn-controls">
-            <input id="debug-car-count" type="number" min="1" max="500" value="1" />
-            <button id="debug-add-car-btn" class="debug-tool-btn">Add Cars</button>
-            <button id="debug-random-traffic-btn" class="debug-tool-btn">Random Tel Aviv Traffic</button>
-            <button id="debug-clear-cars-btn" class="debug-tool-btn danger">Clear Cars</button>
+        <div class="debug-section">
+            <div class="debug-section-title">Simulation Cars</div>
+            <div class="debug-spawn-controls">
+                <label class="debug-input-group">
+                    <span>Count</span>
+                    <input id="debug-car-count" type="number" min="1" max="500" value="1" />
+                </label>
+                <button id="debug-add-car-btn" class="debug-tool-btn">Add Cars</button>
+                <button id="debug-random-traffic-btn" class="debug-tool-btn">Random Traffic</button>
+                <button id="debug-clear-cars-btn" class="debug-tool-btn danger">Clear Cars</button>
+            </div>
+            <button id="toggle-debug-cars-btn" class="debug-tool-btn debug-secondary-btn">
+                Hide Test Cars
+            </button>
+            <div id="debug-car-status" class="debug-status">
+                No extra debug cars.
+            </div>
         </div>
 
-        <button id="debug-drift-btn" class="debug-tool-btn">
-            Force Off-Route
-        </button>
-
-        <button id="toggle-debug-cars-btn" class="debug-tool-btn" style="margin-top: 12px;">
-            Hide Test Cars
-        </button>
-
-        <div id="debug-car-status" class="debug-status">
-            No extra debug cars.
-        </div>
-
-        <div id="debug-main-status" class="debug-status">
-            Start driving to inspect the main car session.
+        <div class="debug-section">
+            <div class="debug-section-title">Drive Simulation</div>
+            <button id="debug-drift-btn" class="debug-tool-btn">
+                Force Off-Route
+            </button>
+            <div id="debug-main-status" class="debug-status">
+                Start driving to inspect the main car session.
+            </div>
         </div>
     </div>
 
