@@ -14,11 +14,13 @@ export function showAlert(title, message) {
 }
 
 export function onArrival(distance, eta) {
+    document.getElementById('arrival-overlay')?.remove();
+
     const overlay = document.createElement('div');
     overlay.id = 'arrival-overlay';
     overlay.innerHTML = `
     <div class="arrival-card">
-            <div class="arrival-icon">🚩</div>
+            <div class="arrival-icon">&#x1F6A9;</div>
             <h2>Arrived</h2>
             <p>You have reached your destination</p>
             <div class="arrival-stats">
@@ -31,10 +33,13 @@ export function onArrival(distance, eta) {
                     <span class="a-val">${formatDuration(eta)}</span>
                 </div>
             </div>
-            <button onclick="document.getElementById('arrival-overlay').remove()">Close</button>
+            <button type="button" id="arrival-close-btn">Close</button>
         </div>
     `;
     document.body.appendChild(overlay);
+    document.getElementById('arrival-close-btn')?.addEventListener('click', () => {
+        overlay.remove();
+    });
 }
 
 export function toggleLoadingState(isLoading) {
