@@ -25,6 +25,21 @@ function refreshTrafficStatus() {
     updateTrafficStatus(status.level, status.detail);
 }
 
+function formatRerouteGainText(oldEtaSec, newEtaSec) {
+    if (oldEtaSec == null || newEtaSec == null) {
+        return 'Route updated for current traffic conditions.';
+    }
+
+    const etaGainSec = Math.max(0, oldEtaSec - newEtaSec);
+    if (etaGainSec >= 60) {
+        return `New path saves about ${Math.round(etaGainSec / 60)} min.`;
+    }
+    if (etaGainSec > 0) {
+        return `New path saves about ${Math.round(etaGainSec)} sec.`;
+    }
+    return 'Route updated for current traffic conditions.';
+}
+
 function setupDrivingUI() {
     toggleDrivingHUD(true);
     const formatAddress = (addr) => {
@@ -119,6 +134,7 @@ export async function startDriving() {
     state.drive.stepProgress = 0;
     state.drive.isActive = true;
     state.drive.distanceLeft = state.routing.activeObj.distance;
+    state.drive.totalDistanceDrivenM = 0;
     state.drive.startTimeMs = Date.now();
     state.sim.pendingEdgeEvents = [];
     state.sim.currentEdgeTimeMs = 0;
@@ -142,9 +158,10 @@ function updateSimulation(elapsedMs) {
         const actualTimeSec = state.drive.startTimeMs 
             ? (Date.now() - state.drive.startTimeMs) / 1000 
             : state.routing.activeObj.dynamicETA;
-            
+
+        const totalDistanceM = state.drive.totalDistanceDrivenM || state.routing.activeObj.distance;
         void stopDriving();
-        onArrival(state.routing.activeObj.distance, actualTimeSec);
+        onArrival(totalDistanceM, actualTimeSec);
         return;
     }
 
@@ -169,6 +186,7 @@ function updateSimulation(elapsedMs) {
     const speedKmh = Math.round(state.sim.motionState.speedKmh);
 
     state.drive.distanceLeft = Math.max(0, state.drive.distanceLeft - metersThisTick);
+    state.drive.totalDistanceDrivenM += metersThisTick;
 
     state.drive.carPos = calculateNewPosition(metersThisTick, elapsedMs);
     const bearing = calculateBearing(state.drive.carPos);
@@ -226,7 +244,6 @@ export function onReroute(message) {
     const reason = message.reroute_reason || 'traffic';
     const oldEtaSec = message.old_eta_sec;
     const newEtaSec = message.new_eta_sec;
-    const etaGainMin = oldEtaSec && newEtaSec ? Math.max(0, Math.round((oldEtaSec - newEtaSec) / 60)) : 0;
 
     if (state.debug.serverData) {
         state.debug.serverData.last_reroute_reason = reason;
@@ -239,8 +256,7 @@ export function onReroute(message) {
         const distText = typeof dist === 'number' ? `${dist.toFixed(1)} m away from the expected path.` : 'Vehicle left the expected path.';
         showAlert('Off-route reroute', distText);
     } else {
-        const gainText = etaGainMin > 0 ? `New path saves about ${etaGainMin} min.` : 'New path is faster under current traffic.';
-        showAlert('Traffic reroute', gainText);
+        showAlert('Traffic reroute', formatRerouteGainText(oldEtaSec, newEtaSec));
     }
     state.sim.recommendedSpeeds.clear();
     state.sim.currentEdgeTimeMs = 0;
@@ -284,5 +300,5 @@ export function onReroute(message) {
         const stepIndex = Math.min(state.drive.currentRoadIndex + 1, state.routing.activeObj.steps.length - 1);
         sendLocationPing(state.drive.carPos[0], state.drive.carPos[1], Math.round(getCurrentSpeedKmh()), stepIndex, []);
     }
-    updateTrafficStatus('normal');
+    refreshTrafficStatus();
 }

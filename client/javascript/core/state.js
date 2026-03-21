@@ -3,6 +3,7 @@ const defaultDriveState = {
     sessionId: null,
     carPos: null,
     distanceLeft: 0,
+    totalDistanceDrivenM: 0,
     stepProgress: 0,
     currentRoadIndex: 0,
     offRouteOffset: [0, 0],
@@ -43,10 +44,12 @@ export function resetDrivingSession() {
         sessionId: null,
         carPos: null,
         distanceLeft: 0,
+        totalDistanceDrivenM: 0,
         stepProgress: 0,
         currentRoadIndex: 0,
         offRouteOffset: [0, 0],
         isDrifting: false,
+        startTimeMs: null,
     };
     state.sim = {
         recommendedSpeeds: new Map(),

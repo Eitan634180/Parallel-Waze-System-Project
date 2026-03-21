@@ -124,6 +124,7 @@ func Check(
 				OldETASec:     &oldETAVal,
 				NewETASec:     &newETAVal,
 			})
+			sendCurrentSpeedHints(s, store, g)
 		}
 		return
 	}
@@ -233,6 +234,33 @@ func congestionSummaryLocked(s *Session, store *traffic.Store, g *builder.Graph)
 	return count > 0, count
 }
 
+func sendCurrentSpeedHints(s *Session, store *traffic.Store, g *builder.Graph) {
+	for _, edgeID32 := range s.RemainingEdges() {
+		eid := builder.EdgeID(edgeID32)
+		if int(eid) >= len(g.Edges) {
+			continue
+		}
+
+		edge := g.Edges[eid]
+		if edge.SpeedKmh <= 0 {
+			continue
+		}
+
+		recSpeed := store.RecommendedSpeedKmh(eid, edge.SpeedKmh, edge.DistanceM)
+		if recSpeed == edge.SpeedKmh && store.Density(eid) == 0 {
+			continue
+		}
+
+		edgeIDVal := uint32(eid)
+		recSpeedVal := recSpeed
+		_ = s.Send(OutMsg{
+			Type:                "speed_update",
+			EdgeID:              &edgeIDVal,
+			RecommendedSpeedKmh: &recSpeedVal,
+		})
+	}
+}
+
 func doReroute(
 	s *Session,
 	lat, lon float64,
@@ -286,6 +314,7 @@ func doReroute(
 		OldETASec:     oldETA,
 		NewETASec:     newETA,
 	})
+	sendCurrentSpeedHints(s, store, g)
 }
 
 func distanceFromExpectedPathMLocked(s *Session, lat, lon float64, g *builder.Graph) float32 {
