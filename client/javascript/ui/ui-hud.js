@@ -22,7 +22,7 @@ export function updateTrafficStatus(status = 'normal', detail = '') {
         el.textContent = 'Heavy';
         el.className = 'stat-value heavy';
     } else if (status === 'congested') {
-        el.textContent = 'Slowdowns';
+        el.textContent = 'Slower';
         el.className = 'stat-value congested';
     } else {
         el.textContent = 'Normal';
