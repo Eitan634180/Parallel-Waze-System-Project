@@ -576,3 +576,121 @@ func (pq *astarPQ) Pop() interface{} {
 	*pq = old[:n-1]
 	return x
 }
+
+// ---------------------------------------------------------------------------
+// Local Repair (Optimization 1)
+// ---------------------------------------------------------------------------
+
+type localAstarItem struct {
+	id   builder.NodeID
+	f    float32
+	g    float32
+	hops int
+}
+
+type localAstarPQ []localAstarItem
+
+func (pq localAstarPQ) Len() int            { return len(pq) }
+func (pq localAstarPQ) Less(i, j int) bool  { return pq[i].f < pq[j].f }
+func (pq localAstarPQ) Swap(i, j int)       { pq[i], pq[j] = pq[j], pq[i] }
+func (pq *localAstarPQ) Push(x interface{}) { *pq = append(*pq, x.(localAstarItem)) }
+func (pq *localAstarPQ) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	x := old[n-1]
+	*pq = old[:n-1]
+	return x
+}
+
+// LocalRepairOverlay attempts a strictly bounded local search on the overlay graph.
+// Used when a cross-cell edge becomes congested.
+// It searches from srcNodeID to dstNodeID, explicitly ignoring the direct cross-cell edge,
+// and it aborts if the accumulated cost exceeds maxCost or hops exceed maxHops.
+func (r *Router) LocalRepairOverlay(
+	srcNodeID, dstNodeID builder.NodeID,
+	maxCost float32,
+	maxHops int,
+	wf WeightFunc,
+) ([]Step, bool) {
+	g := r.g
+
+	// Ensure source is a boundary node
+	if _, ok := g.BoundaryNodeIdx[srcNodeID]; !ok {
+		return nil, false
+	}
+
+	costs := make(map[builder.NodeID]float32)
+	pred := make(map[builder.NodeID]overlayPredEntry)
+
+	const maxSpeedMs = 120.0 / 3.6
+	dstNode := g.NodeByID(dstNodeID)
+	if dstNode == nil {
+		return nil, false
+	}
+	heuristic := func(nid builder.NodeID) float32 {
+		n := g.NodeByID(nid)
+		if n == nil {
+			return 0
+		}
+		return dist2m(n.X, n.Y, dstNode.X, dstNode.Y) / maxSpeedMs
+	}
+
+	costs[srcNodeID] = 0
+	pq := &localAstarPQ{}
+	heap.Push(pq, localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
+
+	for pq.Len() > 0 {
+		cur := heap.Pop(pq).(localAstarItem)
+		if c, ok := costs[cur.id]; ok && cur.g > c {
+			continue
+		}
+		if cur.id == dstNodeID {
+			// Found local bypass! Extract steps using walkOverlayBack.
+			steps, _, termID := walkOverlayBack(g, dstNodeID, 0, pred, wf)
+			if termID != srcNodeID {
+				return nil, false
+			}
+			reverseSteps(steps)
+			return steps, true
+		}
+		if cur.hops >= maxHops {
+			continue
+		}
+
+		bIdx, ok := g.BoundaryNodeIdx[cur.id]
+		if !ok {
+			continue
+		}
+
+		g.OverlayAdj.Mu.RLock()
+		base := g.OverlayAdj.Offsets[bIdx]
+		for i, oe := range g.OverlayAdj.Neighbours(bIdx) {
+			edgeIdx := base + uint32(i)
+
+			// Constraint 2: Strictly ignore the congested cross-cell edge
+			if cur.id == srcNodeID && oe.ToNodeID == dstNodeID {
+				continue
+			}
+
+			nc := cur.g + oe.Weight
+
+			// Constraint 3: Bounded max budget
+			if nc > maxCost {
+				continue
+			}
+
+			if existing, has := costs[oe.ToNodeID]; !has || nc < existing {
+				costs[oe.ToNodeID] = nc
+				pred[oe.ToNodeID] = overlayPredEntry{prevNodeID: cur.id, edgeIdx: edgeIdx}
+				heap.Push(pq, localAstarItem{
+					id:   oe.ToNodeID,
+					f:    nc + heuristic(oe.ToNodeID),
+					g:    nc,
+					hops: cur.hops + 1,
+				})
+			}
+		}
+		g.OverlayAdj.Mu.RUnlock()
+	}
+	return nil, false
+}

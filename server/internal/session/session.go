@@ -86,6 +86,7 @@ type Session struct {
 	LastCongestionAhead   bool
 	LastCongestedEdges    int
 	LastRerouteReason     string
+	CheckBetterRoute      bool
 
 	// WebSocket — protected by WriteMu for concurrent writes.
 	Conn    *websocket.Conn

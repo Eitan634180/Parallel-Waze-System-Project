@@ -53,6 +53,7 @@ func main() {
 	go traffic.RunCustomization(ctx, g, store)
 	go mgr.RunExpiry(ctx)
 	go mgr.RunPropagation(ctx, store, g)
+	go srv.RunOptimizationSweep(ctx)
 	go srv.RunRouteCacheGC(ctx)
 	go sim.Run(ctx)
 

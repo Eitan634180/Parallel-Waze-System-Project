@@ -232,6 +232,25 @@ func (m *Manager) RunPropagation(ctx context.Context, store *traffic.Store, g *b
 
 func (m *Manager) propagate(store *traffic.Store, g *builder.Graph) {
 	changed := store.DirtySnapshot()
+
+	// Capture edges that experienced significant traffic relaxation
+	var improvedEdges []traffic.ChangedEdge
+	for _, ce := range changed {
+		if ce.OldMultiplier-ce.NewMultiplier >= traffic.SignificantShift {
+			improvedEdges = append(improvedEdges, ce)
+		}
+	}
+
+	if len(improvedEdges) > 0 {
+		m.mu.RLock()
+		activeSessions := make([]*Session, 0, len(m.sessions))
+		for _, s := range m.sessions {
+			activeSessions = append(activeSessions, s)
+		}
+		m.mu.RUnlock()
+		go evaluateHeuristics(activeSessions, improvedEdges, store, g)
+	}
+
 	for _, ce := range changed {
 		// Find base speed for this edge.
 		var baseKmh float32
@@ -262,6 +281,173 @@ func (m *Manager) propagate(store *traffic.Store, g *builder.Graph) {
 				Type:                "speed_update",
 				EdgeID:              &eid32,
 				RecommendedSpeedKmh: &recSpeedVal,
+			})
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Optimization 2 Background Workers
+// ---------------------------------------------------------------------------
+
+func evaluateHeuristics(sessions []*Session, improvedEdges []traffic.ChangedEdge, store *traffic.Store, g *builder.Graph) {
+	const maxSpeedMs = 120.0 / 3.6
+
+	var wg sync.WaitGroup
+	numWorkers := 10
+	if len(sessions) < numWorkers {
+		numWorkers = len(sessions)
+	}
+	if numWorkers == 0 {
+		return
+	}
+
+	chunkSize := len(sessions) / numWorkers
+	for w := 0; w < numWorkers; w++ {
+		start := w * chunkSize
+		end := start + chunkSize
+		if w == numWorkers-1 {
+			end = len(sessions)
+		}
+
+		wg.Add(1)
+		go func(sessChunk []*Session) {
+			defer wg.Done()
+			for _, s := range sessChunk {
+				s.Mu.RLock()
+				if len(s.Route.Steps) == 0 {
+					s.Mu.RUnlock()
+					continue
+				}
+				carX, carY := projectForCheck(s.LastLat, s.LastLon)
+				destStep := s.Route.Steps[len(s.Route.Steps)-1]
+				destNode := g.NodeByID(builder.NodeID(destStep.NodeID))
+				eta := s.ETA
+				s.Mu.RUnlock()
+
+				if destNode == nil {
+					continue
+				}
+
+				flagged := false
+				for _, ce := range improvedEdges {
+					if int(ce.EdgeID) >= len(g.Edges) {
+						continue
+					}
+					edge := g.Edges[ce.EdgeID]
+					u := g.NodeByID(edge.FromNodeID)
+					v := g.NodeByID(edge.ToNodeID)
+					if u == nil || v == nil {
+						continue
+					}
+
+					// Lower-Bound calculation
+					distCarU := distancePointToPoint(carX, carY, u.X, u.Y)
+					distVDst := distancePointToPoint(v.X, v.Y, destNode.X, destNode.Y)
+
+					idealTime := (distCarU / maxSpeedMs) + store.LiveWeight(ce.EdgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM) + (distVDst / maxSpeedMs)
+
+					if idealTime < eta {
+						flagged = true
+						break
+					}
+				}
+
+				if flagged {
+					s.Mu.Lock()
+					s.CheckBetterRoute = true
+					s.Mu.Unlock()
+				}
+			}
+		}(sessions[start:end])
+	}
+	wg.Wait()
+}
+
+// RunOptimizationSweep runs in the background to execute A* for sessions flagged with CheckBetterRoute.
+func (m *Manager) RunOptimizationSweep(ctx context.Context, g *builder.Graph, store *traffic.Store, router *routing.Router, wf routing.WeightFunc, prepareRoute func(routing.Route) routing.Route) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.sweepOptimizations(g, store, router, wf, prepareRoute)
+		}
+	}
+}
+
+func (m *Manager) sweepOptimizations(g *builder.Graph, store *traffic.Store, router *routing.Router, wf routing.WeightFunc, prepareRoute func(routing.Route) routing.Route) {
+	m.mu.RLock()
+	var flagged []*Session
+	for _, s := range m.sessions {
+		s.Mu.RLock()
+		toCheck := s.CheckBetterRoute
+		s.Mu.RUnlock()
+		if toCheck {
+			flagged = append(flagged, s)
+		}
+	}
+	m.mu.RUnlock()
+
+	for _, s := range flagged {
+		s.Mu.Lock()
+		s.CheckBetterRoute = false
+		if len(s.Route.Steps) == 0 {
+			s.Mu.Unlock()
+			continue
+		}
+		snapLat, snapLon := s.LastLat, s.LastLon
+		dst := s.Route.Steps[len(s.Route.Steps)-1]
+		oldETA := computeETALocked(s, g, store)
+		s.Mu.Unlock()
+
+		newRoutes := router.Compute(snapLat, snapLon, dst.Lat, dst.Lon, 1, wf)
+		if len(newRoutes) == 0 {
+			continue
+		}
+
+		newETA := newRoutes[0].TotalTimeSec
+		etaGain := oldETA - newETA
+		if oldETA > 0 && (etaGain/oldETA >= rerouteSpeedupMin || etaGain >= rerouteMinGainSec) && !sameRemainingRoute(s, newRoutes[0]) {
+			newRoute := prepareRoute(newRoutes[0])
+
+			s.Mu.RLock()
+			currentEdgeID := s.CurrentEdgeID
+			s.Mu.RUnlock()
+			if currentEdgeID != nil {
+				store.LeaveEdge(builder.EdgeID(*currentEdgeID))
+			}
+
+			m.UpdateRoute(s, newRoute)
+
+			now := time.Now()
+			s.Mu.Lock()
+			if s.CurrentEdgeID != nil {
+				store.EnterEdge(builder.EdgeID(*s.CurrentEdgeID))
+			}
+			s.LastReroute = now
+			s.LastRerouteReason = "traffic_cleared"
+			s.OffRouteViolations = 0
+			s.Mu.Unlock()
+
+			routePayload := RoutePayload{
+				ID:           newRoute.ID,
+				Steps:        newRoute.Steps,
+				TotalDistM:   newRoute.TotalDistM,
+				TotalTimeSec: newRoute.TotalTimeSec,
+			}
+
+			reason := "traffic_cleared"
+			oldETAVal := oldETA
+			newETAVal := newETA
+			_ = s.Send(OutMsg{
+				Type:          "reroute",
+				Route:         &routePayload,
+				RerouteReason: &reason,
+				OldETASec:     &oldETAVal,
+				NewETASec:     &newETAVal,
 			})
 		}
 	}

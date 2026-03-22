@@ -209,6 +209,7 @@ func (s *Store) IsCongested(id builder.EdgeID) bool {
 // since the last snapshot.
 type ChangedEdge struct {
 	EdgeID        builder.EdgeID
+	OldMultiplier float32
 	NewMultiplier float32
 }
 
@@ -238,7 +239,7 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 		density := s.density[id]
 		densityChanged := density != s.prevDensity[id]
 		if delta >= SignificantShift || densityChanged {
-			changed = append(changed, ChangedEdge{EdgeID: id, NewMultiplier: cur})
+			changed = append(changed, ChangedEdge{EdgeID: id, OldMultiplier: prev, NewMultiplier: cur})
 			s.prev[id] = cur
 			s.prevDensity[id] = density
 		}

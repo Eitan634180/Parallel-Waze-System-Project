@@ -75,18 +75,48 @@ func Check(
 	if congestionAhead {
 		dst := s.Route.Steps[len(s.Route.Steps)-1]
 		oldETA := computeETALocked(s, g, store)
-		s.Mu.Unlock()
 
-		newRoutes := router.Compute(snapLat, snapLon, dst.Lat, dst.Lon, 1, wf)
+		// --- OPTIMIZATION 1: Local Route Repair ---
+		repairTriggered, repairStepIdx, congestedCost := checkLocalRepairTriggerLocked(s, store, g)
+		var patchSteps []routing.Step
+		var patchSuccessful bool
+
+		if repairTriggered {
+			srcNodeID := s.Route.Steps[repairStepIdx-1].NodeID
+			dstNodeID := s.Route.Steps[repairStepIdx].NodeID
+
+			// Max hops allowed for a fast local detour on the overlay graph
+			const maxHops = 5
+
+			s.Mu.Unlock()
+			patchSteps, patchSuccessful = router.LocalRepairOverlay(srcNodeID, dstNodeID, congestedCost, maxHops, wf)
+			s.Mu.Lock()
+		}
+
+		var newRoutes []routing.Route
+		var isLocalPatch bool
+
+		if patchSuccessful && len(patchSteps) > 1 {
+			newRoute := rebuildPatchedRoute(s.Route, repairStepIdx, patchSteps)
+			newRoutes = []routing.Route{newRoute}
+			isLocalPatch = true
+		} else {
+			// Fallback to global A*
+			s.Mu.Unlock()
+			newRoutes = router.Compute(snapLat, snapLon, dst.Lat, dst.Lon, 1, wf)
+			s.Mu.Lock()
+		}
+
 		if len(newRoutes) == 0 {
+			s.Mu.Unlock()
 			return
 		}
 
+		s.Mu.Unlock()
+
 		newETA := newRoutes[0].TotalTimeSec
 		etaGain := oldETA - newETA
-		if oldETA > 0 &&
-			(etaGain/oldETA >= rerouteSpeedupMin || etaGain >= rerouteMinGainSec) &&
-			!sameRemainingRoute(s, newRoutes[0]) {
+		if isLocalPatch || (oldETA > 0 && (etaGain/oldETA >= rerouteSpeedupMin || etaGain >= rerouteMinGainSec) && !sameRemainingRoute(s, newRoutes[0])) {
 			newRoute := prepareRoute(newRoutes[0])
 
 			s.Mu.RLock()
@@ -103,7 +133,11 @@ func Check(
 				store.EnterEdge(builder.EdgeID(*s.CurrentEdgeID))
 			}
 			s.LastReroute = now
-			s.LastRerouteReason = "traffic"
+			if isLocalPatch {
+				s.LastRerouteReason = "local_patch"
+			} else {
+				s.LastRerouteReason = "traffic"
+			}
 			s.OffRouteViolations = 0
 			s.Mu.Unlock()
 
@@ -114,7 +148,7 @@ func Check(
 				TotalTimeSec: newRoute.TotalTimeSec,
 			}
 
-			reason := "traffic"
+			reason := s.LastRerouteReason
 			oldETAVal := oldETA
 			newETAVal := newETA
 			_ = s.Send(OutMsg{
@@ -408,4 +442,74 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func checkLocalRepairTriggerLocked(s *Session, store *traffic.Store, g *builder.Graph) (bool, int, float32) {
+	for i := maxInt(1, s.StepIdx); i < len(s.Route.Steps); i++ {
+		step := s.Route.Steps[i]
+		if step.EdgeID == nil {
+			continue
+		}
+		eid := builder.EdgeID(*step.EdgeID)
+		if int(eid) >= len(g.Edges) {
+			continue
+		}
+		edge := g.Edges[eid]
+		liveWeight := store.LiveWeight(eid, edge.Weight, edge.SpeedKmh, edge.DistanceM)
+
+		// Compound threshold: severe spike
+		if liveWeight >= edge.Weight*2.0 && (liveWeight-edge.Weight) >= 60.0 {
+			u := g.NodeByID(s.Route.Steps[i-1].NodeID)
+			v := g.NodeByID(s.Route.Steps[i].NodeID)
+			// Ensure it's explicitly a cross-cell edge
+			if u != nil && v != nil && u.CellID != v.CellID {
+				return true, i, liveWeight
+			}
+		}
+	}
+	return false, -1, 0
+}
+
+func rebuildPatchedRoute(oldRoute routing.Route, repairStepIdx int, patch []routing.Step) routing.Route {
+	rawSteps := make([]routing.Step, 0, len(oldRoute.Steps)+len(patch))
+
+	for i := 0; i < repairStepIdx; i++ {
+		step := oldRoute.Steps[i]
+		if i > 0 {
+			step.DistanceM = oldRoute.Steps[i].DistanceM - oldRoute.Steps[i-1].DistanceM
+			step.BaseTimeSec = oldRoute.Steps[i].BaseTimeSec - oldRoute.Steps[i-1].BaseTimeSec
+		} else {
+			step.DistanceM = 0
+			step.BaseTimeSec = 0
+		}
+		rawSteps = append(rawSteps, step)
+	}
+
+	for i := 1; i < len(patch); i++ {
+		rawSteps = append(rawSteps, patch[i])
+	}
+
+	for i := repairStepIdx + 1; i < len(oldRoute.Steps); i++ {
+		step := oldRoute.Steps[i]
+		step.DistanceM = oldRoute.Steps[i].DistanceM - oldRoute.Steps[i-1].DistanceM
+		step.BaseTimeSec = oldRoute.Steps[i].BaseTimeSec - oldRoute.Steps[i-1].BaseTimeSec
+		rawSteps = append(rawSteps, step)
+	}
+
+	var cumD, cumT float32
+	for i := range rawSteps {
+		if i > 0 {
+			cumD += rawSteps[i].DistanceM
+			cumT += rawSteps[i].BaseTimeSec
+		}
+		rawSteps[i].DistanceM = cumD
+		rawSteps[i].BaseTimeSec = cumT
+	}
+
+	return routing.Route{
+		ID:           oldRoute.ID,
+		Steps:        rawSteps,
+		TotalDistM:   cumD,
+		TotalTimeSec: cumT,
+	}
 }

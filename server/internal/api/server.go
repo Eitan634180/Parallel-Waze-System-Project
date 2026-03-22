@@ -109,6 +109,10 @@ func (s *Server) prepareRoute(route routing.Route) routing.Route {
 	return route
 }
 
+func (s *Server) RunOptimizationSweep(ctx context.Context) {
+	s.mgr.RunOptimizationSweep(ctx, s.g, s.store, s.router, s.liveWeightFunc(), s.prepareRoute)
+}
+
 func (s *Server) RunRouteCacheGC(ctx context.Context) {
 	ticker := time.NewTicker(routeCacheGCInterval)
 	defer ticker.Stop()
