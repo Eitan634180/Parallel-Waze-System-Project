@@ -87,7 +87,9 @@ func Check(
 		if oldETA > 0 &&
 			(etaGain/oldETA >= rerouteSpeedupMin || etaGain >= rerouteMinGainSec) &&
 			!sameRemainingRoute(s, newRoutes[0]) {
-			newRoute := prepareRoute(newRoutes[0])
+			newRouteCandidate := newRoutes[0]
+			newRouteCandidate.CongestionAhead, newRouteCandidate.CongestedEdges = RouteCongestionSummary(newRouteCandidate, store, g)
+			newRoute := prepareRoute(newRouteCandidate)
 
 			s.Mu.RLock()
 			currentEdgeID := s.CurrentEdgeID
@@ -102,6 +104,7 @@ func Check(
 			if s.CurrentEdgeID != nil {
 				store.EnterEdge(builder.EdgeID(*s.CurrentEdgeID))
 			}
+			s.ETA = newETA
 			s.LastReroute = now
 			s.LastRerouteReason = "traffic"
 			s.OffRouteViolations = 0
@@ -112,6 +115,8 @@ func Check(
 				Steps:        newRoute.Steps,
 				TotalDistM:   newRoute.TotalDistM,
 				TotalTimeSec: newRoute.TotalTimeSec,
+				CongestionAhead: newRoute.CongestionAhead,
+				CongestedEdges:  newRoute.CongestedEdges,
 			}
 
 			reason := "traffic"
@@ -124,6 +129,7 @@ func Check(
 				OldETASec:     &oldETAVal,
 				NewETASec:     &newETAVal,
 			})
+			sendCurrentSpeedHints(s, store, g)
 		}
 		return
 	}
@@ -216,8 +222,16 @@ func computeETALocked(s *Session, g *builder.Graph, store *traffic.Store) float3
 
 // congestionSummaryLocked reports whether any remaining edge is congested and how many.
 func congestionSummaryLocked(s *Session, store *traffic.Store, g *builder.Graph) (bool, int) {
+	return routeCongestionSummary(s.remainingStepsLocked(), store, g)
+}
+
+func RouteCongestionSummary(route routing.Route, store *traffic.Store, g *builder.Graph) (bool, int) {
+	return routeCongestionSummary(route.Steps, store, g)
+}
+
+func routeCongestionSummary(steps []routing.Step, store *traffic.Store, g *builder.Graph) (bool, int) {
 	count := 0
-	for _, step := range s.remainingStepsLocked() {
+	for _, step := range steps {
 		if step.EdgeID == nil {
 			continue
 		}
@@ -231,6 +245,33 @@ func congestionSummaryLocked(s *Session, store *traffic.Store, g *builder.Graph)
 		}
 	}
 	return count > 0, count
+}
+
+func sendCurrentSpeedHints(s *Session, store *traffic.Store, g *builder.Graph) {
+	for _, edgeID32 := range s.RemainingEdges() {
+		eid := builder.EdgeID(edgeID32)
+		if int(eid) >= len(g.Edges) {
+			continue
+		}
+
+		edge := g.Edges[eid]
+		if edge.SpeedKmh <= 0 {
+			continue
+		}
+
+		recSpeed := store.RecommendedSpeedKmh(eid, edge.SpeedKmh, edge.DistanceM)
+		if recSpeed == edge.SpeedKmh && store.Density(eid) == 0 {
+			continue
+		}
+
+		edgeIDVal := uint32(eid)
+		recSpeedVal := recSpeed
+		_ = s.Send(OutMsg{
+			Type:                "speed_update",
+			EdgeID:              &edgeIDVal,
+			RecommendedSpeedKmh: &recSpeedVal,
+		})
+	}
 }
 
 func doReroute(
@@ -257,7 +298,9 @@ func doReroute(
 		return
 	}
 
-	newRoute := prepareRoute(newRoutes[0])
+	newRouteCandidate := newRoutes[0]
+	newRouteCandidate.CongestionAhead, newRouteCandidate.CongestedEdges = RouteCongestionSummary(newRouteCandidate, store, g)
+	newRoute := prepareRoute(newRouteCandidate)
 	if currentEdgeID != nil {
 		store.LeaveEdge(builder.EdgeID(*currentEdgeID))
 	}
@@ -267,6 +310,7 @@ func doReroute(
 	if s.CurrentEdgeID != nil {
 		store.EnterEdge(builder.EdgeID(*s.CurrentEdgeID))
 	}
+	s.ETA = newRoute.TotalTimeSec
 	s.LastReroute = now
 	s.LastRerouteReason = reason
 	s.OffRouteViolations = 0
@@ -277,6 +321,8 @@ func doReroute(
 		Steps:        newRoute.Steps,
 		TotalDistM:   newRoute.TotalDistM,
 		TotalTimeSec: newRoute.TotalTimeSec,
+		CongestionAhead: newRoute.CongestionAhead,
+		CongestedEdges:  newRoute.CongestedEdges,
 	}
 
 	_ = s.Send(OutMsg{
@@ -286,6 +332,7 @@ func doReroute(
 		OldETASec:     oldETA,
 		NewETASec:     newETA,
 	})
+	sendCurrentSpeedHints(s, store, g)
 }
 
 func distanceFromExpectedPathMLocked(s *Session, lat, lon float64, g *builder.Graph) float32 {

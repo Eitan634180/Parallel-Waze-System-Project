@@ -17,4 +17,6 @@ type Route struct {
 	Steps        []Step  `json:"steps"`
 	TotalDistM   float32 `json:"total_dist_m"`
 	TotalTimeSec float32 `json:"total_time_sec"` // computed with live weights at query time
+	CongestionAhead bool `json:"congestion_ahead"`
+	CongestedEdges  int  `json:"congested_edges"`
 }
