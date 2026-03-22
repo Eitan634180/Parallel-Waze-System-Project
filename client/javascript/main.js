@@ -11,6 +11,28 @@ import { startDriving, stopDriving } from './simulation/driving-controller.js';
 import { getRouteTrafficStatus } from './simulation/traffic-evaluator.js';
 import { processRawRoute } from './utils/utils.js';
 
+function syncNavigateButton() {
+    document.getElementById('navigate-btn').disabled = !(state.routing.source && state.routing.dest);
+}
+
+function clearCurrentRoute() {
+    state.routing.allRoutes = [];
+    state.routing.currentIndex = 0;
+    state.routing.activeObj = null;
+    state.routing.activeLegs = [];
+    state.sim.recommendedSpeeds.clear();
+    document.getElementById('route-panel').classList.add('hidden');
+    updateETA(null);
+    updateDistance(0);
+    updateTrafficStatus('normal');
+    state.debug.inspectorEnabled = false;
+    setRouteInspectorButtonState(false);
+    renderEdgeDebugInfo(null);
+    mapInstance.setRouteInspectorEnabled(false);
+    mapInstance.setRouteInspectorRoute(null);
+    mapInstance.clearRouteLayers();
+}
+
 async function handleCalculateRoute() {
     if (!state.routing.source || !state.routing.dest) return;
     toggleLoadingState(true);
@@ -59,15 +81,22 @@ document.addEventListener('DOMContentLoaded', () => {
     mapInstance.initMap();
     setupDebugTools();
 
+    const invalidateRoutingState = (key) => {
+        if (state.routing[key] === null) return;
+        state.routing[key] = null;
+        clearCurrentRoute();
+        syncNavigateButton();
+    };
+
     setupSearchInput('source-input', 'source-suggestions', (loc) => {
         state.routing.source = loc;
-        document.getElementById('navigate-btn').disabled = !(state.routing.source && state.routing.dest);
-    });
+        syncNavigateButton();
+    }, () => invalidateRoutingState('source'));
 
     setupSearchInput('dest-input', 'dest-suggestions', (loc) => {
         state.routing.dest = loc;
-        document.getElementById('navigate-btn').disabled = !(state.routing.source && state.routing.dest);
-    });
+        syncNavigateButton();
+    }, () => invalidateRoutingState('dest'));
 
     document.getElementById('navigate-btn').addEventListener('click', handleCalculateRoute);
     

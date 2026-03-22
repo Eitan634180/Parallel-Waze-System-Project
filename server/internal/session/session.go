@@ -14,12 +14,12 @@ import (
 // ---------------------------------------------------------------------------
 
 type RoutePayload struct {
-	ID           string         `json:"id"`
-	Steps        []routing.Step `json:"steps"`
-	TotalDistM   float32        `json:"total_dist_m"`
-	TotalTimeSec float32        `json:"total_time_sec"`
-	CongestionAhead bool        `json:"congestion_ahead"`
-	CongestedEdges  int         `json:"congested_edges"`
+	ID              string         `json:"id"`
+	Steps           []routing.Step `json:"steps"`
+	TotalDistM      float32        `json:"total_dist_m"`
+	TotalTimeSec    float32        `json:"total_time_sec"`
+	CongestionAhead bool           `json:"congestion_ahead"`
+	CongestedEdges  int            `json:"congested_edges"`
 }
 
 // OutMsg is any message the server sends to the client over the WebSocket.
@@ -106,7 +106,7 @@ func (s *Session) Send(msg OutMsg) error {
 	}
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
-	s.Conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	return conn.WriteJSON(msg)
 }
 

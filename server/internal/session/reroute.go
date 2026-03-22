@@ -96,7 +96,7 @@ func Check(
 		var newRoutes []routing.Route
 		var isLocalPatch bool
 
-		if patchSuccessful && len(patchSteps) > 1 {
+		if patchSuccessful && len(patchSteps) > 0 {
 			newRoute := rebuildPatchedRoute(s.Route, repairStepIdx, patchSteps)
 			newRoutes = []routing.Route{newRoute}
 			isLocalPatch = true
@@ -295,7 +295,7 @@ func sendCurrentSpeedHints(s *Session, store *traffic.Store, g *builder.Graph) {
 			continue
 		}
 
-		recSpeed := store.RecommendedSpeedKmh(eid, edge.SpeedKmh, edge.DistanceM)
+		recSpeed := store.LiveSpeedKmh(eid, edge.Weight, edge.SpeedKmh, edge.DistanceM)
 		if recSpeed == edge.SpeedKmh && store.Density(eid) == 0 {
 			continue
 		}
@@ -534,7 +534,7 @@ func rebuildPatchedRoute(oldRoute routing.Route, repairStepIdx int, patch []rout
 		rawSteps = append(rawSteps, step)
 	}
 
-	for i := 1; i < len(patch); i++ {
+	for i := 0; i < len(patch); i++ {
 		rawSteps = append(rawSteps, patch[i])
 	}
 

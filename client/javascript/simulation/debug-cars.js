@@ -7,6 +7,18 @@ let simulationReadyPromise = null;
 let cars = [];
 let onUpdateCallback = null;
 
+function clearSimulationSnapshots() {
+    cars = [];
+    activeCount = 0;
+    mapInstance.clearDebugCars();
+    if (onUpdateCallback) onUpdateCallback({ active: activeCount });
+}
+
+function resetSimulationFeedState() {
+    simulationReadyPromise = null;
+    clearSimulationSnapshots();
+}
+
 export function setDebugCarCallback(callback) {
     onUpdateCallback = callback;
     if (onUpdateCallback) onUpdateCallback({ active: activeCount });
@@ -22,8 +34,11 @@ export async function ensureSimulationFeed() {
             mapInstance.syncDebugCars(snapshotCars);
             if (onUpdateCallback) onUpdateCallback({ active: activeCount });
         },
+        onClose: () => {
+            resetSimulationFeedState();
+        },
     }).catch((err) => {
-        simulationReadyPromise = null;
+        resetSimulationFeedState();
         throw err;
     });
 
@@ -48,10 +63,7 @@ export async function spawnRandomDebugCars(count) {
 
 export async function clearDebugCars() {
     await clearSimulationCars();
-    cars = [];
-    activeCount = 0;
-    mapInstance.clearDebugCars();
-    if (onUpdateCallback) onUpdateCallback({ active: activeCount });
+    clearSimulationSnapshots();
 }
 
 export function getLatestSimulationCars() {
@@ -60,9 +72,5 @@ export function getLatestSimulationCars() {
 
 export function disconnectDebugCars() {
     disconnectSimulation();
-    simulationReadyPromise = null;
-    cars = [];
-    activeCount = 0;
-    mapInstance.clearDebugCars();
-    if (onUpdateCallback) onUpdateCallback({ active: activeCount });
+    resetSimulationFeedState();
 }

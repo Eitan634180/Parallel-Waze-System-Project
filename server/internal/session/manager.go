@@ -55,7 +55,7 @@ func (m *Manager) Create(route routing.Route) *Session {
 	}
 	m.mu.Lock()
 	m.sessions[id] = s
-	m.subscribeEdges(s)
+	m.subscribeEdges(id, route.Steps[stepIdx:])
 	m.mu.Unlock()
 	return s
 }
@@ -71,58 +71,68 @@ func (m *Manager) Get(id string) *Session {
 // Delete removes a session, unsubscribing its edges.
 func (m *Manager) Delete(id string) {
 	s := m.Get(id)
-	if s != nil {
-		s.Mu.Lock()
-		defer s.Mu.Unlock()
-		if s.Conn != nil {
-			s.Conn.Close()
-		}
+	if s == nil {
+		return
 	}
+
+	s.Mu.Lock()
+	conn := s.Conn
+	s.Conn = nil
+	remainingSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
+	s.Mu.Unlock()
+
+	if conn != nil {
+		s.WriteMu.Lock()
+		conn.Close()
+		s.WriteMu.Unlock()
+	}
+
 	m.mu.Lock()
-	if s, ok := m.sessions[id]; ok {
-		m.unsubscribeEdges(s)
+	if _, ok := m.sessions[id]; ok {
+		m.unsubscribeEdges(id, remainingSteps)
 		delete(m.sessions, id)
 	}
 	m.mu.Unlock()
 }
 
-// AdvanceStep updates the session's StepIdx, adjusting edge subscriptions.
-// Must be called with session already write-locked by the caller if needed.
-// (Here we take the Manager lock since we touch edgeSubscribers.)
-func (m *Manager) AdvanceStep(s *Session, newIdx int) {
-	if newIdx <= s.StepIdx {
+// AdvanceStep updates edge subscriptions for a session after it advances.
+func (m *Manager) AdvanceStep(sessionID string, route routing.Route, oldIdx, newIdx int) {
+	if newIdx <= oldIdx {
 		return
 	}
 	m.mu.Lock()
-	// Unsubscribe edges that were traversed (indices StepIdx..newIdx-1).
-	for i := s.StepIdx; i < newIdx && i < len(s.Route.Steps); i++ {
-		edgeID := s.Route.Steps[i].EdgeID
+	// Unsubscribe edges that were traversed (indices oldIdx..newIdx-1).
+	for i := oldIdx; i < newIdx && i < len(route.Steps); i++ {
+		edgeID := route.Steps[i].EdgeID
 		if edgeID == nil {
 			continue
 		}
 		eid := builder.EdgeID(*edgeID)
 		if subs, ok := m.edgeSubscribers[eid]; ok {
-			delete(subs, s.ID)
+			delete(subs, sessionID)
 			if len(subs) == 0 {
 				delete(m.edgeSubscribers, eid)
 			}
 		}
 	}
-	s.StepIdx = newIdx
 	m.mu.Unlock()
 }
 
 // UpdateRoute replaces a session's route (reroute) and resubscribes edges.
 func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
 	s.Mu.Lock()
-	defer s.Mu.Unlock()
-	m.mu.Lock()
-	m.unsubscribeEdges(s)
+	oldSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	s.Route = newRoute
 	s.StepIdx = InitialStepIndex(newRoute)
 	s.CurrentEdgeID = CurrentEdgeForStep(newRoute, s.StepIdx)
 	s.CurrentEdgeAt = time.Now()
-	m.subscribeEdges(s)
+	newSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
+	sessionID := s.ID
+	s.Mu.Unlock()
+
+	m.mu.Lock()
+	m.unsubscribeEdges(sessionID, oldSteps)
+	m.subscribeEdges(sessionID, newSteps)
 	m.mu.Unlock()
 }
 
@@ -130,8 +140,8 @@ func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
 // Edge subscription helpers (caller must hold m.mu write lock)
 // ---------------------------------------------------------------------------
 
-func (m *Manager) subscribeEdges(s *Session) {
-	for _, step := range s.Route.Steps[s.StepIdx:] {
+func (m *Manager) subscribeEdges(sessionID string, steps []routing.Step) {
+	for _, step := range steps {
 		if step.EdgeID == nil {
 			continue
 		}
@@ -139,18 +149,18 @@ func (m *Manager) subscribeEdges(s *Session) {
 		if m.edgeSubscribers[eid] == nil {
 			m.edgeSubscribers[eid] = make(map[string]struct{})
 		}
-		m.edgeSubscribers[eid][s.ID] = struct{}{}
+		m.edgeSubscribers[eid][sessionID] = struct{}{}
 	}
 }
 
-func (m *Manager) unsubscribeEdges(s *Session) {
-	for _, step := range s.Route.Steps[s.StepIdx:] {
+func (m *Manager) unsubscribeEdges(sessionID string, steps []routing.Step) {
+	for _, step := range steps {
 		if step.EdgeID == nil {
 			continue
 		}
 		eid := builder.EdgeID(*step.EdgeID)
 		if subs, ok := m.edgeSubscribers[eid]; ok {
-			delete(subs, s.ID)
+			delete(subs, sessionID)
 			if len(subs) == 0 {
 				delete(m.edgeSubscribers, eid)
 			}
@@ -260,7 +270,7 @@ func (m *Manager) propagate(store *traffic.Store, g *builder.Graph) {
 		if baseKmh <= 0 {
 			continue
 		}
-		recSpeed := store.RecommendedSpeedKmh(ce.EdgeID, baseKmh, g.Edges[ce.EdgeID].DistanceM)
+		recSpeed := store.LiveSpeedKmh(ce.EdgeID, g.Edges[ce.EdgeID].Weight, baseKmh, g.Edges[ce.EdgeID].DistanceM)
 
 		eid32 := uint32(ce.EdgeID)
 		recSpeedVal := recSpeed
@@ -380,8 +390,14 @@ func (m *Manager) RunOptimizationSweep(ctx context.Context, g *builder.Graph, st
 
 func (m *Manager) sweepOptimizations(g *builder.Graph, store *traffic.Store, router *routing.Router, wf routing.WeightFunc, prepareRoute func(routing.Route) routing.Route) {
 	m.mu.RLock()
-	var flagged []*Session
+	sessions := make([]*Session, 0, len(m.sessions))
 	for _, s := range m.sessions {
+		sessions = append(sessions, s)
+	}
+	m.mu.RUnlock()
+
+	var flagged []*Session
+	for _, s := range sessions {
 		s.Mu.RLock()
 		toCheck := s.CheckBetterRoute
 		s.Mu.RUnlock()
@@ -389,7 +405,6 @@ func (m *Manager) sweepOptimizations(g *builder.Graph, store *traffic.Store, rou
 			flagged = append(flagged, s)
 		}
 	}
-	m.mu.RUnlock()
 
 	for _, s := range flagged {
 		s.Mu.Lock()

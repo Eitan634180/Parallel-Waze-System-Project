@@ -147,6 +147,25 @@ func (s *Store) LiveWeight(id builder.EdgeID, baseSec, baseKmh, distanceM float3
 	return observed
 }
 
+// LiveSpeedKmh converts the current live weight back into an effective speed hint.
+func (s *Store) LiveSpeedKmh(id builder.EdgeID, baseSec, baseKmh, distanceM float32) float32 {
+	if baseKmh <= 0 || distanceM <= 0 {
+		return baseKmh
+	}
+	liveWeight := s.LiveWeight(id, baseSec, baseKmh, distanceM)
+	if liveWeight <= 0 {
+		return baseKmh
+	}
+	speed := (distanceM / liveWeight) * 3.6
+	if speed <= 0 {
+		return baseKmh * hintMinSpeedRatio
+	}
+	if speed > baseKmh {
+		return baseKmh
+	}
+	return speed
+}
+
 // Multiplier returns the raw multiplier for an edge (1.0 if not observed).
 func (s *Store) Multiplier(id builder.EdgeID) float32 {
 	s.mu.RLock()

@@ -12,9 +12,13 @@ export function connectToSession(sessionId, callbacks) {
     const wsUrl = SERVER_URL.replace(/^http/, 'ws') + `/session/${sessionId}/ws`;
 
     return new Promise((resolve, reject) => {
+        let opened = false;
+        let settled = false;
         socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
+            opened = true;
+            settled = true;
             console.log('Connected to navigation session');
             resolve();
         };
@@ -33,10 +37,23 @@ export function connectToSession(sessionId, callbacks) {
 
         socket.onerror = (error) => {
             console.error('WebSocket encountered an error:', error);
-            reject(new Error('WebSocket connection failed'));
+            if (!settled) {
+                settled = true;
+                reject(new Error('WebSocket connection failed'));
+            }
         };
 
-        socket.onclose = () => { socket = null; };
+        socket.onclose = (event) => {
+            socket = null;
+            if (!settled) {
+                settled = true;
+                reject(new Error('WebSocket connection failed'));
+                return;
+            }
+            if (opened && callbacks.onClose) {
+                callbacks.onClose(event);
+            }
+        };
     });
 }
 
@@ -64,8 +81,12 @@ export function connectToSimulation(callbacks) {
     const wsUrl = SERVER_URL.replace(/^http/, 'ws') + '/simulation/ws';
 
     return new Promise((resolve, reject) => {
+        let settled = false;
         simulationSocket = new WebSocket(wsUrl);
-        simulationSocket.onopen = () => resolve();
+        simulationSocket.onopen = () => {
+            settled = true;
+            resolve();
+        };
 
         simulationSocket.onmessage = (event) => {
             try {
@@ -76,8 +97,23 @@ export function connectToSimulation(callbacks) {
             }
         };
 
-        simulationSocket.onerror = () => reject(new Error('Simulation websocket connection failed'));
-        simulationSocket.onclose = () => { simulationSocket = null; };
+        simulationSocket.onerror = () => {
+            if (!settled) {
+                settled = true;
+                reject(new Error('Simulation websocket connection failed'));
+            }
+        };
+        simulationSocket.onclose = (event) => {
+            simulationSocket = null;
+            if (!settled) {
+                settled = true;
+                reject(new Error('Simulation websocket connection failed'));
+                return;
+            }
+            if (callbacks.onClose) {
+                callbacks.onClose(event);
+            }
+        };
     });
 }
 

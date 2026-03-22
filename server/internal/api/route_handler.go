@@ -20,12 +20,12 @@ type routeResponse struct {
 }
 
 type routeWithID struct {
-	ID           string      `json:"id"`
-	Steps        interface{} `json:"steps"`
-	TotalDistM   float32     `json:"total_dist_m"`
-	TotalTimeSec float32     `json:"total_time_sec"`
-	CongestionAhead bool     `json:"congestion_ahead"`
-	CongestedEdges  int      `json:"congested_edges"`
+	ID              string      `json:"id"`
+	Steps           interface{} `json:"steps"`
+	TotalDistM      float32     `json:"total_dist_m"`
+	TotalTimeSec    float32     `json:"total_time_sec"`
+	CongestionAhead bool        `json:"congestion_ahead"`
+	CongestedEdges  int         `json:"congested_edges"`
 }
 
 func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
@@ -61,10 +61,10 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 		rt = s.prepareRoute(rt)
 		routes[i] = rt
 		resp.Routes[i] = routeWithID{
-			ID:           rt.ID,
-			Steps:        rt.Steps,
-			TotalDistM:   rt.TotalDistM,
-			TotalTimeSec: rt.TotalTimeSec,
+			ID:              rt.ID,
+			Steps:           rt.Steps,
+			TotalDistM:      rt.TotalDistM,
+			TotalTimeSec:    rt.TotalTimeSec,
 			CongestionAhead: rt.CongestionAhead,
 			CongestedEdges:  rt.CongestedEdges,
 		}

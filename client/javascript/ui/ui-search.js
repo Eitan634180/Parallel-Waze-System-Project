@@ -1,15 +1,31 @@
 import { searchLocationByName } from '../api/api-rest.js';
 import { SEARCH_DELAY } from '../core/config.js';
 
-export function setupSearchInput(inputId, suggestionsId, onSelect) {
+export function setupSearchInput(inputId, suggestionsId, onSelect, onInvalidate = null) {
     const input = document.getElementById(inputId);
     const dropdown = document.getElementById(suggestionsId);
     let searchTimeout = null;
+    let requestSeq = 0;
 
     input.addEventListener('input', () => {
         clearTimeout(searchTimeout);
+        const seq = ++requestSeq;
+        if (onInvalidate) {
+            onInvalidate();
+        }
         searchTimeout = setTimeout(async () => {
-            const results = await searchLocationByName(input.value);
+            const query = input.value.trim();
+            if (!query) {
+                dropdown.innerHTML = '';
+                dropdown.classList.remove('active');
+                return;
+            }
+
+            const results = await searchLocationByName(query);
+            if (seq !== requestSeq || input.value.trim() !== query) {
+                return;
+            }
+
             dropdown.innerHTML = '';
             if (results.length > 0) {
                 dropdown.classList.add('active');

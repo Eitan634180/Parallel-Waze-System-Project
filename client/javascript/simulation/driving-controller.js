@@ -98,10 +98,11 @@ export async function startDriving() {
     if (state.routing.activeLegs.length === 0 || state.drive.isActive) return;
     state.sim.recommendedSpeeds.clear();
     mapInstance.drawAlternatives([]);
+    let sessionId = null;
 
     try {
-        await ensureSimulationFeed();
-        const sessionId = await createSession(state.routing.activeObj.id);
+        sessionId = await createSession(state.routing.activeObj.id);
+        state.drive.sessionId = sessionId;
         await connectToSession(sessionId, {
             onEtaUpdate: ({ eta_sec }) => {
                 updateETA(eta_sec);
@@ -120,9 +121,21 @@ export async function startDriving() {
                 renderMainCarDebug(debug);
                 refreshTrafficStatus();
             },
+            onClose: () => {
+                if (!state.drive.isActive || state.drive.sessionId !== sessionId) return;
+                showAlert('Navigation disconnected', 'Live server connection was lost.');
+                void stopDriving();
+            },
         });
-        state.drive.sessionId = sessionId;
     } catch (err) {
+        state.drive.sessionId = null;
+        if (sessionId) {
+            try {
+                await deleteSession(sessionId);
+            } catch (cleanupErr) {
+                console.error('Failed to clean up navigation session after startup error:', cleanupErr);
+            }
+        }
         console.error('Failed to start navigation session:', err);
         showAlert("Navigation failed", err.message);
         return;
@@ -145,6 +158,10 @@ export async function startDriving() {
     renderMainCarDebug(null);
     pingElapsedMs = 0;
     lastTickAt = 0;
+
+    void ensureSimulationFeed().catch((err) => {
+        console.error('Optional simulation feed unavailable:', err);
+    });
 
     const firstCoord = state.routing.activeLegs[0].from_node;
     state.drive.carPos = [firstCoord[1], firstCoord[0]];

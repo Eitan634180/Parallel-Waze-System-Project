@@ -18,6 +18,7 @@ package builder
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -140,10 +141,14 @@ func saveNodes(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	writeHeader(f, uint64(len(g.Nodes)))
+	if err := writeHeader(f, uint64(len(g.Nodes))); err != nil {
+		return err
+	}
 	for i := range g.Nodes {
 		n := &g.Nodes[i]
-		writeFixed(f, nodeBin{n.ID, n.Lat, n.Lon, n.X, n.Y, n.CellID})
+		if err := writeFixed(f, nodeBin{n.ID, n.Lat, n.Lon, n.X, n.Y, n.CellID}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -187,14 +192,18 @@ func saveEdges(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	writeHeader(f, uint64(len(g.Edges)))
+	if err := writeHeader(f, uint64(len(g.Edges))); err != nil {
+		return err
+	}
 	for i := range g.Edges {
 		e := &g.Edges[i]
-		writeFixed(f, edgeBin{
+		if err := writeFixed(f, edgeBin{
 			ID: e.ID, FromNodeID: e.FromNodeID, ToNodeID: e.ToNodeID,
 			Weight: e.Weight, DistanceM: e.DistanceM, SpeedKmh: e.SpeedKmh,
 			RoadClass: e.RoadClass, Flags: e.Flags,
-		})
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -231,37 +240,57 @@ func saveBaseAdj(g *Graph, path string) error {
 	}
 	defer f.Close()
 
-	// Write offsets count (= num_nodes + 1), then offsets, then edge IDs
-	writeUint64(f, uint64(len(g.BaseAdj.Offsets)))
-	for _, o := range g.BaseAdj.Offsets {
-		writeUint32(f, o)
+	if err := writeHeader(f, uint64(len(g.BaseAdj.Offsets))); err != nil {
+		return err
 	}
-	writeUint64(f, uint64(len(g.BaseAdj.EdgeIDs)))
+
+	// Write offsets count (= num_nodes + 1), then offsets, then edge IDs
+	for _, o := range g.BaseAdj.Offsets {
+		if err := writeUint32(f, o); err != nil {
+			return err
+		}
+	}
+	if err := writeUint64(f, uint64(len(g.BaseAdj.EdgeIDs))); err != nil {
+		return err
+	}
 	for _, e := range g.BaseAdj.EdgeIDs {
-		writeUint32(f, e)
+		if err := writeUint32(f, e); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func loadBaseAdj(path string) (AdjacencyList, error) {
-	f, err := os.Open(path)
+	f, offsetCount, hasHeader, err := openSequenceFile(path)
 	if err != nil {
 		return AdjacencyList{}, err
 	}
 	defer f.Close()
 
-	offsetCount, _ := readUint64(f)
 	offsets := make([]uint32, offsetCount)
 	for i := range offsets {
-		v, _ := readUint32(f)
+		v, err := readUint32(f)
+		if err != nil {
+			return AdjacencyList{}, err
+		}
 		offsets[i] = v
 	}
 
-	edgeCount, _ := readUint64(f)
+	edgeCount, err := readUint64(f)
+	if err != nil {
+		return AdjacencyList{}, err
+	}
 	edgeIDs := make([]uint32, edgeCount)
 	for i := range edgeIDs {
-		v, _ := readUint32(f)
+		v, err := readUint32(f)
+		if err != nil {
+			return AdjacencyList{}, err
+		}
 		edgeIDs[i] = v
+	}
+	if !hasHeader {
+		return AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}, nil
 	}
 
 	return AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}, nil
@@ -277,17 +306,29 @@ func saveCells(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	writeHeader(f, uint64(len(g.Cells)))
+	if err := writeHeader(f, uint64(len(g.Cells))); err != nil {
+		return err
+	}
 	for i := range g.Cells {
 		c := &g.Cells[i]
-		writeUint32(f, c.ID)
-		writeUint64(f, uint64(len(c.InternalNodeIDs)))
-		for _, nid := range c.InternalNodeIDs {
-			writeUint64(f, nid)
+		if err := writeUint32(f, c.ID); err != nil {
+			return err
 		}
-		writeUint64(f, uint64(len(c.BoundaryNodeIDs)))
+		if err := writeUint64(f, uint64(len(c.InternalNodeIDs))); err != nil {
+			return err
+		}
+		for _, nid := range c.InternalNodeIDs {
+			if err := writeUint64(f, nid); err != nil {
+				return err
+			}
+		}
+		if err := writeUint64(f, uint64(len(c.BoundaryNodeIDs))); err != nil {
+			return err
+		}
 		for _, nid := range c.BoundaryNodeIDs {
-			writeUint64(f, nid)
+			if err := writeUint64(f, nid); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -329,9 +370,13 @@ func saveBoundary(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	writeHeader(f, uint64(len(g.BoundaryNodes)))
+	if err := writeHeader(f, uint64(len(g.BoundaryNodes))); err != nil {
+		return err
+	}
 	for _, nid := range g.BoundaryNodes {
-		writeUint64(f, nid)
+		if err := writeUint64(f, nid); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -370,36 +415,49 @@ func saveOverlayAdj(g *Graph, path string) error {
 	}
 	defer f.Close()
 
-	writeUint64(f, uint64(len(g.OverlayAdj.Offsets)))
-	for _, o := range g.OverlayAdj.Offsets {
-		writeUint32(f, o)
+	if err := writeHeader(f, uint64(len(g.OverlayAdj.Offsets))); err != nil {
+		return err
 	}
-	writeUint64(f, uint64(len(g.OverlayAdj.OverlayEdges)))
+	for _, o := range g.OverlayAdj.Offsets {
+		if err := writeUint32(f, o); err != nil {
+			return err
+		}
+	}
+	if err := writeUint64(f, uint64(len(g.OverlayAdj.OverlayEdges))); err != nil {
+		return err
+	}
 	for _, e := range g.OverlayAdj.OverlayEdges {
 		cc := uint8(0)
 		if e.IsCrossCell {
 			cc = 1
 		}
-		writeFixed(f, overlayEdgeBin{e.FromNodeID, e.ToNodeID, e.Weight, e.DistanceM, cc, [3]byte{}})
+		if err := writeFixed(f, overlayEdgeBin{e.FromNodeID, e.ToNodeID, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func loadOverlayAdj(path string) (OverlayAdjList, error) {
-	f, err := os.Open(path)
+	f, offsetCount, _, err := openSequenceFile(path)
 	if err != nil {
 		return OverlayAdjList{}, err
 	}
 	defer f.Close()
 
-	offsetCount, _ := readUint64(f)
 	offsets := make([]uint32, offsetCount)
 	for i := range offsets {
-		v, _ := readUint32(f)
+		v, err := readUint32(f)
+		if err != nil {
+			return OverlayAdjList{}, err
+		}
 		offsets[i] = v
 	}
 
-	edgeCount, _ := readUint64(f)
+	edgeCount, err := readUint64(f)
+	if err != nil {
+		return OverlayAdjList{}, err
+	}
 	edges := make([]OverlayEdge, edgeCount)
 	for i := range edges {
 		var b overlayEdgeBin
@@ -426,10 +484,14 @@ func createFile(path string) (*os.File, error) {
 	return os.Create(path)
 }
 
-func writeHeader(w io.Writer, count uint64) {
-	w.Write([]byte(magic))
-	binary.Write(w, le, version)
-	binary.Write(w, le, count)
+func writeHeader(w io.Writer, count uint64) error {
+	if _, err := w.Write([]byte(magic)); err != nil {
+		return err
+	}
+	if err := binary.Write(w, le, version); err != nil {
+		return err
+	}
+	return binary.Write(w, le, count)
 }
 
 func openFile(path string) (*os.File, uint64, error) {
@@ -438,22 +500,72 @@ func openFile(path string) (*os.File, uint64, error) {
 		return nil, 0, err
 	}
 	hdr := make([]byte, 4)
-	f.Read(hdr)
+	if _, err := io.ReadFull(f, hdr); err != nil {
+		f.Close()
+		return nil, 0, err
+	}
 	if string(hdr) != magic {
 		f.Close()
 		return nil, 0, fmt.Errorf("bad magic in %s", path)
 	}
 	var ver uint16
-	binary.Read(f, le, &ver)
+	if err := binary.Read(f, le, &ver); err != nil {
+		f.Close()
+		return nil, 0, err
+	}
 	var count uint64
-	binary.Read(f, le, &count)
+	if err := binary.Read(f, le, &count); err != nil {
+		f.Close()
+		return nil, 0, err
+	}
 	return f, count, nil
 }
 
-func writeFixed(w io.Writer, v interface{}) { binary.Write(w, le, v) }
+func openSequenceFile(path string) (*os.File, uint64, bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, false, err
+	}
 
-func writeUint32(w io.Writer, v uint32) { binary.Write(w, le, v) }
-func writeUint64(w io.Writer, v uint64) { binary.Write(w, le, v) }
+	hdr := make([]byte, 4)
+	n, err := io.ReadFull(f, hdr)
+	switch {
+	case err == nil && string(hdr) == magic:
+		var ver uint16
+		if err := binary.Read(f, le, &ver); err != nil {
+			f.Close()
+			return nil, 0, false, err
+		}
+		var count uint64
+		if err := binary.Read(f, le, &count); err != nil {
+			f.Close()
+			return nil, 0, false, err
+		}
+		return f, count, true, nil
+	case err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF):
+		f.Close()
+		return nil, 0, false, err
+	}
+
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		f.Close()
+		return nil, 0, false, err
+	}
+	count, err := readUint64(f)
+	if err != nil {
+		f.Close()
+		if errors.Is(err, io.EOF) && n == 0 {
+			return nil, 0, false, io.ErrUnexpectedEOF
+		}
+		return nil, 0, false, err
+	}
+	return f, count, false, nil
+}
+
+func writeFixed(w io.Writer, v interface{}) error { return binary.Write(w, le, v) }
+
+func writeUint32(w io.Writer, v uint32) error { return binary.Write(w, le, v) }
+func writeUint64(w io.Writer, v uint64) error { return binary.Write(w, le, v) }
 
 func readUint32(r io.Reader) (uint32, error) {
 	var v uint32

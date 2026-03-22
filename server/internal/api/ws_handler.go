@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"nav-system/internal/routing"
 	"nav-system/internal/session"
 	"nav-system/map/builder"
 
@@ -44,22 +45,37 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, sessionID stri
 	}
 
 	sess.Mu.Lock()
+	oldConn := sess.Conn
+	needsEdgeInit := oldConn == nil && sess.CurrentEdgeAt.IsZero()
 	sess.Conn = conn
 	sess.Mu.Unlock()
-	s.initializeSessionEdge(sess)
+	if oldConn != nil {
+		oldConn.Close()
+	}
+	if needsEdgeInit {
+		s.initializeSessionEdge(sess)
+	}
 	s.sendInitialSpeedUpdates(sess)
 	defer func() {
+		ownsSession := false
+		var currentEdgeID *uint32
 		sess.Mu.Lock()
-		currentEdgeID := sess.CurrentEdgeID
-		sess.Conn = nil
-		sess.Mu.Unlock()
-		if currentEdgeID != nil {
-			s.store.LeaveEdge(builder.EdgeID(*currentEdgeID))
+		if sess.Conn == conn {
+			ownsSession = true
+			currentEdgeID = sess.CurrentEdgeID
+			sess.Conn = nil
 		}
+		sess.Mu.Unlock()
 
 		sess.WriteMu.Lock()
 		conn.Close()
 		sess.WriteMu.Unlock()
+		if !ownsSession {
+			return
+		}
+		if currentEdgeID != nil {
+			s.store.LeaveEdge(builder.EdgeID(*currentEdgeID))
+		}
 		s.mgr.Delete(sessionID)
 	}()
 
@@ -96,6 +112,11 @@ func (s *Server) initializeSessionEdge(sess *session.Session) {
 
 func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 	now := time.Now()
+	var advanceSessionID string
+	var advanceRoute routing.Route
+	advanceFrom := -1
+	advanceTo := -1
+
 	sess.Mu.Lock()
 	sess.LastPing = now
 
@@ -136,7 +157,13 @@ func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 		}
 	}
 
-	s.mgr.AdvanceStep(sess, newIdx)
+	if newIdx > sess.StepIdx {
+		advanceSessionID = sess.ID
+		advanceRoute = sess.Route
+		advanceFrom = sess.StepIdx
+		advanceTo = newIdx
+		sess.StepIdx = newIdx
+	}
 	nextEdgeID := session.CurrentEdgeForStep(sess.Route, newIdx)
 	currentEdgeChanged := (nextEdgeID == nil) != (sess.CurrentEdgeID == nil)
 	if !currentEdgeChanged && nextEdgeID != nil && sess.CurrentEdgeID != nil {
@@ -155,6 +182,10 @@ func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 	sess.LastLat = msg.Lat
 	sess.LastLon = msg.Lon
 	sess.Mu.Unlock()
+
+	if advanceFrom >= 0 {
+		s.mgr.AdvanceStep(advanceSessionID, advanceRoute, advanceFrom, advanceTo)
+	}
 
 	session.Check(
 		sess,
@@ -184,7 +215,7 @@ func (s *Server) sendInitialSpeedUpdates(sess *session.Session) {
 		if baseKmh <= 0 {
 			continue
 		}
-		recSpeed := s.store.RecommendedSpeedKmh(eid, baseKmh, s.g.Edges[eid].DistanceM)
+		recSpeed := s.store.LiveSpeedKmh(eid, s.g.Edges[eid].Weight, baseKmh, s.g.Edges[eid].DistanceM)
 		edgeIDVal := uint32(eid)
 		recSpeedVal := recSpeed
 		_ = sess.Send(session.OutMsg{
