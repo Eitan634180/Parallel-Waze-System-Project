@@ -26,7 +26,7 @@ func reconstructPath(
 
 	// Step A: walk egressPred backward from dstID until we hit a
 	// destination-cell boundary node (the overlay entry point).
-	egressSteps, entryBoundaryID := walkBaseBack(g, dstID, egressPred)
+	egressSteps, entryBoundaryID := walkBaseBack(g, dstID, egressPred, wf)
 	if entryBoundaryID == 0 {
 		return nil, nil, false
 	}
@@ -39,7 +39,7 @@ func reconstructPath(
 	}
 
 	// Step C: walk injPred backward from exitBoundaryID to srcID.
-	srcSteps, termID := walkBaseBack(g, exitBoundaryID, injPred)
+	srcSteps, termID := walkBaseBack(g, exitBoundaryID, injPred, wf)
 	_ = termID
 
 	reverseSteps(srcSteps)
@@ -68,6 +68,7 @@ func walkBaseBack(
 	g *builder.Graph,
 	startID builder.NodeID,
 	pred map[builder.NodeID]predEntry,
+	wf WeightFunc,
 ) (steps []Step, terminalID builder.NodeID) {
 	cur := startID
 	for {
@@ -80,7 +81,7 @@ func walkBaseBack(
 			return nil, 0
 		}
 		e := &g.Edges[p.edgeID]
-		step := nodeToStep(g, ni, p.edgeID, e.DistanceM, e.Weight)
+		step := nodeToStep(g, ni, p.edgeID, e.DistanceM, wf(e))
 		steps = append(steps, step)
 		cur = p.prevNodeID
 	}
@@ -179,7 +180,7 @@ func expandShortcut(g *builder.Graph, srcID, dstID builder.NodeID, wf WeightFunc
 		}
 	}
 
-	steps, _ := walkBaseBack(g, dstID, pred)
+	steps, _ := walkBaseBack(g, dstID, pred, wf)
 	_ = dstIdx
 	return steps
 }
@@ -238,7 +239,7 @@ func dedup(next, prev []Step) []Step {
 // used by intraSearch.
 func backtrackBase(srcIdx, dstIdx uint32, pred map[builder.NodeID]predEntry, g *builder.Graph, wf WeightFunc) []Step {
 	dstID := g.Nodes[dstIdx].ID
-	steps, _ := walkBaseBack(g, dstID, pred)
+	steps, _ := walkBaseBack(g, dstID, pred, wf)
 	reverseSteps(steps)
 	srcStep := nodeToStep(g, srcIdx, 0, 0, 0)
 	return append([]Step{srcStep}, steps...)

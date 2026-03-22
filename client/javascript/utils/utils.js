@@ -1,4 +1,4 @@
-import { DEFAULT_SPEED_LIMIT } from "./config.js"
+import { DEFAULT_SPEED_LIMIT } from '../core/config.js';
 
 export function formatDuration(seconds) {
     if (!seconds || seconds < 0) return '--';
@@ -47,6 +47,8 @@ export function processRawRoute(route) {
         pathCoords: steps.map(step => [step.lon, step.lat]),
         distance: route.total_dist_m || 0,
         dynamicETA: route.total_time_sec || 0,
+        congestionAhead: Boolean(route.congestion_ahead),
+        congestedEdges: route.congested_edges || 0,
     };
 }
 

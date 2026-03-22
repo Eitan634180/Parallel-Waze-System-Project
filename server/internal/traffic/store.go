@@ -166,7 +166,7 @@ func (s *Store) RecommendedSpeedKmh(id builder.EdgeID, baseKmh, distanceM float3
 		return baseKmh
 	}
 	density := s.Density(id)
-	if density <= 0 {
+	if density <= 1 {
 		return baseKmh
 	}
 
