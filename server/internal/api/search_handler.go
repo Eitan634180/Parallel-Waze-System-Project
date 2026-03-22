@@ -10,10 +10,7 @@ import (
 
 const (
 	nominatimSearchURL = "https://nominatim.openstreetmap.org/search"
-	searchLimit        = 5
 	searchUserAgent    = "navigation-prototype/1.0"
-	searchCountryCodes = "il,ps"
-	searchViewBox      = "34.15,33.45,35.90,29.45"
 )
 
 type nominatimSearchResult struct {
@@ -44,12 +41,18 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	values := url.Values{}
 	values.Set("q", query)
 	values.Set("format", "jsonv2")
-	values.Set("limit", strconv.Itoa(searchLimit))
+	values.Set("limit", strconv.Itoa(s.search.Limit))
 	values.Set("addressdetails", "0")
-	values.Set("accept-language", "he")
-	values.Set("countrycodes", searchCountryCodes)
-	values.Set("viewbox", searchViewBox)
-	values.Set("bounded", "1")
+	if s.search.Language != "" {
+		values.Set("accept-language", s.search.Language)
+	}
+	if s.search.CountryCodes != "" {
+		values.Set("countrycodes", s.search.CountryCodes)
+	}
+	if s.search.ViewBox != "" {
+		values.Set("viewbox", s.search.ViewBox)
+		values.Set("bounded", "1")
+	}
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, nominatimSearchURL+"?"+values.Encode(), nil)
 	if err != nil {
@@ -57,7 +60,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("User-Agent", searchUserAgent)
-	req.Header.Set("Accept-Language", "he")
+	if s.search.Language != "" {
+		req.Header.Set("Accept-Language", s.search.Language)
+	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {

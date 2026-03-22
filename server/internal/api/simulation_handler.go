@@ -142,8 +142,7 @@ func (s *Server) generateRandomSimulationRoutes(count int) []routing.Route {
 		if len(computed) == 0 {
 			continue
 		}
-		route := s.prepareRoute(computed[0])
-		routes = append(routes, route)
+		routes = append(routes, computed[0])
 	}
 	return routes
 }

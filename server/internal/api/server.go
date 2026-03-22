@@ -32,6 +32,7 @@ type Server struct {
 	mgr    *session.Manager
 	router *routing.Router
 	sim    *simulation.Manager
+	search searchConfig
 
 	// Route cache: routes are computed by POST /route and stored here by ID so
 	// that POST /session can look them up later.
@@ -56,6 +57,7 @@ func NewServer(
 		mgr:        mgr,
 		router:     router,
 		sim:        sim,
+		search:     loadSearchConfig(),
 		routeCache: make(map[string]routeCacheEntry),
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 		mux:        http.NewServeMux(),
@@ -78,9 +80,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // withCORS wraps a handler with permissive CORS headers.
 func (s *Server) withCORS(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			if !isAllowedBrowserOrigin(origin) {
+				http.Error(w, "origin not allowed", http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

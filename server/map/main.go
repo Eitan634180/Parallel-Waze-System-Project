@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nav-system/map/builder"
+	"nav-system/map/importer"
 )
 
 /*
@@ -37,7 +38,7 @@ func main() {
 
 	log.Printf("[BUILD] Parsing PBF: %s...", *pbfPath)
 	t := time.Now()
-	pr, err := builder.ParsePBF(*pbfPath)
+	pr, err := importer.ParsePBF(*pbfPath)
 	if err != nil {
 		log.Fatalf("ParsePBF: %v", err)
 	}
