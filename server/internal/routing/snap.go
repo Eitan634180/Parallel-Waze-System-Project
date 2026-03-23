@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"nav-system/internal/geo"
-	"nav-system/map/builder"
+	"nav-system/internal/graph/builder"
 )
 
 // SnapIndex is a prebuilt spatial grid for nearest-node lookups.

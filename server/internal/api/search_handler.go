@@ -81,7 +81,6 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert lat lng in results from strings to floats
 	results := make([]searchResult, 0, len(upstream))
 	for _, item := range upstream {
 		lat, errLat := strconv.ParseFloat(item.Lat, 64)

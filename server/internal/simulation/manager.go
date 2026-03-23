@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
 	"nav-system/internal/traffic"
-	"nav-system/map/builder"
 )
 
 const tickInterval = 250 * time.Millisecond

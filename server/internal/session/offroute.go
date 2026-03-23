@@ -2,8 +2,8 @@ package session
 
 import (
 	"nav-system/internal/geo"
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
-	"nav-system/map/builder"
 )
 
 func distanceFromExpectedPathMLocked(s *Session, lat, lon float64, g *builder.Graph) float32 {

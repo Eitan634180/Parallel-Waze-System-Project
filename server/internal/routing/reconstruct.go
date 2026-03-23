@@ -1,6 +1,6 @@
 package routing
 
-import "nav-system/map/builder"
+import "nav-system/internal/graph/builder"
 
 // reconstructPath builds the full []Step for a two-level route.
 func reconstructPath(

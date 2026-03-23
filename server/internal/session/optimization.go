@@ -3,9 +3,9 @@ package session
 import (
 	"context"
 
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
 	"nav-system/internal/traffic"
-	"nav-system/map/builder"
 )
 
 // RunOptimizationSweep reroutes sessions that were flagged by the propagation heuristic.

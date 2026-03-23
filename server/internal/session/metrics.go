@@ -2,9 +2,9 @@ package session
 
 import (
 	"nav-system/internal/geo"
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
 	"nav-system/internal/traffic"
-	"nav-system/map/builder"
 )
 
 func computeETALocked(s *Session, g *builder.Graph, store *traffic.Store) float32 {

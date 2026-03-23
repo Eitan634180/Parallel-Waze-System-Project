@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"nav-system/map/builder"
+	"nav-system/internal/graph/builder"
 )
 
 const customizationInterval = 10 * time.Second

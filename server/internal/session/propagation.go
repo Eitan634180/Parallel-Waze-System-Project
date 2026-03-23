@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"nav-system/internal/geo"
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/traffic"
-	"nav-system/map/builder"
 )
 
 // RunPropagation broadcasts speed updates for edges whose live traffic changed.

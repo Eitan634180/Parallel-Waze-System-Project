@@ -1,9 +1,9 @@
 package session
 
 import (
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
 	"nav-system/internal/traffic"
-	"nav-system/map/builder"
 )
 
 func sameRemainingRoute(s *Session, candidate routing.Route) bool {

@@ -3,7 +3,7 @@ package routing
 import (
 	"container/heap"
 
-	"nav-system/map/builder"
+	"nav-system/internal/graph/builder"
 )
 
 type predEntry struct {

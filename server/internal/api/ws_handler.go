@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
 	"nav-system/internal/session"
-	"nav-system/map/builder"
 
 	"github.com/gorilla/websocket"
 )

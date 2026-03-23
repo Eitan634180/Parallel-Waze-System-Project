@@ -1,3 +1,7 @@
-server/map/data/*
-server/.gocache
-.gocache
+/.gocache/
+/server/.gocache/
+/.cache/
+/server/.cache/
+/server/server.exe
+/server/data/map/*.bin
+/server/data/map/*.pbf

@@ -3,8 +3,8 @@ package session
 import (
 	"sync"
 
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
-	"nav-system/map/builder"
 
 	"github.com/google/uuid"
 )

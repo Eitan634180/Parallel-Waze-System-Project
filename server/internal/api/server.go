@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
 	"nav-system/internal/session"
 	"nav-system/internal/simulation"
 	"nav-system/internal/traffic"
-	"nav-system/map/builder"
 )
 
 const (

@@ -4,15 +4,12 @@ import (
 	"net/http"
 )
 
-// POST /session
 type createSessionRequest struct {
 	RouteID string `json:"route_id"`
 }
 type createSessionResponse struct {
 	SessionID string `json:"session_id"`
 }
-
-// DELETE /session/:id  →  204
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -23,7 +20,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleSessionID dispatches /session/:id and /session/:id/ws
+// handleSessionID routes requests for /session/:id and /session/:id/ws.
 func (s *Server) handleSessionID(w http.ResponseWriter, r *http.Request) {
 	sessionID, subpath, ok := parseSessionPath(r.URL.Path)
 	if !ok {
