@@ -9,10 +9,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// ---------------------------------------------------------------------------
-// WS message types (server → client)
-// ---------------------------------------------------------------------------
-
 type RoutePayload struct {
 	ID              string         `json:"id"`
 	Steps           []routing.Step `json:"steps"`
@@ -24,22 +20,18 @@ type RoutePayload struct {
 
 // OutMsg is any message the server sends to the client over the WebSocket.
 type OutMsg struct {
-	Type string `json:"type"` // "eta_update" | "reroute" | "speed_update"
+	Type string `json:"type"`
 
-	// eta_update
 	ETASec *float32 `json:"eta_sec,omitempty"`
 
-	// reroute
 	Route         *RoutePayload `json:"route,omitempty"`
 	RerouteReason *string       `json:"reroute_reason,omitempty"`
 	OldETASec     *float32      `json:"old_eta_sec,omitempty"`
 	NewETASec     *float32      `json:"new_eta_sec,omitempty"`
 
-	// speed_update
 	EdgeID              *uint32  `json:"edge_id,omitempty"`
 	RecommendedSpeedKmh *float32 `json:"recommended_speed_kmh,omitempty"`
 
-	// debug_update
 	Debug *NavigationDebug `json:"debug,omitempty"`
 }
 
@@ -58,29 +50,22 @@ type NavigationDebug struct {
 	LastRerouteAtUnixMs int64   `json:"last_reroute_at_unix_ms,omitempty"`
 }
 
-// ---------------------------------------------------------------------------
-// Session
-// ---------------------------------------------------------------------------
-
 // Session holds the full state of an active driving session.
 type Session struct {
 	Mu    sync.RWMutex
 	ID    string
 	Route routing.Route
 
-	// Navigation state
-	StepIdx       int // index into Route.Steps of the client's current position
+	StepIdx       int
 	CurrentEdgeID *uint32
 	CurrentEdgeAt time.Time
 	LastLat       float64
 	LastLon       float64
 
-	// Timing
 	LastPing    time.Time
 	LastReroute time.Time
 	LastETAPush time.Time
 
-	// Current ETA (seconds remaining from StepIdx to end)
 	ETA float32
 
 	OffRouteViolations    int
@@ -90,13 +75,11 @@ type Session struct {
 	LastRerouteReason     string
 	CheckBetterRoute      bool
 
-	// WebSocket — protected by WriteMu for concurrent writes.
 	Conn    *websocket.Conn
-	WriteMu sync.Mutex // serialise all writes to Conn
+	WriteMu sync.Mutex
 }
 
 // Send writes a message to the client's WebSocket connection.
-// It is safe to call from multiple goroutines.
 func (s *Session) Send(msg OutMsg) error {
 	s.Mu.RLock()
 	conn := s.Conn
@@ -104,61 +87,12 @@ func (s *Session) Send(msg OutMsg) error {
 	if conn == nil {
 		return nil
 	}
+
 	s.WriteMu.Lock()
 	defer s.WriteMu.Unlock()
+
 	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	return conn.WriteJSON(msg)
-}
-
-// RemainingSteps returns the steps from the current position to the end.
-func (s *Session) RemainingSteps() []routing.Step {
-	s.Mu.RLock()
-	defer s.Mu.RUnlock()
-	return s.remainingStepsLocked()
-}
-
-func (s *Session) remainingStepsLocked() []routing.Step {
-	if s.StepIdx < 0 {
-		return s.Route.Steps
-	}
-	if s.StepIdx >= len(s.Route.Steps) {
-		return nil
-	}
-	return s.Route.Steps[s.StepIdx:]
-}
-
-// RemainingEdges returns the EdgeIDs of all steps after the current position.
-func (s *Session) RemainingEdges() []uint32 {
-	s.Mu.RLock()
-	steps := s.remainingStepsLocked()
-	ids := make([]uint32, 0, len(steps))
-	for _, st := range steps {
-		if st.EdgeID != nil {
-			ids = append(ids, *st.EdgeID)
-		}
-	}
-	s.Mu.RUnlock()
-	return ids
-}
-
-func InitialStepIndex(route routing.Route) int {
-	if len(route.Steps) > 1 {
-		return 1
-	}
-	return 0
-}
-
-func CurrentEdgeForStep(route routing.Route, stepIdx int) *uint32 {
-	if stepIdx < 0 || stepIdx >= len(route.Steps) {
-		return nil
-	}
-	if stepIdx == 0 {
-		if len(route.Steps) < 2 {
-			return nil
-		}
-		return route.Steps[1].EdgeID
-	}
-	return route.Steps[stepIdx].EdgeID
 }
 
 func DebugSnapshot(s *Session, speedKmh float32) NavigationDebug {

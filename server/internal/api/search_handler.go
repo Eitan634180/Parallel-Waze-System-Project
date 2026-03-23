@@ -27,14 +27,13 @@ type searchResult struct {
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
 
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]searchResult{})
+		writeJSON(w, http.StatusOK, []searchResult{})
 		return
 	}
 
@@ -97,6 +96,5 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(results)
+	writeJSON(w, http.StatusOK, results)
 }

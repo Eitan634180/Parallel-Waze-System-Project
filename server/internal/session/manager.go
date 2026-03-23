@@ -1,32 +1,19 @@
 package session
 
 import (
-	"context"
 	"sync"
-	"time"
 
 	"nav-system/internal/routing"
-	"nav-system/internal/traffic"
 	"nav-system/map/builder"
 
 	"github.com/google/uuid"
 )
 
-const (
-	sessionExpiry       = 5 * time.Minute
-	expiryCheckInterval = 60 * time.Second
-	propagationInterval = 5 * time.Second
-)
-
-// ---------------------------------------------------------------------------
-// Manager
-// ---------------------------------------------------------------------------
-
 // Manager owns all active sessions and the reverse edge-to-session index.
 type Manager struct {
 	mu              sync.RWMutex
 	sessions        map[string]*Session
-	edgeSubscribers map[builder.EdgeID]map[string]struct{} // edgeID → set of sessionIDs
+	edgeSubscribers map[builder.EdgeID]map[string]struct{}
 }
 
 // NewManager creates an empty Manager.
@@ -37,119 +24,126 @@ func NewManager() *Manager {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// CRUD
-// ---------------------------------------------------------------------------
-
 // Create registers a new session for the given route and returns it.
 func (m *Manager) Create(route routing.Route) *Session {
 	id := uuid.NewString()
 	stepIdx := InitialStepIndex(route)
-	s := &Session{
+	session := &Session{
 		ID:            id,
 		Route:         route,
 		StepIdx:       stepIdx,
 		CurrentEdgeID: CurrentEdgeForStep(route, stepIdx),
-		LastPing:      time.Now(),
-		LastReroute:   time.Now(),
+		LastPing:      now(),
+		LastReroute:   now(),
 	}
+
 	m.mu.Lock()
-	m.sessions[id] = s
+	defer m.mu.Unlock()
+
+	m.sessions[id] = session
 	m.subscribeEdges(id, route.Steps[stepIdx:])
-	m.mu.Unlock()
-	return s
+	return session
 }
 
-// Get retrieves a session by ID (nil if not found).
+// Get retrieves a session by ID.
 func (m *Manager) Get(id string) *Session {
 	m.mu.RLock()
-	s := m.sessions[id]
-	m.mu.RUnlock()
-	return s
+	defer m.mu.RUnlock()
+	return m.sessions[id]
 }
 
-// Delete removes a session, unsubscribing its edges.
+// Delete removes a session and unsubscribes it from the remaining route edges.
 func (m *Manager) Delete(id string) {
-	s := m.Get(id)
-	if s == nil {
+	session := m.Get(id)
+	if session == nil {
 		return
 	}
 
-	s.Mu.Lock()
-	conn := s.Conn
-	s.Conn = nil
-	remainingSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
-	s.Mu.Unlock()
+	session.Mu.Lock()
+	conn := session.Conn
+	session.Conn = nil
+	remainingSteps := append([]routing.Step(nil), session.remainingStepsLocked()...)
+	session.Mu.Unlock()
 
 	if conn != nil {
-		s.WriteMu.Lock()
+		session.WriteMu.Lock()
 		conn.Close()
-		s.WriteMu.Unlock()
+		session.WriteMu.Unlock()
 	}
 
 	m.mu.Lock()
-	if _, ok := m.sessions[id]; ok {
-		m.unsubscribeEdges(id, remainingSteps)
-		delete(m.sessions, id)
+	defer m.mu.Unlock()
+
+	if _, ok := m.sessions[id]; !ok {
+		return
 	}
-	m.mu.Unlock()
+
+	m.unsubscribeEdges(id, remainingSteps)
+	delete(m.sessions, id)
 }
 
-// AdvanceStep updates edge subscriptions for a session after it advances.
+// AdvanceStep removes subscriptions for edges that the session has already traversed.
 func (m *Manager) AdvanceStep(sessionID string, route routing.Route, oldIdx, newIdx int) {
 	if newIdx <= oldIdx {
 		return
 	}
+
 	m.mu.Lock()
-	// Unsubscribe edges that were traversed (indices oldIdx..newIdx-1).
+	defer m.mu.Unlock()
+
 	for i := oldIdx; i < newIdx && i < len(route.Steps); i++ {
 		edgeID := route.Steps[i].EdgeID
 		if edgeID == nil {
 			continue
 		}
-		eid := builder.EdgeID(*edgeID)
-		if subs, ok := m.edgeSubscribers[eid]; ok {
-			delete(subs, sessionID)
-			if len(subs) == 0 {
-				delete(m.edgeSubscribers, eid)
-			}
-		}
+
+		m.unsubscribeEdge(sessionID, builder.EdgeID(*edgeID))
 	}
-	m.mu.Unlock()
 }
 
-// UpdateRoute replaces a session's route (reroute) and resubscribes edges.
+// UpdateRoute replaces a session's route and refreshes edge subscriptions.
 func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
 	s.Mu.Lock()
 	oldSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	s.Route = newRoute
 	s.StepIdx = InitialStepIndex(newRoute)
 	s.CurrentEdgeID = CurrentEdgeForStep(newRoute, s.StepIdx)
-	s.CurrentEdgeAt = time.Now()
+	s.CurrentEdgeAt = now()
 	newSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	sessionID := s.ID
 	s.Mu.Unlock()
 
 	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.unsubscribeEdges(sessionID, oldSteps)
 	m.subscribeEdges(sessionID, newSteps)
-	m.mu.Unlock()
 }
 
-// ---------------------------------------------------------------------------
-// Edge subscription helpers (caller must hold m.mu write lock)
-// ---------------------------------------------------------------------------
+// SubscribersOf returns a snapshot of session IDs subscribed to edgeID.
+func (m *Manager) SubscribersOf(edgeID builder.EdgeID) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	subscribers := m.edgeSubscribers[edgeID]
+	ids := make([]string, 0, len(subscribers))
+	for id := range subscribers {
+		ids = append(ids, id)
+	}
+	return ids
+}
 
 func (m *Manager) subscribeEdges(sessionID string, steps []routing.Step) {
 	for _, step := range steps {
 		if step.EdgeID == nil {
 			continue
 		}
-		eid := builder.EdgeID(*step.EdgeID)
-		if m.edgeSubscribers[eid] == nil {
-			m.edgeSubscribers[eid] = make(map[string]struct{})
+
+		edgeID := builder.EdgeID(*step.EdgeID)
+		if m.edgeSubscribers[edgeID] == nil {
+			m.edgeSubscribers[edgeID] = make(map[string]struct{})
 		}
-		m.edgeSubscribers[eid][sessionID] = struct{}{}
+		m.edgeSubscribers[edgeID][sessionID] = struct{}{}
 	}
 }
 
@@ -158,312 +152,19 @@ func (m *Manager) unsubscribeEdges(sessionID string, steps []routing.Step) {
 		if step.EdgeID == nil {
 			continue
 		}
-		eid := builder.EdgeID(*step.EdgeID)
-		if subs, ok := m.edgeSubscribers[eid]; ok {
-			delete(subs, sessionID)
-			if len(subs) == 0 {
-				delete(m.edgeSubscribers, eid)
-			}
-		}
+
+		m.unsubscribeEdge(sessionID, builder.EdgeID(*step.EdgeID))
 	}
 }
 
-// SubscribersOf returns a snapshot of session IDs subscribed to edgeID.
-func (m *Manager) SubscribersOf(eid builder.EdgeID) []string {
-	m.mu.RLock()
-	subs := m.edgeSubscribers[eid]
-	ids := make([]string, 0, len(subs))
-	for id := range subs {
-		ids = append(ids, id)
-	}
-	m.mu.RUnlock()
-	return ids
-}
-
-// ---------------------------------------------------------------------------
-// Background workers
-// ---------------------------------------------------------------------------
-
-// RunExpiry starts the session auto-expiry goroutine.
-// It removes sessions whose last ping was a long time ago.
-func (m *Manager) RunExpiry(ctx context.Context) {
-	ticker := time.NewTicker(expiryCheckInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			m.expireSessions()
-		}
-	}
-}
-
-func (m *Manager) expireSessions() {
-	cutoff := time.Now().Add(-sessionExpiry)
-	var toCheck []*Session
-
-	m.mu.RLock()
-	for _, s := range m.sessions {
-		toCheck = append(toCheck, s)
-	}
-	m.mu.RUnlock()
-
-	var expiredIDs []string
-	for _, s := range toCheck {
-		s.Mu.RLock()
-		expired := s.LastPing.Before(cutoff)
-		s.Mu.RUnlock()
-		if expired {
-			expiredIDs = append(expiredIDs, s.ID)
-		}
-	}
-
-	for _, id := range expiredIDs {
-		m.Delete(id)
-	}
-}
-
-// RunPropagation starts the background speed-update propagation goroutine.
-// It polls the traffic Store for significantly-changed edges every 5 s and
-// pushes speed_update messages to all subscribed sessions.
-func (m *Manager) RunPropagation(ctx context.Context, store *traffic.Store, g *builder.Graph) {
-	ticker := time.NewTicker(propagationInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			m.propagate(store, g)
-		}
-	}
-}
-
-func (m *Manager) propagate(store *traffic.Store, g *builder.Graph) {
-	changed := store.DirtySnapshot()
-
-	// Capture edges that experienced significant traffic relaxation
-	var improvedEdges []traffic.ChangedEdge
-	for _, ce := range changed {
-		if ce.OldMultiplier-ce.NewMultiplier >= traffic.SignificantShift {
-			improvedEdges = append(improvedEdges, ce)
-		}
-	}
-
-	if len(improvedEdges) > 0 {
-		m.mu.RLock()
-		activeSessions := make([]*Session, 0, len(m.sessions))
-		for _, s := range m.sessions {
-			activeSessions = append(activeSessions, s)
-		}
-		m.mu.RUnlock()
-		go evaluateHeuristics(activeSessions, improvedEdges, store, g)
-	}
-
-	for _, ce := range changed {
-		// Find base speed for this edge.
-		var baseKmh float32
-		if int(ce.EdgeID) < len(g.Edges) {
-			baseKmh = g.Edges[ce.EdgeID].SpeedKmh
-		}
-		if baseKmh <= 0 {
-			continue
-		}
-		recSpeed := store.LiveSpeedKmh(ce.EdgeID, g.Edges[ce.EdgeID].Weight, baseKmh, g.Edges[ce.EdgeID].DistanceM)
-
-		eid32 := uint32(ce.EdgeID)
-		recSpeedVal := recSpeed
-		subscribers := m.SubscribersOf(ce.EdgeID)
-
-		for _, sid := range subscribers {
-			s := m.Get(sid)
-			if s == nil {
-				continue
-			}
-			s.Mu.RLock()
-			hasConn := s.Conn != nil
-			s.Mu.RUnlock()
-			if !hasConn {
-				continue
-			}
-			_ = s.Send(OutMsg{
-				Type:                "speed_update",
-				EdgeID:              &eid32,
-				RecommendedSpeedKmh: &recSpeedVal,
-			})
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Optimization 2 Background Workers
-// ---------------------------------------------------------------------------
-
-func evaluateHeuristics(sessions []*Session, improvedEdges []traffic.ChangedEdge, store *traffic.Store, g *builder.Graph) {
-	const maxSpeedMs = 120.0 / 3.6
-
-	var wg sync.WaitGroup
-	numWorkers := 10
-	if len(sessions) < numWorkers {
-		numWorkers = len(sessions)
-	}
-	if numWorkers == 0 {
+func (m *Manager) unsubscribeEdge(sessionID string, edgeID builder.EdgeID) {
+	subscribers, ok := m.edgeSubscribers[edgeID]
+	if !ok {
 		return
 	}
 
-	chunkSize := len(sessions) / numWorkers
-	for w := 0; w < numWorkers; w++ {
-		start := w * chunkSize
-		end := start + chunkSize
-		if w == numWorkers-1 {
-			end = len(sessions)
-		}
-
-		wg.Add(1)
-		go func(sessChunk []*Session) {
-			defer wg.Done()
-			for _, s := range sessChunk {
-				s.Mu.RLock()
-				if len(s.Route.Steps) == 0 {
-					s.Mu.RUnlock()
-					continue
-				}
-				carX, carY := projectForCheck(s.LastLat, s.LastLon)
-				destStep := s.Route.Steps[len(s.Route.Steps)-1]
-				destNode := g.NodeByID(builder.NodeID(destStep.NodeID))
-				eta := s.ETA
-				s.Mu.RUnlock()
-
-				if destNode == nil {
-					continue
-				}
-
-				flagged := false
-				for _, ce := range improvedEdges {
-					if int(ce.EdgeID) >= len(g.Edges) {
-						continue
-					}
-					edge := g.Edges[ce.EdgeID]
-					u := g.NodeByID(edge.FromNodeID)
-					v := g.NodeByID(edge.ToNodeID)
-					if u == nil || v == nil {
-						continue
-					}
-
-					// Lower-Bound calculation
-					distCarU := distancePointToPoint(carX, carY, u.X, u.Y)
-					distVDst := distancePointToPoint(v.X, v.Y, destNode.X, destNode.Y)
-
-					idealTime := (distCarU / maxSpeedMs) + store.LiveWeight(ce.EdgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM) + (distVDst / maxSpeedMs)
-
-					if idealTime < eta {
-						flagged = true
-						break
-					}
-				}
-
-				if flagged {
-					s.Mu.Lock()
-					s.CheckBetterRoute = true
-					s.Mu.Unlock()
-				}
-			}
-		}(sessions[start:end])
-	}
-	wg.Wait()
-}
-
-// RunOptimizationSweep runs in the background to execute A* for sessions flagged with CheckBetterRoute.
-func (m *Manager) RunOptimizationSweep(ctx context.Context, g *builder.Graph, store *traffic.Store, router *routing.Router, wf routing.WeightFunc, prepareRoute func(routing.Route) routing.Route) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			m.sweepOptimizations(g, store, router, wf, prepareRoute)
-		}
-	}
-}
-
-func (m *Manager) sweepOptimizations(g *builder.Graph, store *traffic.Store, router *routing.Router, wf routing.WeightFunc, prepareRoute func(routing.Route) routing.Route) {
-	m.mu.RLock()
-	sessions := make([]*Session, 0, len(m.sessions))
-	for _, s := range m.sessions {
-		sessions = append(sessions, s)
-	}
-	m.mu.RUnlock()
-
-	var flagged []*Session
-	for _, s := range sessions {
-		s.Mu.RLock()
-		toCheck := s.CheckBetterRoute
-		s.Mu.RUnlock()
-		if toCheck {
-			flagged = append(flagged, s)
-		}
-	}
-
-	for _, s := range flagged {
-		s.Mu.Lock()
-		s.CheckBetterRoute = false
-		if len(s.Route.Steps) == 0 {
-			s.Mu.Unlock()
-			continue
-		}
-		snapLat, snapLon := s.LastLat, s.LastLon
-		dst := s.Route.Steps[len(s.Route.Steps)-1]
-		oldETA := computeETALocked(s, g, store)
-		s.Mu.Unlock()
-
-		newRoutes := router.Compute(snapLat, snapLon, dst.Lat, dst.Lon, 1, wf)
-		if len(newRoutes) == 0 {
-			continue
-		}
-
-		newETA := newRoutes[0].TotalTimeSec
-		etaGain := oldETA - newETA
-		if oldETA > 0 && (etaGain/oldETA >= rerouteSpeedupMin || etaGain >= rerouteMinGainSec) && !sameRemainingRoute(s, newRoutes[0]) {
-			newRoute := prepareRoute(newRoutes[0])
-
-			s.Mu.RLock()
-			currentEdgeID := s.CurrentEdgeID
-			s.Mu.RUnlock()
-			if currentEdgeID != nil {
-				store.LeaveEdge(builder.EdgeID(*currentEdgeID))
-			}
-
-			m.UpdateRoute(s, newRoute)
-
-			now := time.Now()
-			s.Mu.Lock()
-			if s.CurrentEdgeID != nil {
-				store.EnterEdge(builder.EdgeID(*s.CurrentEdgeID))
-			}
-			s.LastReroute = now
-			s.LastRerouteReason = "traffic_cleared"
-			s.OffRouteViolations = 0
-			s.Mu.Unlock()
-
-			routePayload := RoutePayload{
-				ID:           newRoute.ID,
-				Steps:        newRoute.Steps,
-				TotalDistM:   newRoute.TotalDistM,
-				TotalTimeSec: newRoute.TotalTimeSec,
-			}
-
-			reason := "traffic_cleared"
-			oldETAVal := oldETA
-			newETAVal := newETA
-			_ = s.Send(OutMsg{
-				Type:          "reroute",
-				Route:         &routePayload,
-				RerouteReason: &reason,
-				OldETASec:     &oldETAVal,
-				NewETASec:     &newETAVal,
-			})
-		}
+	delete(subscribers, sessionID)
+	if len(subscribers) == 0 {
+		delete(m.edgeSubscribers, edgeID)
 	}
 }

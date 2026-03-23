@@ -11,19 +11,11 @@ import (
 	"nav-system/internal/simulation"
 	"nav-system/internal/traffic"
 	"nav-system/map/builder"
-
-	"github.com/google/uuid"
 )
 
 const (
-	routeCacheTTL        = 30 * time.Minute
 	routeCacheGCInterval = 5 * time.Minute
 )
-
-type routeCacheEntry struct {
-	route     routing.Route
-	createdAt time.Time
-}
 
 // Server wires together all dependencies and exposes the HTTP mux.
 type Server struct {
@@ -34,10 +26,8 @@ type Server struct {
 	sim    *simulation.Manager
 	search searchConfig
 
-	// Route cache: routes are computed by POST /route and stored here by ID so
-	// that POST /session can look them up later.
-	mu         sync.RWMutex
-	routeCache map[string]routeCacheEntry
+	routeCacheMu sync.RWMutex
+	routeCache   map[string]routeCacheEntry
 
 	httpClient *http.Client
 	mux        *http.ServeMux
@@ -62,6 +52,11 @@ func NewServer(
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 		mux:        http.NewServeMux(),
 	}
+	s.registerRoutes()
+	return s
+}
+
+func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/search", s.withCORS(s.handleSearch))
 	s.mux.HandleFunc("/route", s.withCORS(s.handleRoute))
 	s.mux.HandleFunc("/session", s.withCORS(s.handleSession))
@@ -69,7 +64,6 @@ func NewServer(
 	s.mux.HandleFunc("/simulation", s.withCORS(s.handleSimulation))
 	s.mux.HandleFunc("/simulation/random", s.withCORS(s.handleSimulationRandom))
 	s.mux.HandleFunc("/simulation/ws", s.withCORS(s.handleSimulationWS))
-	return s
 }
 
 // ServeHTTP implements http.Handler.
@@ -106,21 +100,8 @@ func (s *Server) liveWeightFunc() routing.WeightFunc {
 	}
 }
 
-func (s *Server) prepareRoute(route routing.Route) routing.Route {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if route.ID == "" {
-		route.ID = uuid.NewString()
-	}
-	s.routeCache[route.ID] = routeCacheEntry{
-		route:     route,
-		createdAt: time.Now(),
-	}
-	return route
-}
-
 func (s *Server) RunOptimizationSweep(ctx context.Context) {
-	s.mgr.RunOptimizationSweep(ctx, s.g, s.store, s.router, s.liveWeightFunc(), s.prepareRoute)
+	s.mgr.RunOptimizationSweep(ctx, s.g, s.store, s.router, s.liveWeightFunc(), s.cacheRoute)
 }
 
 func (s *Server) RunRouteCacheGC(ctx context.Context) {
@@ -133,19 +114,6 @@ func (s *Server) RunRouteCacheGC(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.pruneExpiredRoutes(time.Now())
-		}
-	}
-}
-
-func (s *Server) pruneExpiredRoutes(now time.Time) {
-	cutoff := now.Add(-routeCacheTTL)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for id, entry := range s.routeCache {
-		if entry.createdAt.Before(cutoff) {
-			delete(s.routeCache, id)
 		}
 	}
 }
