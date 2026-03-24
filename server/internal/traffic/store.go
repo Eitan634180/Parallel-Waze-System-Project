@@ -12,7 +12,7 @@ const (
 	ewmaAlpha = float32(0.15)
 
 	// partialSampleAlpha is used for weaker in-progress speed samples from pings.
-	partialSampleAlpha = float32(0.05)
+	partialSampleAlpha = float32(0.08)
 
 	// CongestionThreshold marks edges that should be treated as congested.
 	CongestionThreshold = float32(1.5)
