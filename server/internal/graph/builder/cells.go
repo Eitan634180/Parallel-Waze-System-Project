@@ -290,13 +290,6 @@ func (fn *flowNet) reachableFrom(s int) []bool {
 	return vis
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // =============================================================================
 // PART 3 — BOUNDARY NODE DETECTION
 // =============================================================================
@@ -553,9 +546,11 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 		cur := heap.Pop(pq).(dijkstraItem)
 		curID := cur.id
 
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		best, hasBest := dist[curID]
 		if !hasBest || cur.weight > best.weight {
-			continue // stale entry
+			continue
 		}
 
 		// Check if this is a boundary node (count settled boundary nodes)

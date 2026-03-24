@@ -197,6 +197,9 @@ func liveCellDijkstra(
 
 	for pq.Len() > 0 {
 		cur := heap.Pop(pq).(livePQItem)
+
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		best, hasBest := dist[cur.id]
 		if !hasBest || cur.cost > best {
 			continue

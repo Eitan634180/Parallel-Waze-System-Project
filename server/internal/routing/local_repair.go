@@ -40,9 +40,13 @@ func (r *Router) LocalRepairOverlay(
 
 	for pq.Len() > 0 {
 		current := heap.Pop(pq).(localAstarItem)
+
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.id]; ok && current.g > best {
 			continue
 		}
+
 		if current.id == dstNodeID {
 			steps, _, terminalID := walkOverlayBack(g, dstNodeID, 0, pred, wf)
 			if terminalID != srcNodeID {

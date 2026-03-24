@@ -37,6 +37,7 @@ func checkLocalRepairTriggerLocked(s *Session, store *traffic.Store, g *builder.
 func rebuildPatchedRoute(oldRoute routing.Route, repairStepIdx int, patch []routing.Step) routing.Route {
 	rawSteps := make([]routing.Step, 0, len(oldRoute.Steps)+len(patch))
 
+	// Edges before repair index
 	for i := 0; i < repairStepIdx; i++ {
 		step := oldRoute.Steps[i]
 		if i == 0 {
@@ -49,8 +50,10 @@ func rebuildPatchedRoute(oldRoute routing.Route, repairStepIdx int, patch []rout
 		rawSteps = append(rawSteps, step)
 	}
 
+	// Patch at repair index
 	rawSteps = append(rawSteps, patch...)
 
+	// Edges after repair index
 	for i := repairStepIdx + 1; i < len(oldRoute.Steps); i++ {
 		step := oldRoute.Steps[i]
 		step.DistanceM = oldRoute.Steps[i].DistanceM - oldRoute.Steps[i-1].DistanceM
