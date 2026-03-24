@@ -96,7 +96,7 @@ func (s *Server) withCORS(h http.HandlerFunc) http.HandlerFunc {
 // liveWeightFunc builds a WeightFunc backed by the live traffic Store.
 func (s *Server) liveWeightFunc() routing.WeightFunc {
 	return func(e *builder.Edge) float32 {
-		return s.store.LiveWeight(e.ID, e.Weight, e.SpeedKmh, e.DistanceM)
+		return s.store.LiveWeight(e.ID, e.Weight)
 	}
 }
 

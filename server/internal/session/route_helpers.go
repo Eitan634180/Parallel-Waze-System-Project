@@ -78,7 +78,7 @@ func sendCurrentSpeedHints(s *Session, store *traffic.Store, g *builder.Graph) {
 			continue
 		}
 
-		recommended := store.LiveSpeedKmh(edgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM)
+		recommended := store.RecommendedSpeedKmh(edgeID, edge.SpeedKmh, edge.DistanceM)
 		if recommended == edge.SpeedKmh && store.Density(edgeID) == 0 {
 			continue
 		}

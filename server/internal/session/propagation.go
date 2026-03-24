@@ -36,7 +36,7 @@ func (m *Manager) propagate(store *traffic.Store, g *builder.Graph) {
 			continue
 		}
 
-		recommendedSpeed := store.LiveSpeedKmh(changed.EdgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM)
+		recommendedSpeed := store.RecommendedSpeedKmh(changed.EdgeID, edge.SpeedKmh, edge.DistanceM)
 		m.broadcastSpeedUpdate(changed.EdgeID, recommendedSpeed)
 	}
 }
@@ -139,7 +139,7 @@ func flagBetterRouteIfHelpful(s *Session, improvedEdges []traffic.ChangedEdge, s
 		distEdgeToDestination := geo.Distance(toNode.X, toNode.Y, snapshot.destination.X, snapshot.destination.Y)
 		idealETA :=
 			(distCarToEdge / maxHeuristicSpeedMps) +
-				store.LiveWeight(changed.EdgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM) +
+				store.LiveWeight(changed.EdgeID, edge.Weight) +
 				(distEdgeToDestination / maxHeuristicSpeedMps)
 
 		if idealETA < snapshot.eta {

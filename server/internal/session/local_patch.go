@@ -19,7 +19,7 @@ func checkLocalRepairTriggerLocked(s *Session, store *traffic.Store, g *builder.
 			continue
 		}
 
-		liveWeight := store.LiveWeight(edgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM)
+		liveWeight := store.LiveWeight(edgeID, edge.Weight)
 		if liveWeight < edge.Weight*severeCongestionMultiplier || liveWeight-edge.Weight < severeCongestionMinDelay {
 			continue
 		}

@@ -72,7 +72,7 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 		}
 		updates = append(updates, overlayWeightUpdate{
 			edgeIdx: uint32(idx),
-			weight:  store.LiveWeight(eid, g.Edges[eid].Weight, g.Edges[eid].SpeedKmh, g.Edges[eid].DistanceM),
+			weight:  store.LiveWeight(eid, g.Edges[eid].Weight),
 		})
 	}
 
@@ -225,7 +225,7 @@ func liveCellDijkstra(
 				continue
 			}
 
-			newCost := best + store.LiveWeight(eid, e.Weight, e.SpeedKmh, e.DistanceM)
+			newCost := best + store.LiveWeight(eid, e.Weight)
 			if existing, has := dist[toID]; !has || newCost < existing {
 				dist[toID] = newCost
 				heap.Push(pq, livePQItem{id: toID, cost: newCost})

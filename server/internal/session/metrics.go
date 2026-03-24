@@ -21,7 +21,7 @@ func computeETALocked(s *Session, g *builder.Graph, store *traffic.Store) float3
 			continue
 		}
 
-		weight := store.LiveWeight(edgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM)
+		weight := store.LiveWeight(edgeID, edge.Weight)
 		if index == 0 {
 			weight *= remainingFractionOnCurrentEdge(s, step, edge, g)
 		}
@@ -70,7 +70,7 @@ func routeCongestionSummary(steps []routing.Step, store *traffic.Store, g *build
 			continue
 		}
 
-		liveWeight := store.LiveWeight(edgeID, edge.Weight, edge.SpeedKmh, edge.DistanceM)
+		liveWeight := store.LiveWeight(edgeID, edge.Weight)
 		if liveWeight >= edge.Weight*congestionMultiplier {
 			count++
 		}

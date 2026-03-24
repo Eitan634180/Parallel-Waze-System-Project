@@ -11,6 +11,9 @@ const (
 	// ewmaAlpha controls how quickly observed travel-time changes affect weight.
 	ewmaAlpha = float32(0.15)
 
+	// partialSampleAlpha is used for weaker in-progress speed samples from pings.
+	partialSampleAlpha = float32(0.05)
+
 	// CongestionThreshold marks edges that should be treated as congested.
 	CongestionThreshold = float32(1.5)
 
@@ -28,7 +31,7 @@ const (
 // The zero value is NOT valid; use NewStore().
 type Store struct {
 	mu          sync.RWMutex
-	weight      map[builder.EdgeID]float32  // effective multiplier (1.0 = free-flow)
+	weight      map[builder.EdgeID]float32  // observed EWMA multiplier (1.0 = free-flow)
 	density     map[builder.EdgeID]int      // number of active sessions currently on edge
 	dirty       map[builder.EdgeID]struct{} // edges whose multiplier != 1.0
 	activity    map[builder.EdgeID]struct{} // edges whose density changed since last snapshot
@@ -81,67 +84,45 @@ func (s *Store) RecordObservation(id builder.EdgeID, observedSec, baseSec float3
 	if baseSec <= 0 {
 		return
 	}
-	ratio := observedSec / baseSec
+	s.recordObservedRatio(id, observedSec/baseSec, ewmaAlpha)
+}
 
+// RecordSpeedSample updates the observed multiplier from an in-progress speed sample.
+func (s *Store) RecordSpeedSample(id builder.EdgeID, speedKmh, baseSec, distanceM float32) {
+	if speedKmh <= 0 || baseSec <= 0 || distanceM <= 0 {
+		return
+	}
+	observedSec := distanceM / (speedKmh / 3.6)
+	if observedSec <= 0 {
+		return
+	}
+	s.recordObservedRatio(id, observedSec/baseSec, partialSampleAlpha)
+}
+
+func (s *Store) recordObservedRatio(id builder.EdgeID, ratio, alpha float32) {
+	if ratio <= 0 {
+		return
+	}
 	s.mu.Lock()
 	cur, ok := s.weight[id]
 	if !ok {
 		cur = 1.0
 	}
-	updated := ewmaAlpha*ratio + (1-ewmaAlpha)*cur
+	updated := alpha*ratio + (1-alpha)*cur
 	s.weight[id] = updated
 	s.dirty[id] = struct{}{}
 	s.mu.Unlock()
 }
 
-// EffectiveWeight returns base multiplied by the current traffic multiplier.
-func (s *Store) EffectiveWeight(id builder.EdgeID, base float32) float32 {
+// LiveWeight returns the routing/ETA cost for an edge based on observed traffic only.
+func (s *Store) LiveWeight(id builder.EdgeID, baseSec float32) float32 {
 	s.mu.RLock()
 	m, ok := s.weight[id]
 	s.mu.RUnlock()
 	if !ok {
-		return base
+		return baseSec
 	}
-	return base * m
-}
-
-// LiveWeight returns the routing/ETA cost for an edge after combining
-// observation-based slowdown with density-based slowdown.
-func (s *Store) LiveWeight(id builder.EdgeID, baseSec, baseKmh, distanceM float32) float32 {
-	observed := s.EffectiveWeight(id, baseSec)
-	if baseSec <= 0 || baseKmh <= 0 {
-		return observed
-	}
-
-	recommended := s.RecommendedSpeedKmh(id, baseKmh, distanceM)
-	if recommended <= 0 {
-		return observed
-	}
-
-	densityBased := distanceM / (recommended / 3.6)
-	if densityBased > observed {
-		return densityBased
-	}
-	return observed
-}
-
-// LiveSpeedKmh converts the current live weight back into a speed hint.
-func (s *Store) LiveSpeedKmh(id builder.EdgeID, baseSec, baseKmh, distanceM float32) float32 {
-	if baseKmh <= 0 || distanceM <= 0 {
-		return baseKmh
-	}
-	liveWeight := s.LiveWeight(id, baseSec, baseKmh, distanceM)
-	if liveWeight <= 0 {
-		return baseKmh
-	}
-	speed := (distanceM / liveWeight) * 3.6
-	if speed <= 0 {
-		return baseKmh * hintMinSpeedRatio
-	}
-	if speed > baseKmh {
-		return baseKmh
-	}
-	return speed
+	return baseSec * m
 }
 
 // Multiplier returns the raw multiplier for an edge (1.0 if not observed).

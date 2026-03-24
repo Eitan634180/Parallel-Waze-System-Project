@@ -13,6 +13,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const partialObservationMinEdgeAge = 2 * time.Second
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return isAllowedBrowserOrigin(r.Header.Get("Origin"))
@@ -128,6 +130,8 @@ func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 	var advanceRoute routing.Route
 	advanceFrom := -1
 	advanceTo := -1
+	var currentEdgeID *uint32
+	var currentEdgeAt time.Time
 
 	sess.Mu.Lock()
 	sess.LastPing = now
@@ -165,11 +169,15 @@ func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 	}
 	sess.LastLat = msg.Lat
 	sess.LastLon = msg.Lon
+	currentEdgeID = sess.CurrentEdgeID
+	currentEdgeAt = sess.CurrentEdgeAt
 	sess.Mu.Unlock()
 
 	if advanceFrom >= 0 {
 		s.mgr.AdvanceStep(advanceSessionID, advanceRoute, advanceFrom, advanceTo)
 	}
+
+	s.recordCurrentEdgeSpeedSample(currentEdgeID, currentEdgeAt, now, msg.SpeedKmh)
 
 	session.Check(
 		sess,
@@ -199,6 +207,24 @@ func (s *Server) recordEdgeObservations(events []edgeTravel) {
 
 		s.store.RecordObservation(edgeID, event.ObservedSec, edge.Weight)
 	}
+}
+
+func (s *Server) recordCurrentEdgeSpeedSample(edgeID *uint32, edgeAt, now time.Time, speedKmh float32) {
+	if edgeID == nil || speedKmh <= 0 || edgeAt.IsZero() || now.Sub(edgeAt) < partialObservationMinEdgeAge {
+		return
+	}
+
+	eid := builder.EdgeID(*edgeID)
+	if int(eid) >= len(s.g.Edges) {
+		return
+	}
+
+	edge := &s.g.Edges[eid]
+	if edge.Weight <= 0 || edge.DistanceM <= 0 {
+		return
+	}
+
+	s.store.RecordSpeedSample(eid, speedKmh, edge.Weight, edge.DistanceM)
 }
 
 func (s *Server) releaseTraversedEdges(route routing.Route, fromIdx, toIdx int) {
@@ -241,15 +267,14 @@ func (s *Server) sendInitialSpeedUpdates(sess *session.Session) {
 		if int(eid) >= len(s.g.Edges) {
 			continue
 		}
-		multiplier := s.store.Multiplier(eid)
-		if multiplier == 1.0 && s.store.Density(eid) == 0 {
-			continue
-		}
 		baseKmh := s.g.Edges[eid].SpeedKmh
 		if baseKmh <= 0 {
 			continue
 		}
-		recSpeed := s.store.LiveSpeedKmh(eid, s.g.Edges[eid].Weight, baseKmh, s.g.Edges[eid].DistanceM)
+		recSpeed := s.store.RecommendedSpeedKmh(eid, baseKmh, s.g.Edges[eid].DistanceM)
+		if recSpeed == baseKmh && s.store.Density(eid) == 0 {
+			continue
+		}
 		edgeIDVal := uint32(eid)
 		recSpeedVal := recSpeed
 		_ = sess.Send(session.OutMsg{
