@@ -1,4 +1,4 @@
-import { formatDuration } from '../../shared/utils/formatters.js';
+import { formatDuration } from '../../utils/formatters.js';
 
 export function showAlert(title, message) {
     const toast = document.getElementById('alert-toast');

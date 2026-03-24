@@ -1,5 +1,5 @@
 import { DEFAULT_SPEED_LIMIT } from '../../app/app-config.js';
-import { distanceBetweenLatLngM } from '../../shared/utils/geo.js';
+import { distanceBetweenLatLngM } from '../../utils/geo.js';
 
 export function processRawRoute(route) {
     const steps = route.steps || [];

@@ -45,6 +45,9 @@ func cellDijkstra(
 
 	for pq.Len() > 0 {
 		current := heap.Pop(pq).(ijItem)
+
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
@@ -113,9 +116,13 @@ func multiSourceCellDijkstra(
 
 	for pq.Len() > 0 {
 		current := heap.Pop(pq).(ijItem)
+
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
+		
 		if current.id == dstID {
 			break
 		}

@@ -1,4 +1,4 @@
-import { formatDuration, getArrivalTime } from '../../shared/utils/formatters.js';
+import { formatDuration, getArrivalTime } from '../../utils/formatters.js';
 
 export function updateETA(seconds) {
     const durationStr = formatDuration(seconds);

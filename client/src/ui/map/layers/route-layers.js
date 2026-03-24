@@ -1,4 +1,4 @@
-import { flipCoords } from '../../../shared/utils/geo.js';
+import { flipCoords } from '../../../utils/geo.js';
 import { refreshRouteInspector } from './route-inspector.js';
 
 export function drawRoute(manager, coordinates, source, dest) {

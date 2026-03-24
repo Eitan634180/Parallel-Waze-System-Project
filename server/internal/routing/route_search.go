@@ -23,6 +23,7 @@ func (r *Router) twoLevelSearch(
 		return steps, nil, ok
 	}
 
+	// Dykstra to source cell boundry nodes
 	srcBoundary := g.Cells[srcCellID].BoundaryNodeIDs
 	injectionCosts, injectionPred := cellDijkstra(g, srcIdx, srcBoundary, srcCellID, wf)
 	overlaySeeds := make(map[builder.NodeID]float32, len(srcBoundary))
@@ -49,8 +50,10 @@ func (r *Router) twoLevelSearch(
 		return geo.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
+	// A* on overlay graph
 	overlayCosts, overlayPred := r.overlayAStar(overlaySeeds, dstBoundarySet, heuristic, overlayPenalties)
 
+	// Dykstra from dest cell boundry nodes
 	seeds := make([]seedE, 0, len(dstBoundary))
 	for _, nodeID := range dstBoundary {
 		cost, ok := overlayCosts[nodeID]
@@ -93,9 +96,13 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 
 	for pq.Len() > 0 {
 		current := heap.Pop(pq).(astarItem)
+
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.id]; ok && current.g > best {
 			continue
 		}
+
 		if current.id == dstID {
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
@@ -149,6 +156,9 @@ func (r *Router) overlayAStar(
 
 	for pq.Len() > 0 {
 		current := heap.Pop(pq).(astarItem)
+
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.id]; ok && current.g > best {
 			continue
 		}

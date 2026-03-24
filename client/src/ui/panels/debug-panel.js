@@ -1,4 +1,4 @@
-import { formatDuration } from '../../shared/utils/formatters.js';
+import { formatDuration } from '../../utils/formatters.js';
 
 export function toggleDebugPanel(isOpen) {
     const panel = document.getElementById('debug-panel');

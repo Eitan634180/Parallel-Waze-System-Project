@@ -33,7 +33,7 @@ func (s *Server) handleSessionID(w http.ResponseWriter, r *http.Request) {
 		s.handleWS(w, r, sessionID)
 	case "":
 		if r.Method == http.MethodDelete {
-			s.deleteSession(w, r, sessionID)
+			s.deleteSession(w, sessionID)
 		} else {
 			methodNotAllowed(w)
 		}
@@ -58,7 +58,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, createSessionResponse{SessionID: session.ID})
 }
 
-func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request, id string) {
+func (s *Server) deleteSession(w http.ResponseWriter, id string) {
 	s.mgr.Delete(id)
 	w.WriteHeader(http.StatusNoContent)
 }
