@@ -90,18 +90,7 @@ func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) in
 		m.nextID++
 		id := carID(m.nextID)
 
-		maxStart := len(route.Steps) - 2
-		startIndex := minStep
-		if startIndex > maxStart {
-			startIndex = maxStart
-		}
-		if startIndex < 0 {
-			startIndex = 0
-		}
-
-		if maxStart > startIndex {
-			startIndex += m.rng.Intn(maxStart - startIndex + 1)
-		}
+		startIndex := weightedStartIndex(route, minStep, m.rng)
 
 		c := &car{
 			id:       id,
@@ -261,6 +250,48 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) b
 	}
 
 	return true
+}
+
+func weightedStartIndex(route routing.Route, minStep int, rng *rand.Rand) int {
+	maxStart := len(route.Steps) - 2
+	startIndex := minStep
+	if startIndex > maxStart {
+		startIndex = maxStart
+	}
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	if startIndex >= maxStart {
+		return startIndex
+	}
+
+	totalWeight := float32(0)
+	for i := startIndex; i <= maxStart; i++ {
+		totalWeight += routeLegWeight(route, i)
+	}
+	if totalWeight <= 0 {
+		return startIndex + rng.Intn(maxStart-startIndex+1)
+	}
+
+	target := rng.Float32() * totalWeight
+	for i := startIndex; i <= maxStart; i++ {
+		target -= routeLegWeight(route, i)
+		if target <= 0 {
+			return i
+		}
+	}
+	return maxStart
+}
+
+func routeLegWeight(route routing.Route, startIndex int) float32 {
+	if startIndex < 0 || startIndex+1 >= len(route.Steps) {
+		return 0
+	}
+	legDist := route.Steps[startIndex+1].DistanceM - route.Steps[startIndex].DistanceM
+	if legDist <= 0 {
+		return 0.1
+	}
+	return legDist
 }
 
 func recordSimSpeedSample(c *car, step routing.Step, speedMps float32, g *builder.Graph, store *traffic.Store) {
