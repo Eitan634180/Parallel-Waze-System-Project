@@ -41,7 +41,6 @@ func main() {
 	log.Printf("[main] Snap index built in %s", time.Since(t).Round(time.Millisecond))
 
 	store := traffic.NewStore()
-	traffic.CustomizeOverlayWeights(g, store)
 	mgr := session.NewManager()
 	sim := simulation.NewManager(g, store)
 	router := routing.NewRouter(g, si)
