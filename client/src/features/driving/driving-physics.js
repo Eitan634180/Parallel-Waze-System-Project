@@ -11,6 +11,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
     let remainingElapsedMs = elapsedMs;
     let pos = state.drive.carPos;
 
+    // Move through the route, segment by segment
     while (remainingMeters > 0 && state.drive.currentRoadIndex < state.routing.activeLegs.length) {
         const step = state.routing.activeLegs[state.drive.currentRoadIndex];
         const stepDist = step.base_length || 0.1; 
@@ -20,6 +21,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
         const endPos = [step.to_node[1], step.to_node[0]];
 
         if (distanceLeftOnStep <= remainingMeters) {
+            // Segment finished: record travel time and jump to the next road segment
             const spilloverMs = remainingMeters > 0 ? remainingElapsedMs * ((remainingMeters - distanceLeftOnStep) / remainingMeters) : 0;
             const observedMs = Math.max(0, state.sim.currentEdgeTimeMs - spilloverMs);
             remainingMeters -= distanceLeftOnStep;
@@ -33,6 +35,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
             state.drive.stepProgress = 0;
             pos = endPos; 
         } else {
+            // Segment ongoing: interpolate current position between start and end
             state.drive.stepProgress += remainingMeters;
             const fraction = state.drive.stepProgress / stepDist;
             pos = [startPos[0] + (endPos[0] - startPos[0]) * fraction, startPos[1] + (endPos[1] - startPos[1]) * fraction];
@@ -41,6 +44,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
         }
     }
 
+    // Apply off route offset
     if (state.drive.isDrifting) {
         state.drive.offRouteOffset[0] += 0.0000006 * elapsedMs;
         state.drive.offRouteOffset[1] += 0.0000006 * elapsedMs;
@@ -62,6 +66,8 @@ export function limitMovementByTraffic(metersToMove, speedKmh) {
 
         const otherProgressM = Math.max(0, (state.routing.activeObj.distance || 0) - projected.distanceLeft);
         const gapM = otherProgressM - myProgressM;
+
+        // If a car is ahead, reduce allowed movement to maintain the safety gap
         if (gapM > 0 && gapM <= MAX_TRACKED_GAP_M) {
             allowedMoveM = Math.min(allowedMoveM, Math.max(0, gapM - safetyGapM));
         }
