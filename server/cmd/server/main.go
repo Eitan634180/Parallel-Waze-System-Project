@@ -44,6 +44,7 @@ func main() {
 	mgr := session.NewManager()
 	sim := simulation.NewManager(g, store)
 	router := routing.NewRouter(g, si)
+	traffic.CustomizeOverlayWeights(g, store)
 	srv := api.NewServer(g, store, mgr, router, sim)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"log"
 	"time"
 
 	"nav-system/internal/graph/builder"
@@ -29,7 +30,9 @@ func doReroute(
 		return
 	}
 
+	start := time.Now()
 	newRoutes := router.Compute(lat, lon, destination.Lat, destination.Lon, 1, wf)
+	log.Printf("[session] reroute compute reason=%s session=%s routes=%d in %s", reason, s.ID, len(newRoutes), time.Since(start).Round(time.Millisecond))
 	if len(newRoutes) == 0 {
 		return
 	}

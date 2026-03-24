@@ -199,8 +199,14 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 	}
 	var changed []ChangedEdge
 	for id := range edgeIDs {
-		cur := s.weight[id]
-		prev := s.prev[id]
+		cur, ok := s.weight[id]
+		if !ok {
+			cur = 1.0
+		}
+		prev, ok := s.prev[id]
+		if !ok {
+			prev = 1.0
+		}
 		delta := cur - prev
 		if delta < 0 {
 			delta = -delta

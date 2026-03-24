@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"log"
+	"time"
 
 	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
@@ -90,7 +92,9 @@ func optimizationCandidate(
 	snapLat, snapLon := s.LastLat, s.LastLon
 	s.Mu.Unlock()
 
+	start := time.Now()
 	routes := router.Compute(snapLat, snapLon, destination.Lat, destination.Lon, 1, wf)
+	log.Printf("[session] optimization compute session=%s routes=%d in %s", s.ID, len(routes), time.Since(start).Round(time.Millisecond))
 	if len(routes) == 0 {
 		return 0, routing.Route{}, false
 	}

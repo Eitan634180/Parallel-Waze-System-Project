@@ -3,6 +3,7 @@ package traffic
 import (
 	"container/heap"
 	"context"
+	"log"
 	"math"
 	"runtime"
 	"sync"
@@ -11,7 +12,7 @@ import (
 	"nav-system/internal/graph/builder"
 )
 
-const customizationInterval = 10 * time.Second
+const customizationInterval = 5 * time.Second
 
 type overlayWeightUpdate struct {
 	edgeIdx uint32
@@ -55,6 +56,8 @@ func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 // CustomizeOverlayWeights recomputes all overlay edge weights against the
 // current live traffic multipliers in store.
 func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
+	start := time.Now()
+
 	g.OverlayAdj.Mu.RLock()
 	offsets := append([]uint32(nil), g.OverlayAdj.Offsets...)
 	overlayEdges := append([]builder.OverlayEdge(nil), g.OverlayAdj.OverlayEdges...)
@@ -117,6 +120,8 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 		g.OverlayAdj.OverlayEdges[update.edgeIdx].Weight = update.weight
 	}
 	g.OverlayAdj.Mu.Unlock()
+
+	log.Printf("[traffic] overlay customization updated %d edges in %s", len(updates), time.Since(start).Round(time.Millisecond))
 }
 
 func computeCellCustomizationUpdates(
