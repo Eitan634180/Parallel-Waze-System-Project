@@ -263,11 +263,13 @@ func currentSpeedMps(c *car, g *builder.Graph, store *traffic.Store) float32 {
 		eid := builder.EdgeID(*cur.EdgeID)
 		if int(eid) < len(g.Edges) {
 			edge := g.Edges[eid]
-			recommended := store.RecommendedSpeedKmh(eid, edge.SpeedKmh, edge.DistanceM)
-			if recommended > 0 {
-				baseKmh = recommended
-			} else if edge.SpeedKmh > 0 {
-				baseKmh = edge.SpeedKmh
+			if edge.SpeedKmh > 0 {
+				liveSpeed := store.LiveSpeedKmh(eid, edge.Weight, edge.SpeedKmh, edge.DistanceM)
+				if liveSpeed > 0 {
+					baseKmh = liveSpeed
+				} else {
+					baseKmh = edge.SpeedKmh
+				}
 			}
 		}
 	}
