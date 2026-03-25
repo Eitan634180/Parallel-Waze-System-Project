@@ -135,22 +135,10 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 		fn.addEdge(localIdx[idx], T, n) // large capacity to super-sink
 	}
 
-	// Internal edges (within the current subset)
-	for _, idx := range nodeIdxs {
-		u := localIdx[idx]
-		for _, eid := range g.BaseAdj.Neighbours(idx) {
-			toID := g.Edges[eid].ToNodeID
-			toIdx, ok := g.NodeIdx[toID]
-			if !ok {
-				continue
-			}
-			v, inSubset := localIdx[toIdx]
-			if !inSubset {
-				continue
-			}
-			fn.addEdge(u, v, 1)
-		}
-	}
+	// Internal edges (within the current subset).
+	// The cut objective should be symmetric even when the routing graph is not:
+	// a one-way road crossing a partition is still a cross-cell boundary later.
+	addUndirectedSubsetEdges(fn, g, nodeIdxs, localIdx)
 
 	// Run Dinic's
 	fn.maxflow(S, T)
@@ -184,6 +172,39 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 	}
 
 	return left, right
+}
+
+// addUndirectedSubsetEdges adds one unit-capacity undirected edge for each
+// pair of subset nodes connected by at least one base-graph edge.
+func addUndirectedSubsetEdges(fn *flowNet, g *Graph, nodeIdxs []uint32, localIdx map[uint32]int) {
+	seen := make(map[uint64]struct{}, len(nodeIdxs))
+	for _, idx := range nodeIdxs {
+		u := localIdx[idx]
+		for _, eid := range g.BaseAdj.Neighbours(idx) {
+			toID := g.Edges[eid].ToNodeID
+			toIdx, ok := g.NodeIdx[toID]
+			if !ok {
+				continue
+			}
+			v, inSubset := localIdx[toIdx]
+			if !inSubset || u == v {
+				continue
+			}
+
+			a, b := idx, toIdx
+			if a > b {
+				a, b = b, a
+			}
+			key := uint64(a)<<32 | uint64(b)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+
+			fn.addEdge(u, v, 1)
+			fn.addEdge(v, u, 1)
+		}
+	}
 }
 
 // =============================================================================

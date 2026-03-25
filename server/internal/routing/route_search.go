@@ -23,7 +23,7 @@ func (r *Router) twoLevelSearch(
 		return steps, nil, ok
 	}
 
-	// Dykstra to source cell boundry nodes
+	// Dijkstra to source cell boundary nodes
 	srcBoundary := g.Cells[srcCellID].BoundaryNodeIDs
 	injectionCosts, injectionPred := cellDijkstra(g, srcIdx, srcBoundary, srcCellID, wf)
 	overlaySeeds := make(map[builder.NodeID]float32, len(srcBoundary))
@@ -53,7 +53,7 @@ func (r *Router) twoLevelSearch(
 	// A* on overlay graph
 	overlayCosts, overlayPred := r.overlayAStar(overlaySeeds, dstBoundarySet, heuristic, overlayPenalties)
 
-	// Dykstra from dest cell boundry nodes
+	// Dijkstra from dest cell boundary nodes
 	seeds := make([]seedE, 0, len(dstBoundary))
 	for _, nodeID := range dstBoundary {
 		cost, ok := overlayCosts[nodeID]
