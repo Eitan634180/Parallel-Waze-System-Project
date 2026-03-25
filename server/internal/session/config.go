@@ -10,14 +10,14 @@ const (
 	sessionExpiry             = 5 * time.Minute
 	expiryCheckInterval       = 60 * time.Second
 	propagationInterval       = 2 * time.Second
-	optimizationSweepInterval = 2 * time.Second
+	optimizationSweepInterval = 500 * time.Millisecond
 
 	rerouteCooldown = 5 * time.Second
 	etaThrottle     = 2 * time.Second
 
 	congestionMultiplier = traffic.CongestionThreshold
-	rerouteSpeedupMin    = float32(0.10)
-	rerouteMinGainSec    = float32(30)
+	rerouteSpeedupMin    = float32(0.07)
+	rerouteMinGainSec    = float32(15)
 
 	offRouteDistM      = float32(50)
 	offRouteSanityMaxM = float32(5_000)

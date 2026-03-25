@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	decayInterval  = 10 * time.Second
-	decayFactor    = float32(0.85)
+	decayInterval  = 2 * time.Second
+	decayFactor    = float32(0.5)
 	decayTolerance = float32(0.05)
 )
 

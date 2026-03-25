@@ -1,5 +1,6 @@
 import { state } from '../../app/app-state.js';
 import { projectPositionOntoRoute } from '../routing/route-utils.js';
+import { reserveJunctionPassage } from './junction-queue.js';
 
 const FOLLOWING_TIME_SEC = 1.8;
 const MIN_GAP_M = 7;
@@ -33,7 +34,21 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
             state.sim.currentEdgeTimeMs = spilloverMs;
             state.drive.currentRoadIndex++;
             state.drive.stepProgress = 0;
-            pos = endPos; 
+            if (state.drive.currentRoadIndex < state.routing.activeLegs.length) {
+                const prevStep = step;
+                const nextStep = state.routing.activeLegs[state.drive.currentRoadIndex];
+                
+                const prevBearing = Math.atan2(prevStep.to_node[1] - prevStep.from_node[1], prevStep.to_node[0] - prevStep.from_node[0]) * 180 / Math.PI;
+                const nextBearing = Math.atan2(nextStep.to_node[1] - nextStep.from_node[1], nextStep.to_node[0] - nextStep.from_node[0]) * 180 / Math.PI;
+                
+                let diff = Math.abs(nextBearing - prevBearing);
+                if (diff > 180) diff = 360 - diff;
+                
+                // If it's a turn, slow down
+                if (diff > 25 && state.sim.motionState) {
+                    state.sim.motionState.speedKmh = Math.min(state.sim.motionState.speedKmh, 20);
+                }
+            }
         } else {
             // Segment ongoing: interpolate current position between start and end
             state.drive.stepProgress += remainingMeters;

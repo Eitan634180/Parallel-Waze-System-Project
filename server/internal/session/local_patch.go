@@ -6,7 +6,7 @@ import (
 	"nav-system/internal/traffic"
 )
 
-func checkLocalRepairTriggerLocked(s *Session, store *traffic.Store, g *builder.Graph) (bool, int, float32) {
+func checkLocalRepairTriggerLocked(s *Session, store *traffic.Store, g *builder.Graph) (bool, int, float32, bool) {
 	for i := maxInt(1, s.StepIdx); i < len(s.Route.Steps); i++ {
 		step := s.Route.Steps[i]
 		if step.EdgeID == nil {
@@ -26,12 +26,13 @@ func checkLocalRepairTriggerLocked(s *Session, store *traffic.Store, g *builder.
 
 		u := g.NodeByID(s.Route.Steps[i-1].NodeID)
 		v := g.NodeByID(s.Route.Steps[i].NodeID)
-		if u != nil && v != nil && u.CellID != v.CellID {
-			return true, i, liveWeight
+		if u != nil && v != nil {
+			isCrossCell := u.CellID != v.CellID
+			return true, i, liveWeight, isCrossCell
 		}
 	}
 
-	return false, -1, 0
+	return false, -1, 0, false
 }
 
 func rebuildPatchedRoute(oldRoute routing.Route, repairStepIdx int, patch []routing.Step) routing.Route {

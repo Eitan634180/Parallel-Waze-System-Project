@@ -29,6 +29,7 @@ type localRepairRequest struct {
 	congestedCost float32
 	fromNodeID    builder.NodeID
 	toNodeID      builder.NodeID
+	isCrossCell   bool
 }
 
 // Check evaluates reroute conditions and pushes ETA / reroute events.

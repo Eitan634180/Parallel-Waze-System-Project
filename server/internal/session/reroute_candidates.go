@@ -57,7 +57,7 @@ func captureCongestionContext(s *Session, g *builder.Graph, store *traffic.Store
 		oldETA:       computeETALocked(s, g, store),
 	}
 
-	triggered, repairStepIdx, congestedCost := checkLocalRepairTriggerLocked(s, store, g)
+	triggered, repairStepIdx, congestedCost, isCrossCell := checkLocalRepairTriggerLocked(s, store, g)
 	if !triggered {
 		return context, true
 	}
@@ -68,6 +68,7 @@ func captureCongestionContext(s *Session, g *builder.Graph, store *traffic.Store
 		congestedCost: congestedCost,
 		fromNodeID:    s.Route.Steps[repairStepIdx-1].NodeID,
 		toNodeID:      s.Route.Steps[repairStepIdx].NodeID,
+		isCrossCell:   isCrossCell,
 	}
 	return context, true
 }
@@ -79,13 +80,26 @@ func buildCongestionCandidate(
 	context congestionContext,
 ) (routing.Route, bool, bool) {
 	if context.localRepair.enabled {
-		patchSteps, ok := router.LocalRepairOverlay(
-			context.localRepair.fromNodeID,
-			context.localRepair.toNodeID,
-			context.localRepair.congestedCost,
-			localRepairMaxHops,
-			wf,
-		)
+		var patchSteps []routing.Step
+		var ok bool
+		if context.localRepair.isCrossCell {
+			patchSteps, ok = router.LocalRepairOverlay(
+				context.localRepair.fromNodeID,
+				context.localRepair.toNodeID,
+				context.localRepair.congestedCost,
+				localRepairMaxHops,
+				wf,
+			)
+		} else {
+			patchSteps, ok = router.LocalRepairOriginal(
+				context.localRepair.fromNodeID,
+				context.localRepair.toNodeID,
+				context.localRepair.congestedCost,
+				20, // maxHops for original graph search
+				wf,
+			)
+		}
+
 		if ok && len(patchSteps) > 0 {
 			return rebuildPatchedRoute(context.currentRoute, context.localRepair.repairStepIdx, patchSteps), true, true
 		}

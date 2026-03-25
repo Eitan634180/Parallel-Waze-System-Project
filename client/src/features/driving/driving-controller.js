@@ -87,6 +87,7 @@ export async function startDriving() {
 
     state.drive.currentRoadIndex = 0;
     state.drive.stepProgress = 0;
+    state.drive.junctionWaitMs = 0;
     state.drive.isActive = true;
     state.drive.distanceLeft = state.routing.activeObj.distance;
     state.drive.totalDistanceDrivenM = 0;
