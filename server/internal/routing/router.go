@@ -50,15 +50,7 @@ func (r *Router) Compute(srcLat, srcLon, dstLat, dstLon float64, k int, wf Weigh
 		steps, usedOverlayEdges, ok := r.twoLevelSearch(srcIdx, dstIdx, penalizedWeight, overlayPenalties)
 		if !ok {
 			log.Printf("[routing] route search failed")
-			break;
-			/* // Falling back to A* is disabled for now
-			steps, ok = r.fullGraphSearch(srcIdx, dstIdx, penalizedWeight)
-			if !ok {
-				log.Printf("[routing] route search failed")
-				break
-			}
-			log.Printf("[routing] overlay search failed; falling back to full-graph A*")
-			*/
+			break
 		}
 
 		routes = append(routes, stepsToRoute(steps))

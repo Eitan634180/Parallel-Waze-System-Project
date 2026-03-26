@@ -43,13 +43,19 @@ func (pq *livePQ) Pop() interface{} {
 func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 	ticker := time.NewTicker(customizationInterval)
 	defer ticker.Stop()
+	previousDirtyEdges := make(map[builder.EdgeID]struct{})
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			CustomizeOverlayWeights(g, store)
+			currentDirtyEdges := snapshotDirtyEdges(store)
+			dirtyEdges := unionDirtyEdges(currentDirtyEdges, previousDirtyEdges)
+			if len(dirtyEdges) > 0 {
+				customizeOverlayWeights(g, store, dirtyEdges)
+			}
+			previousDirtyEdges = currentDirtyEdges
 		}
 	}
 }
@@ -57,11 +63,15 @@ func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 // CustomizeOverlayWeights recomputes all overlay edge weights against the
 // current live traffic multipliers in store.
 func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
-	start := time.Now()
 	dirtyEdges := snapshotDirtyEdges(store)
 	if len(dirtyEdges) == 0 {
 		return
 	}
+	customizeOverlayWeights(g, store, dirtyEdges)
+}
+
+func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}) {
+	start := time.Now()
 
 	g.OverlayAdj.Mu.RLock()
 	offsets := append([]uint32(nil), g.OverlayAdj.Offsets...)
@@ -203,6 +213,21 @@ func snapshotDirtyEdges(store *Store) map[builder.EdgeID]struct{} {
 		dirty[edgeID] = struct{}{}
 	}
 	return dirty
+}
+
+func unionDirtyEdges(current, previous map[builder.EdgeID]struct{}) map[builder.EdgeID]struct{} {
+	if len(current) == 0 && len(previous) == 0 {
+		return nil
+	}
+
+	combined := make(map[builder.EdgeID]struct{}, len(current)+len(previous))
+	for edgeID := range current {
+		combined[edgeID] = struct{}{}
+	}
+	for edgeID := range previous {
+		combined[edgeID] = struct{}{}
+	}
+	return combined
 }
 
 func cellHasDirtyIntraEdge(g *builder.Graph, cell builder.Cell, dirtyEdges map[builder.EdgeID]struct{}) bool {
