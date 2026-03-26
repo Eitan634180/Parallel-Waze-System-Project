@@ -19,6 +19,12 @@ func (m *Manager) RunOptimizationSweep(
 	wf routing.WeightFunc,
 	prepareRoute func(routing.Route) routing.Route,
 ) {
+	jobs := make(chan *Session, 256)
+
+	for i := 0; i < optimizationWorkerLimit; i++ {
+		go m.optimizationWorker(ctx, jobs, g, store, router, wf, prepareRoute)
+	}
+
 	ticker := newTicker(optimizationSweepInterval)
 	defer ticker.Stop()
 
@@ -27,31 +33,44 @@ func (m *Manager) RunOptimizationSweep(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.sweepOptimizations(g, store, router, wf, prepareRoute)
+			for _, session := range m.flaggedSessions() {
+				select {
+				case jobs <- session:
+				default:
+					log.Printf("[session] optimization job channel full, dropping session %s", session.ID)
+				}
+			}
 		}
 	}
 }
 
-func (m *Manager) sweepOptimizations(
+func (m *Manager) optimizationWorker(
+	ctx context.Context,
+	jobs <-chan *Session,
 	g *builder.Graph,
 	store *traffic.Store,
 	router *routing.Router,
 	wf routing.WeightFunc,
 	prepareRoute func(routing.Route) routing.Route,
 ) {
-	for _, session := range m.flaggedSessions() {
-		oldETA, candidate, version, ok := optimizationCandidate(session, g, store, router, wf)
-		if !ok {
-			continue
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case session := <-jobs:
+			oldETA, candidate, version, ok := optimizationCandidate(session, g, store, router, wf)
+			if !ok {
+				continue
+			}
 
-		newETA := candidate.TotalTimeSec
-		if !shouldAcceptOptimizationCandidate(session, candidate, version, oldETA, newETA) {
-			continue
-		}
+			newETA := candidate.TotalTimeSec
+			if !shouldAcceptOptimizationCandidate(session, candidate, version, oldETA, newETA) {
+				continue
+			}
 
-		reason := "traffic_cleared"
-		applyRouteUpdate(session, candidate, g, store, m, prepareRoute, now(), reason, &oldETA, &newETA)
+			reason := "traffic_cleared"
+			applyRouteUpdate(session, candidate, g, store, m, prepareRoute, now(), reason, &oldETA, &newETA)
+		}
 	}
 }
 
