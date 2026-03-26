@@ -19,7 +19,6 @@ export function createDriverProfile(seed = Math.random()) {
 export function createMotionState() {
     return {
         speedKmh: DEFAULT_SPEED_LIMIT * 3.6,
-        waitingMs: 0,
     };
 }
 

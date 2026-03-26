@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"sync"
 
 	"nav-system/internal/geo"
 	"nav-system/internal/graph/builder"
@@ -96,7 +97,7 @@ func evaluateHeuristics(sessions []*Session, improvedEdges []traffic.ChangedEdge
 	}
 
 	chunkSize := (len(sessions) + workerCount - 1) / workerCount
-	done := make(chan struct{}, workerCount)
+	var wg sync.WaitGroup
 
 	for start := 0; start < len(sessions); start += chunkSize {
 		end := start + chunkSize
@@ -104,17 +105,16 @@ func evaluateHeuristics(sessions []*Session, improvedEdges []traffic.ChangedEdge
 			end = len(sessions)
 		}
 
+		wg.Add(1)
 		go func(batch []*Session) {
-			defer func() { done <- struct{}{} }()
+			defer wg.Done()
 			for _, session := range batch {
 				flagBetterRouteIfHelpful(session, improvedEdges, store, g)
 			}
 		}(sessions[start:end])
 	}
 
-	for workers := 0; workers < workerCount; workers++ {
-		<-done
-	}
+	wg.Wait()
 }
 
 func flagBetterRouteIfHelpful(s *Session, improvedEdges []traffic.ChangedEdge, store *traffic.Store, g *builder.Graph) {
@@ -180,3 +180,5 @@ func heuristicSnapshot(s *Session, g *builder.Graph) (heuristicSessionSnapshot, 
 		eta:         s.ETA,
 	}, true
 }
+
+

@@ -1,6 +1,5 @@
 import { state } from '../../app/app-state.js';
 import { projectPositionOntoRoute } from '../routing/route-utils.js';
-import { reserveJunctionPassage } from './junction-queue.js';
 
 const FOLLOWING_TIME_SEC = 1.8;
 const MIN_GAP_M = 7;
