@@ -6,6 +6,13 @@ import (
 	"nav-system/internal/routing"
 )
 
+const (
+	minLatitude  = -90
+	maxLatitude  = 90
+	minLongitude = -180
+	maxLongitude = 180
+)
+
 func distanceFromExpectedPathMLocked(s *Session, lat, lon float64, g *builder.Graph) float32 {
 	if len(s.Route.Steps) == 0 {
 		return 0
@@ -14,7 +21,7 @@ func distanceFromExpectedPathMLocked(s *Session, lat, lon float64, g *builder.Gr
 	px, py := geo.Project(lat, lon)
 	best := distanceFromExpectedProjectionMLocked(s, g, px, py)
 
-	if lon >= -90 && lon <= 90 && lat >= -180 && lat <= 180 {
+	if lon >= minLatitude && lon <= maxLatitude && lat >= minLongitude && lat <= maxLongitude {
 		swappedX, swappedY := geo.Project(lon, lat)
 		swappedBest := distanceFromExpectedProjectionMLocked(s, g, swappedX, swappedY)
 		if swappedBest < best {

@@ -12,6 +12,9 @@ import { handleDrivingReroute } from './driving-reroute.js';
 import { closeDrivingSession, openDrivingSession } from './driving-session.js';
 import { accumulatePingElapsed, flushLocationPing, resetDrivingRuntime, startDrivingRuntime, stopDrivingRuntime } from './driving-runtime.js';
 
+const KMH_PER_MPS = 3.6;
+const MS_PER_SECOND = 1000;
+
 function hasEdgeId(edgeId) {
     return edgeId !== null && edgeId !== undefined;
 }
@@ -33,13 +36,13 @@ function setupDrivingUI() {
 
 function getCurrentSpeedKmh() {
     if (state.drive.currentRoadIndex >= state.routing.activeLegs.length) {
-        return DEFAULT_SPEED_LIMIT * 3.6;
+        return DEFAULT_SPEED_LIMIT * KMH_PER_MPS;
     }
     const currentStep = state.routing.activeLegs[state.drive.currentRoadIndex];
     const recommendedSpeedKmh = hasEdgeId(currentStep.edge_id)
         ? state.sim.recommendedSpeeds.get(currentStep.edge_id)
         : null;
-    return recommendedSpeedKmh || currentStep.speed_limit || (DEFAULT_SPEED_LIMIT * 3.6);
+    return recommendedSpeedKmh || currentStep.speed_limit || (DEFAULT_SPEED_LIMIT * KMH_PER_MPS);
 }
 
 export async function startDriving() {
@@ -124,7 +127,7 @@ function updateSimulation(elapsedMs) {
 
     if (state.drive.currentRoadIndex >= state.routing.activeLegs.length) {
         const actualTimeSec = state.drive.startTimeMs 
-            ? (Date.now() - state.drive.startTimeMs) / 1000 
+            ? (Date.now() - state.drive.startTimeMs) / MS_PER_SECOND
             : state.routing.activeObj.dynamicETA;
 
         const totalDistanceM = state.drive.totalDistanceDrivenM || state.routing.activeObj.distance;
@@ -146,10 +149,10 @@ function updateSimulation(elapsedMs) {
     state.sim.motionState.speedKmh = advanceSpeedKmh(state.sim.motionState.speedKmh || speedKmhValue, targetSpeedKmh, elapsedMs, state.sim.driverProfile);
     state.sim.cars = getLatestSimulationCars();
     const unclampedSpeedKmh = state.sim.motionState.speedKmh;
-    const unclampedMetersThisTick = (unclampedSpeedKmh / 3.6) * (elapsedMs / 1000);
+    const unclampedMetersThisTick = (unclampedSpeedKmh / KMH_PER_MPS) * (elapsedMs / MS_PER_SECOND);
     const metersThisTick = limitMovementByTraffic(unclampedMetersThisTick, unclampedSpeedKmh);
     if (unclampedMetersThisTick > 0 && metersThisTick < unclampedMetersThisTick) {
-        state.sim.motionState.speedKmh = (metersThisTick / (elapsedMs / 1000)) * 3.6;
+        state.sim.motionState.speedKmh = (metersThisTick / (elapsedMs / MS_PER_SECOND)) * KMH_PER_MPS;
     }
     const speedKmh = Math.round(state.sim.motionState.speedKmh);
 

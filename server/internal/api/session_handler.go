@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 )
 
 type createSessionRequest struct {
@@ -48,6 +49,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
 	route, ok := s.cachedRoute(req.RouteID)
 	if !ok {
 		http.Error(w, "route not found", http.StatusNotFound)
@@ -55,6 +57,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session := s.mgr.Create(route)
+	logSlowOperation(
+		slowSessionCreationLogThreshold,
+		start,
+		"[api] session create route=%s",
+		req.RouteID,
+	)
 	writeJSON(w, http.StatusOK, createSessionResponse{SessionID: session.ID})
 }
 

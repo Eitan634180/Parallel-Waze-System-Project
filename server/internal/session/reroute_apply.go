@@ -32,7 +32,10 @@ func doReroute(
 
 	start := time.Now()
 	newRoutes := router.Compute(lat, lon, destination.Lat, destination.Lon, 1, wf)
-	log.Printf("[session] reroute compute reason=%s session=%s routes=%d in %s", reason, s.ID, len(newRoutes), time.Since(start).Round(time.Millisecond))
+	elapsed := time.Since(start)
+	if elapsed >= slowComputeLogThreshold {
+		log.Printf("[session] slow reroute compute reason=%s session=%s routes=%d in %s", reason, s.ID, len(newRoutes), elapsed.Round(time.Millisecond))
+	}
 	if len(newRoutes) == 0 {
 		return
 	}

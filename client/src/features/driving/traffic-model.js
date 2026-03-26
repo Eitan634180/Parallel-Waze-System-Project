@@ -1,6 +1,24 @@
 import { DEFAULT_SPEED_LIMIT } from '../../app/app-config.js';
 
 const MIN_DELAY_MS = 250;
+const KMH_PER_MPS = 3.6;
+const SECONDS_PER_MILLISECOND = 1 / 1000;
+const MIN_TARGET_SPEED_KMH = 0.5;
+const MIN_TARGET_SPEED_CAP_KMH = 8;
+const TARGET_SPEED_BUFFER_RATIO = 1.05;
+const DEFAULT_ACCELERATION_MPS2 = 2.0;
+const DEFAULT_BRAKING_MPS2 = 3.0;
+const SHARP_TURN_ANGLE_DEG = 120;
+const TURN_ANGLE_DEG = 65;
+const LOW_SPEED_ROAD_THRESHOLD_KMH = 35;
+const SHORT_SEGMENT_LENGTH_M = 35;
+const SHARP_TURN_DELAY_MS = 2200;
+const TURN_DELAY_MS = 1200;
+const LOW_SPEED_ROAD_DELAY_MS = 550;
+const SHORT_SEGMENT_DELAY_MS = 300;
+const MIN_COS_THETA = -1;
+const MAX_COS_THETA = 1;
+const DEGREES_PER_RADIAN = 180 / Math.PI;
 
 export function createDriverProfile(seed = Math.random()) {
     const paceBias = seededRange(seed * 17.3, 0.85, 1.15);
@@ -18,24 +36,24 @@ export function createDriverProfile(seed = Math.random()) {
 
 export function createMotionState() {
     return {
-        speedKmh: DEFAULT_SPEED_LIMIT * 3.6,
+        speedKmh: DEFAULT_SPEED_LIMIT * KMH_PER_MPS,
     };
 }
 
 export function resolveTargetSpeedKmh(step, recommendedSpeedKmh, profile) {
-    const baseSpeed = recommendedSpeedKmh || step?.speed_limit || (DEFAULT_SPEED_LIMIT * 3.6);
+    const baseSpeed = recommendedSpeedKmh || step?.speed_limit || (DEFAULT_SPEED_LIMIT * KMH_PER_MPS);
     const target = baseSpeed * (profile?.paceBias || 1);
-    return clamp(target, 0.5, Math.max(8, baseSpeed * 1.05));
+    return clamp(target, MIN_TARGET_SPEED_KMH, Math.max(MIN_TARGET_SPEED_CAP_KMH, baseSpeed * TARGET_SPEED_BUFFER_RATIO));
 }
 
 export function advanceSpeedKmh(currentKmh, targetKmh, elapsedMs, profile) {
-    const currentMs = currentKmh / 3.6;
-    const targetMs = targetKmh / 3.6;
+    const currentMs = currentKmh / KMH_PER_MPS;
+    const targetMs = targetKmh / KMH_PER_MPS;
     const delta = targetMs - currentMs;
-    const accel = delta >= 0 ? (profile?.accelMs2 || 2.0) : (profile?.brakeMs2 || 3.0);
-    const maxDelta = accel * (elapsedMs / 1000);
+    const accel = delta >= 0 ? (profile?.accelMs2 || DEFAULT_ACCELERATION_MPS2) : (profile?.brakeMs2 || DEFAULT_BRAKING_MPS2);
+    const maxDelta = accel * (elapsedMs * SECONDS_PER_MILLISECOND);
     const nextMs = currentMs + clamp(delta, -maxDelta, maxDelta);
-    return Math.max(0, nextMs * 3.6);
+    return Math.max(0, nextMs * KMH_PER_MPS);
 }
 
 export function computeIntersectionDelayMs(route, roadIndex, profile) {
@@ -46,17 +64,17 @@ export function computeIntersectionDelayMs(route, roadIndex, profile) {
     const current = route[roadIndex];
     const next = route[roadIndex + 1];
     const angle = turnAngleDeg(current, next);
-    const nextSpeed = next?.speed_limit || current?.speed_limit || (DEFAULT_SPEED_LIMIT * 3.6);
+    const nextSpeed = next?.speed_limit || current?.speed_limit || (DEFAULT_SPEED_LIMIT * KMH_PER_MPS);
 
     let delayMs = 0;
-    if (angle > 120) {
-        delayMs = 2200;
-    } else if (angle > 65) {
-        delayMs = 1200;
-    } else if (nextSpeed <= 35) {
-        delayMs = 550;
-    } else if (current?.base_length < 35 || next?.base_length < 35) {
-        delayMs = 300;
+    if (angle > SHARP_TURN_ANGLE_DEG) {
+        delayMs = SHARP_TURN_DELAY_MS;
+    } else if (angle > TURN_ANGLE_DEG) {
+        delayMs = TURN_DELAY_MS;
+    } else if (nextSpeed <= LOW_SPEED_ROAD_THRESHOLD_KMH) {
+        delayMs = LOW_SPEED_ROAD_DELAY_MS;
+    } else if (current?.base_length < SHORT_SEGMENT_LENGTH_M || next?.base_length < SHORT_SEGMENT_LENGTH_M) {
+        delayMs = SHORT_SEGMENT_DELAY_MS;
     }
 
     if (delayMs === 0) {
@@ -82,8 +100,8 @@ function turnAngleDeg(current, next) {
     }
 
     const dot = ((ax * bx) + (ay * by)) / (magA * magB);
-    const cosTheta = clamp(dot, -1, 1);
-    return Math.acos(cosTheta) * 180 / Math.PI;
+    const cosTheta = clamp(dot, MIN_COS_THETA, MAX_COS_THETA);
+    return Math.acos(cosTheta) * DEGREES_PER_RADIAN;
 }
 
 function seededRange(seed, min, max) {

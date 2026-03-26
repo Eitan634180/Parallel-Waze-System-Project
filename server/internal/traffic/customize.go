@@ -13,6 +13,7 @@ import (
 )
 
 const customizationInterval = 5 * time.Second
+const slowCustomizationLogThreshold = 500 * time.Millisecond
 
 type overlayWeightUpdate struct {
 	edgeIdx uint32
@@ -121,7 +122,10 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 	}
 	g.OverlayAdj.Mu.Unlock()
 
-	log.Printf("[traffic] overlay customization updated %d edges in %s", len(updates), time.Since(start).Round(time.Millisecond))
+	elapsed := time.Since(start)
+	if elapsed >= slowCustomizationLogThreshold {
+		log.Printf("[traffic] slow overlay customization updated=%d in %s", len(updates), elapsed.Round(time.Millisecond))
+	}
 }
 
 func computeCellCustomizationUpdates(

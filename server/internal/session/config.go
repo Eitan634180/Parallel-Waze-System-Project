@@ -11,6 +11,7 @@ const (
 	expiryCheckInterval       = 60 * time.Second
 	propagationInterval       = 2 * time.Second
 	optimizationSweepInterval = 500 * time.Millisecond
+	slowComputeLogThreshold   = 150 * time.Millisecond
 
 	rerouteCooldown = 5 * time.Second
 	etaThrottle     = 2 * time.Second
@@ -25,6 +26,7 @@ const (
 	offRouteStrikes    = 2
 
 	localRepairMaxHops         = 5
+	localRepairOriginalMaxHops = 20
 	severeCongestionMultiplier = float32(2.0)
 	severeCongestionMinDelay   = float32(20.0)
 

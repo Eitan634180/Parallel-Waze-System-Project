@@ -5,6 +5,14 @@ const FOLLOWING_TIME_SEC = 1.8;
 const MIN_GAP_M = 7;
 const MAX_TRACKED_GAP_M = 80;
 const ROUTE_CAPTURE_M = 18;
+const MIN_STEP_DISTANCE_M = 0.1;
+const MS_PER_SECOND = 1000;
+const DEGREES_PER_RADIAN = 180 / Math.PI;
+const HALF_TURN_DEG = 180;
+const FULL_TURN_DEG = 360;
+const SHARP_TURN_THRESHOLD_DEG = 25;
+const TURN_SPEED_CAP_KMH = 20;
+const OFF_ROUTE_DRIFT_PER_MS = 0.0000006;
 
 export function calculateNewPosition(metersToMove, elapsedMs) {
     let remainingMeters = metersToMove;
@@ -14,7 +22,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
     // Move through the route, segment by segment
     while (remainingMeters > 0 && state.drive.currentRoadIndex < state.routing.activeLegs.length) {
         const step = state.routing.activeLegs[state.drive.currentRoadIndex];
-        const stepDist = step.base_length || 0.1; 
+        const stepDist = step.base_length || MIN_STEP_DISTANCE_M;
         const distanceLeftOnStep = stepDist - state.drive.stepProgress;
 
         const startPos = [step.from_node[1], step.from_node[0]];
@@ -28,7 +36,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
             remainingElapsedMs = spilloverMs;
             
             if (step.edge_id !== null && step.edge_id !== undefined && observedMs > 0) {
-                state.sim.pendingEdgeEvents.push({ edge_id: step.edge_id, observed_sec: observedMs / 1000 });
+                state.sim.pendingEdgeEvents.push({ edge_id: step.edge_id, observed_sec: observedMs / MS_PER_SECOND });
             }
             state.sim.currentEdgeTimeMs = spilloverMs;
             state.drive.currentRoadIndex++;
@@ -37,15 +45,15 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
                 const prevStep = step;
                 const nextStep = state.routing.activeLegs[state.drive.currentRoadIndex];
                 
-                const prevBearing = Math.atan2(prevStep.to_node[1] - prevStep.from_node[1], prevStep.to_node[0] - prevStep.from_node[0]) * 180 / Math.PI;
-                const nextBearing = Math.atan2(nextStep.to_node[1] - nextStep.from_node[1], nextStep.to_node[0] - nextStep.from_node[0]) * 180 / Math.PI;
+                const prevBearing = Math.atan2(prevStep.to_node[1] - prevStep.from_node[1], prevStep.to_node[0] - prevStep.from_node[0]) * DEGREES_PER_RADIAN;
+                const nextBearing = Math.atan2(nextStep.to_node[1] - nextStep.from_node[1], nextStep.to_node[0] - nextStep.from_node[0]) * DEGREES_PER_RADIAN;
                 
                 let diff = Math.abs(nextBearing - prevBearing);
-                if (diff > 180) diff = 360 - diff;
+                if (diff > HALF_TURN_DEG) diff = FULL_TURN_DEG - diff;
                 
                 // If it's a turn, slow down
-                if (diff > 25 && state.sim.motionState) {
-                    state.sim.motionState.speedKmh = Math.min(state.sim.motionState.speedKmh, 20);
+                if (diff > SHARP_TURN_THRESHOLD_DEG && state.sim.motionState) {
+                    state.sim.motionState.speedKmh = Math.min(state.sim.motionState.speedKmh, TURN_SPEED_CAP_KMH);
                 }
             }
         } else {
@@ -60,8 +68,8 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
 
     // Apply off route offset
     if (state.drive.isDrifting) {
-        state.drive.offRouteOffset[0] += 0.0000006 * elapsedMs;
-        state.drive.offRouteOffset[1] += 0.0000006 * elapsedMs;
+        state.drive.offRouteOffset[0] += OFF_ROUTE_DRIFT_PER_MS * elapsedMs;
+        state.drive.offRouteOffset[1] += OFF_ROUTE_DRIFT_PER_MS * elapsedMs;
     }
 
     return [pos[0] + state.drive.offRouteOffset[0], pos[1] + state.drive.offRouteOffset[1]];
@@ -93,5 +101,5 @@ export function calculateBearing(currentPos) {
     if (state.drive.currentRoadIndex >= state.routing.activeLegs.length) return 0;
     const step = state.routing.activeLegs[state.drive.currentRoadIndex];
     const nextPos = [step.to_node[1], step.to_node[0]];
-    return Math.atan2(nextPos[1] - currentPos[1], nextPos[0] - currentPos[0]) * 180 / Math.PI;
+    return Math.atan2(nextPos[1] - currentPos[1], nextPos[0] - currentPos[0]) * DEGREES_PER_RADIAN;
 }

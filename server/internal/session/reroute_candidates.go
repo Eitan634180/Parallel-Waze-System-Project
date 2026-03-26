@@ -95,7 +95,7 @@ func buildCongestionCandidate(
 				context.localRepair.fromNodeID,
 				context.localRepair.toNodeID,
 				context.localRepair.congestedCost,
-				20, // maxHops for original graph search
+				localRepairOriginalMaxHops,
 				wf,
 			)
 		}

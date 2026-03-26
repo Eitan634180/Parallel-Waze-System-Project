@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"nav-system/internal/routing"
 	"nav-system/internal/session"
@@ -30,8 +31,16 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
 	routeCount := normalizedRouteCount(req.Alternatives)
 	routes := s.router.Compute(req.SrcLat, req.SrcLon, req.DstLat, req.DstLon, routeCount, s.liveWeightFunc())
+	logSlowOperation(
+		slowRouteRequestLogThreshold,
+		start,
+		"[api] route compute alternatives=%d returned=%d",
+		routeCount,
+		len(routes),
+	)
 	if len(routes) == 0 {
 		http.Error(w, "no route found", http.StatusNotFound)
 		return

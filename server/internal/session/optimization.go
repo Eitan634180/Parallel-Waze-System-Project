@@ -122,7 +122,10 @@ func optimizationCandidate(
 
 	start := time.Now()
 	routes := router.Compute(snapLat, snapLon, destination.Lat, destination.Lon, 1, wf)
-	log.Printf("[session] optimization compute session=%s routes=%d in %s", s.ID, len(routes), time.Since(start).Round(time.Millisecond))
+	elapsed := time.Since(start)
+	if elapsed >= slowComputeLogThreshold {
+		log.Printf("[session] slow optimization compute session=%s routes=%d in %s", s.ID, len(routes), elapsed.Round(time.Millisecond))
+	}
 	if len(routes) == 0 {
 		return 0, routing.Route{}, version, false
 	}

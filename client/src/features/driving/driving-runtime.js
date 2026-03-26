@@ -5,6 +5,8 @@ let drivingWorker = null;
 let pingElapsedMs = 0;
 let lastTickAt = 0;
 
+const NEXT_STEP_OFFSET = 1;
+
 export function startDrivingRuntime(onTick, onError) {
     const worker = ensureDrivingWorker(onTick, onError);
     worker.postMessage({ type: 'start', tickMs: tick });
@@ -33,7 +35,7 @@ export function flushLocationPing(route, currentRoadIndex, carPos, speedKmh, edg
         return edgeEvents;
     }
 
-    const stepIndex = Math.min(currentRoadIndex + 1, route.steps.length - 1);
+    const stepIndex = Math.min(currentRoadIndex + NEXT_STEP_OFFSET, route.steps.length - NEXT_STEP_OFFSET);
     sendLocationPing(carPos[0], carPos[1], speedKmh, stepIndex, edgeEvents);
     pingElapsedMs %= pingRate;
     return [];

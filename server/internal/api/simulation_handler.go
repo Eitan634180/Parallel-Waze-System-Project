@@ -132,6 +132,7 @@ var telAvivBounds = geoBox{
 
 func (s *Server) randomSimulationRoutes(count int) []routing.Route {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	start := time.Now()
 	routes := make([]routing.Route, 0, count)
 	attempts := count * randomRouteAttemptFactor
 	for len(routes) < count && attempts > 0 {
@@ -147,6 +148,13 @@ func (s *Server) randomSimulationRoutes(count int) []routing.Route {
 		}
 		routes = append(routes, computed[0])
 	}
+	logSlowOperation(
+		slowSimulationRouteLogThreshold,
+		start,
+		"[api] random simulation routes requested=%d generated=%d",
+		count,
+		len(routes),
+	)
 	return routes
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -37,6 +38,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
 	values := url.Values{}
 	values.Set("q", query)
 	values.Set("format", "jsonv2")
@@ -95,5 +97,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	logSlowOperation(
+		slowSearchRequestLogThreshold,
+		start,
+		"[api] search query=%q returned=%d",
+		query,
+		len(results),
+	)
 	writeJSON(w, http.StatusOK, results)
 }

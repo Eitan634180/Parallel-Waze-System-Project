@@ -7,6 +7,8 @@ import { sendLocationPing } from '../../services/ws/socket-client.js';
 import { processRawRoute, projectPositionOntoRoute } from '../routing/route-utils.js';
 import { createDriverProfile, createMotionState } from './traffic-model.js';
 
+const SECONDS_PER_MINUTE = 60;
+
 export function handleDrivingReroute(message, context) {
     resetOffRouteState();
 
@@ -106,8 +108,8 @@ function formatRerouteGainText(oldEtaSec, newEtaSec) {
     }
 
     const etaGainSec = Math.max(0, oldEtaSec - newEtaSec);
-    if (etaGainSec >= 60) {
-        return `New path saves about ${Math.round(etaGainSec / 60)} min.`;
+    if (etaGainSec >= SECONDS_PER_MINUTE) {
+        return `New path saves about ${Math.round(etaGainSec / SECONDS_PER_MINUTE)} min.`;
     }
     if (etaGainSec > 0) {
         return `New path saves about ${Math.round(etaGainSec)} sec.`;
