@@ -40,13 +40,13 @@ func (m *Manager) sweepOptimizations(
 	prepareRoute func(routing.Route) routing.Route,
 ) {
 	for _, session := range m.flaggedSessions() {
-		oldETA, candidate, ok := optimizationCandidate(session, g, store, router, wf)
+		oldETA, candidate, version, ok := optimizationCandidate(session, g, store, router, wf)
 		if !ok {
 			continue
 		}
 
 		newETA := candidate.TotalTimeSec
-		if !shouldAcceptOptimizationCandidate(session, candidate, oldETA, newETA) {
+		if !shouldAcceptOptimizationCandidate(session, candidate, version, oldETA, newETA) {
 			continue
 		}
 
@@ -74,37 +74,58 @@ func (m *Manager) flaggedSessions() []*Session {
 	return flagged
 }
 
+// sessionVersion captures a snapshot of the session state before a long-running
+// route computation. Used by shouldAcceptOptimizationCandidate to detect if the
+// session has moved or been rerouted while the computation was in progress.
+type sessionVersion struct {
+	stepIdx int
+	routeID string
+}
+
 func optimizationCandidate(
 	s *Session,
 	g *builder.Graph,
 	store *traffic.Store,
 	router *routing.Router,
 	wf routing.WeightFunc,
-) (float32, routing.Route, bool) {
+) (float32, routing.Route, sessionVersion, bool) {
 	s.Mu.Lock()
 	destination, ok := routeDestination(s.Route)
 	if !ok {
 		s.Mu.Unlock()
-		return 0, routing.Route{}, false
+		return 0, routing.Route{}, sessionVersion{}, false
 	}
 
 	oldETA := computeETALocked(s, g, store)
 	snapLat, snapLon := s.LastLat, s.LastLon
+	version := sessionVersion{stepIdx: s.StepIdx, routeID: s.Route.ID}
 	s.Mu.Unlock()
 
 	start := time.Now()
 	routes := router.Compute(snapLat, snapLon, destination.Lat, destination.Lon, 1, wf)
 	log.Printf("[session] optimization compute session=%s routes=%d in %s", s.ID, len(routes), time.Since(start).Round(time.Millisecond))
 	if len(routes) == 0 {
-		return 0, routing.Route{}, false
+		return 0, routing.Route{}, version, false
 	}
 
-	return oldETA, routes[0], true
+	return oldETA, routes[0], version, true
 }
 
-func shouldAcceptOptimizationCandidate(s *Session, candidate routing.Route, oldETA, newETA float32) bool {
+func shouldAcceptOptimizationCandidate(s *Session, candidate routing.Route, v sessionVersion, oldETA, newETA float32) bool {
+	s.Mu.RLock()
+	tooSoon := time.Since(s.LastReroute) < rerouteCooldown
+	stale := s.StepIdx != v.stepIdx || s.Route.ID != v.routeID
+	s.Mu.RUnlock()
+
+	if tooSoon || stale {
+		return false
+	}
+
+	if sameRemainingRoute(s, candidate) {
+		return false
+	}
+
 	etaGain := oldETA - newETA
 	return oldETA > 0 &&
-		(etaGain/oldETA >= rerouteSpeedupMin || etaGain >= rerouteMinGainSec) &&
-		!sameRemainingRoute(s, candidate)
+		(etaGain/oldETA >= rerouteSpeedupMin || etaGain >= rerouteMinGainSec)
 }
