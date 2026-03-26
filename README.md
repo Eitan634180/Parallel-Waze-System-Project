@@ -4,25 +4,57 @@ Welcome to the **Parallel Waze System**, a high-performance, real-time navigatio
 
 ---
 
-## 🌟 1. Executive Summary
-The Parallel Waze System is a custom-built, full-stack navigation platform that simulates a highly active road network. It goes beyond simple point-A to point-B routing by introducing **real-time traffic dynamics, live driver feedback loops, and concurrent background rerouting**. 
+## 🌟 1. System Overview: What the System Does
+The Parallel Waze System is a custom-built, full-stack navigation platform that simulates a highly active road network. It goes beyond simple point-A to point-B routing by introducing **real-time traffic dynamics, live driver feedback loops, customizable planning, and concurrent background rerouting**. 
 
 **Primary Objective:** To demonstrate advanced backend concurrency, efficient spatial graph algorithms, and real-time bidirectional WebSocket communication in a complex, live environment.
 
-### 🎯 Key Features:
-* **Real-time Map Rendering & Navigation:** A sleek Vanilla JS/HTML frontend displaying an interactive map and live driving dashboard.
+### 🎯 Key Capabilities:
+* **Interactive Navigation Dashboard:** A sleek Web UI allowing users to set routes, observe simulated drivers, and alter global traffic.
 * **Intelligent Route Planning:** Calculates the most efficient path utilizing highly optimized mapping data extracted directly from OpenStreetMap (OSM).
-* **Live Traffic & Speed Feedback Loop:** As cars "drive" through the simulation, their speeds dynamically alter the "weight" (ETA) of the roads they use, propagating traffic jams across the network.
-* **Dynamic Rerouting:** The engine constantly monitors active drivers; if traffic on their current route exceeds a threshold, a background process finds a faster alternative and updates them on-the-fly without interrupting their journey.
-* **High-Concurrency Architecture:** Written entirely in Go, the server utilizes worker pools and non-blocking I/O to manage countless parallel simulation states without latency spikes.
+* **Live Traffic Propagation:** As cars "drive" through the simulation, their real-time speeds dynamically alter the "weight" (ETA) of the roads they use, propagating traffic jams across the network organically.
+* **Proactive Dynamic Rerouting:** The engine constantly monitors active drivers against live traffic data. If a route becomes congested, a background process finds a faster alternative and silently pushes a new path.
 
 ---
 
-## 🏗️ 2. System Architecture
+## 🧠 2. Algorithmic Deep Dive & Traffic Management
 
-The project is distinctly split into **Static Data Preparation** (Map Builder) and the **Live Real-time Environment** (Frontend UI + Go Server).
+The core of the system relies on executing high-speed graph traversals against a continuously shifting data architecture. 
 
-### High-Level Architecture
+### A. Graph Construction & Inertial Flow Partitioning
+Running raw routing queries on millions of OpenStreetMap nodes is too slow for real-time, interactive navigation. We solved this during the pre-processing phase.
+1. The Map Builder parses raw `.osm.pbf` files into a network of Nodes and Edges.
+2. We utilize an algorithm inspired by **Inertial Flow Partitioning** to divide the massive map into manageable geographical "cells".
+3. Any road (Edge) that crosses a cell boundary is promoted to the **Overlay Graph**. 
+4. **The Result:** A highly optimized one-level hierarchical overlay graph. The system can instantly calculate routes across the country by traversing local base-graph cells only at the origin and destination, leaping across the high-speed Overlay Graph for the vast majority of the journey.
+
+### B. Customizable Route Planning (Dynamic A* / Dijkstra)
+When a driver requests a path, the `Routing Engine` invokes an A* or Dijkstra-based search algorithms. 
+* The crux of the algorithm is the **Edge Weight Function**: `Estimated Time = Distance / Speed`.
+* The `Speed` is not static. While it starts as the legal speed limit of the road, the algorithm actively requests the *current* speed multiplier from the concurrent `Traffic Store`. 
+* This customizable approach means the algorithm naturally pivots away from congested avenues directly toward faster neighborhood streets, as the literal mathematical cost of using main roads spikes.
+
+### C. Live Speed Feedback Loop & Traffic Propagation
+The "Waze" experience comes from our living traffic environment. 
+1. **Feedback Loop:** As a simulated car moves slowly across an edge, the server tracks its velocity. If it drops below the road's current ETA (e.g., 10km/h in a 50km/h zone), the simulation recognizes heavy congestion and lowers the global `Speed` value of that edge in the `Traffic Store`.
+2. **Instant Impact:** Any new route calculation instantly incorporates this penalty, automatically diverting new cars.
+3. **The Decay Loop:** Traffic doesn't last forever. A concurrent `Background Decay Loop` constantly scrubs the `Traffic Store`, slowly increasing the speed of traffic-heavy roads back to their default, empty-road state mathematically over time. This prevents permanent phantom traffic jams.
+
+### D. Concurrent Background Rerouting Algorithm
+We don't just route you once; we constantly protect your ETA.
+1. When a user gets a route, their `Session Manager` constantly watches the `Traffic Store`.
+2. If an edge on their pending polyline suffers a traffic hit, the Session recognizes the ETA inflation.
+3. It fires an async request into a **Worker Pool** to check for an alternative route from their exact current coordinate. 
+4. **Hysteresis Threshold:** The worker finds the *new* optimal route. If the new ETA is significantly better than the old affected ETA (beyond a threshold, e.g., saves > 2 minutes), the server accepts it. This threshold prevents volatile "route-flapping" (changing routes constantly for purely minor gains).
+5. The system pushes the new path to the client via WebSockets perfectly seamlessly without disrupting the ongoing drive.
+
+---
+
+## 🏗️ 3. System Architecture & Concurrency
+
+The backend, written entirely in **Go**, leverages Go's strong concurrency features (channels and goroutines) to handle massive parallelization.
+
+### High-Level Components
 This logical overview demonstrates how the Vanilla JS Client interacts with the Go server, and how the Go server utilizes pre-processed OSM graph data.
 
 ```mermaid
@@ -77,127 +109,14 @@ graph TD
     class GraphDB db;
 ```
 
----
-
-## ⚙️ 3. Backend Deep Dive: The Go Engine
-
-The server (`/server`) is the powerhouse of the system. Designed in Go, it heavily leverages Goroutines and Channels to achieve massive parallelization.
-
-### Concurrent Architecture Breakdown
-This diagram perfectly illustrates our solution to handling thousands of concurrent WebSocket updates alongside heavy Dijkstra/A* graph calculations.
-
-```mermaid
-graph TB
-    classDef interface fill:#e2e3e5,stroke:#383d41;
-    classDef worker fill:#d1ecf1,stroke:#17a2b8;
-    classDef store fill:#f8d7da,stroke:#dc3545;
-
-    Client(("Web Client")) <-->|WS connection| WSPump["WebSocket I/O Pump"]
-    Client -->|HTTP GET/POST| HTTPHandlers["HTTP Handlers"]
-
-    subgraph "API Layer"
-        WSPump
-        HTTPHandlers
-    end
-
-    subgraph "Session Manager"
-        SM_Core["Session State Maps"]
-        RerouteWorkers["Reroute Worker Pool (Channels)"]
-        EventLoop["Main Event Loop"]
-    end
-
-    subgraph "Traffic Engine"
-        TStore[("Traffic Store")]
-        DecayLoop["Background Decay Loop"]
-        Customizer["Speed Customization"]
-    end
-
-    subgraph "Routing Graph"
-        Router["A* / Dijkstra Search"]
-        GraphMem[("In-Memory Overlay Graph")]
-    end
-
-    WSPump -->|Update / Move| EventLoop
-    EventLoop --> SM_Core
-    SM_Core -->|Queue Job| RerouteWorkers
-    
-    RerouteWorkers -->|Calculate Alt Routes| Router
-    Router -->|Read Weights| TStore
-    Router -->|Read Topology| GraphMem
-
-    HTTPHandlers --> Router
-
-    TStore <--> Customizer
-    TStore --- DecayLoop
-
-    class WSPump,HTTPHandlers interface;
-    class RerouteWorkers worker;
-    class TStore,GraphMem store;
-```
-
-### Key Backend Components:
-* **The Worker Pool & Channels:** Routing algorithms are computationally heavy. If the main server thread halted to calculate a new route every time a car hit traffic, the system would freeze. We solve this by dropping reroute requests into a **Channel**, which a dedicated pool of **Reroute Workers (Goroutines)** picks up, processes in the background, and seamlessly pushes back to the active session.
-* **WebSocket I/O Pump:** A non-blocking architectural pattern designed to handle relentless, high-frequency GPS coordinate updates over WS, preventing system-wide latency spikes.
-* **The Map Builder (Pre-processor):** Parses raw `.osm.pbf` files. We utilize **Inertial Flow Partitioning** to divide the massive map into manageable geographical cells, allowing the server to load a highly optimized one-level hierarchical overlay graph on startup instantly.
+### The Worker Pool & Non-Blocking Design
+Routing algorithms are computationally heavy. If the main server thread halted to calculate a new route every time a car hit traffic, the system would freeze. 
+* We solve this by dropping reroute requests into a **Channel**, which a dedicated pool of **Reroute Workers (Goroutines)** picks up, processes in the background, and seamlessly pushes back to the active session.
+* We utilize a **WebSocket I/O Pump**, a non-blocking pattern designed to handle relentless, high-frequency GPS coordinate updates over WS, preventing system-wide latency spikes.
 
 ---
 
-## 🚗 4. Core Flow: Real-Time Traffic & Dynamic Rerouting
-
-The true "Waze" experience comes from our living traffic environment. Here is exactly what happens when a car starts driving:
-
-```mermaid
-sequenceDiagram
-    participant Client as Dashboard (Client)
-    participant API as Server WS API
-    participant Session as Session Manager
-    participant Traffic as Traffic Store
-    participant Router as Routing Engine
-
-    Client->>API: 1. Start Navigation
-    API->>Session: 2. Create Tracking Session
-    Session->>Router: 3. Calculate Initial Best Route
-    Router-->>Session: Return Route Plan
-    Session-->>API: Active Session Data
-    API-->>Client: 4. Draw Route Polyline on UI
-
-    loop Every Move Update
-        Client->>API: 5. Send GPS/Location Update
-        API->>Session: Update Vehicle Position
-        Session->>Traffic: 6. Apply Speed Feedback Loop
-        Traffic-->>Traffic: Adjust Edge Weight (Traffic Jam)
-        
-        Session->>Session: 7. Check Congestion/ETA threshold
-        alt If threshold exceeded (Severe Congestion)
-            Session->>Router: 8. Trigger Background Reroute Job (Worker)
-            Router-->>Session: Return Optimized Alternative
-            Session-->>API: Route Change Event
-            API-->>Client: 9. Push New Route instruction
-        else No severe congestion
-            Session-->>API: Ping/Ack OK
-        end
-    end
-```
-
-### The Traffic Feedback Loop Explained:
-1. **The Edge:** Every road segment in the graph is an "Edge" with a base speed limit and length.
-2. **Speed Customization:** Through the dashboard, users can alter the speed of cars.
-3. **The Feedback:** As a car moves slowly across an edge, the server tracks its velocity. It updates the central `Traffic Store`, explicitly raising the "Weight" (estimated time to cross) of that specific road.
-4. **The Decay:** Traffic doesn't last forever. A `Background Decay Loop` constantly scrubs the `Traffic Store`, slowly lowering the artificial weights back down to their default, empty-road speeds over time.
-5. **The Reroute Event:** As edge weights increase in the store, the `Session Manager` detects that an active driver's ETA has spiked. It asks the `Router` to check for alternatives. If a different path is faster, the system sends an update to the Client to change directions instantly.
-
----
-
-## 💻 5. Frontend Deep Dive: The Dashboard
-
-The UI (`/client`) is intentionally built with pure **Vanilla JavaScript, HTML, and CSS**, demonstrating fundamental DOM manipulation and direct WebSocket handling without the overhead of heavy frameworks. 
-
-* **Collapsible UI:** A professional, responsive sidebar contains search capabilities, active car monitoring, and route information arrays.
-* **Live Render Engine:** The map elements respond instantly to WebSocket events, dynamically drawing tracking lines, animating cars along polyline routes, and displaying active simulated driver statuses.
-
----
-
-## 🚀 6. Getting Started / How to Run
+## 🚀 4. Getting Started / How to Run
 
 Launching the entire system (Building the map, compiling the server, and serving the client) is fully automated.
 
@@ -214,8 +133,6 @@ Launching the entire system (Building the map, compiling the server, and serving
 2. **What the script does:**
    * Validates Go and Python installations.
    * Checks if compiled `.bin` map files exist. If not, it natively runs the Map Builder to crunch the `.pbf` file.
-   * Compiles the Go Server to an executable inside incredibly fast `.cache/bin/`.
+   * Compiles the Go Server to an executable inside incrementally fast `.cache/bin/`.
    * Pops open two new command windows: One running the Go API (`:8080`) and one running the Python Static File Server (`:3000`).
    * Automatically opens your default web browser to `http://localhost:3000/navigation.html`.
-
-Enjoy presenting the **Parallel Waze System**!
