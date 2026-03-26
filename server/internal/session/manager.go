@@ -35,6 +35,7 @@ func (m *Manager) Create(route routing.Route) *Session {
 		CurrentEdgeID: CurrentEdgeForStep(route, stepIdx),
 		LastPing:      now(),
 		LastReroute:   now(),
+		SendChan:      make(chan OutMsg, 256),
 	}
 
 	m.mu.Lock()
@@ -62,13 +63,15 @@ func (m *Manager) Delete(id string) {
 	session.Mu.Lock()
 	conn := session.Conn
 	session.Conn = nil
+	if session.PumpCancel != nil {
+		session.PumpCancel()
+		session.PumpCancel = nil
+	}
 	remainingSteps := append([]routing.Step(nil), session.remainingStepsLocked()...)
 	session.Mu.Unlock()
 
 	if conn != nil {
-		session.WriteMu.Lock()
 		conn.Close()
-		session.WriteMu.Unlock()
 	}
 
 	m.mu.Lock()

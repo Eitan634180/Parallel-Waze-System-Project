@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -52,15 +53,25 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, sessionID stri
 	if oldConn != nil {
 		oldConn.Close()
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sess.Mu.Lock()
+	if sess.PumpCancel != nil {
+		sess.PumpCancel()
+	}
+	sess.PumpCancel = cancel
+	sess.Mu.Unlock()
+
+	go sess.WritePump(ctx, conn)
+
 	if needsEdgeInit {
 		s.initializeSessionEdge(sess)
 	}
 	s.sendInitialSpeedUpdates(sess)
 	defer func() {
 		ownsSession, currentEdgeID := detachSessionConnection(sess, conn)
-		sess.WriteMu.Lock()
+		cancel()
 		conn.Close()
-		sess.WriteMu.Unlock()
 		if !ownsSession {
 			return
 		}

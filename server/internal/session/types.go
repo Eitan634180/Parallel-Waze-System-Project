@@ -1,6 +1,8 @@
 package session
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -75,24 +77,38 @@ type Session struct {
 	LastRerouteReason     string
 	CheckBetterRoute      bool
 
-	Conn    *websocket.Conn
-	WriteMu sync.Mutex
+	Conn       *websocket.Conn
+	SendChan   chan OutMsg
+	PumpCancel context.CancelFunc
 }
 
-// Send writes a message to the client's WebSocket connection.
+// Send queues a message to be written to the client's WebSocket connection.
+// It does not block. If the client buffer is full, the message is dropped.
 func (s *Session) Send(msg OutMsg) error {
-	s.Mu.RLock()
-	conn := s.Conn
-	s.Mu.RUnlock()
-	if conn == nil {
+	select {
+	case s.SendChan <- msg:
 		return nil
+	default:
+		// Client is too slow, dropping message to prevent server blockage
+		return errors.New("client message buffer full")
 	}
+}
 
-	s.WriteMu.Lock()
-	defer s.WriteMu.Unlock()
-
-	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-	return conn.WriteJSON(msg)
+// WritePump pushes queued messages to the websocket connection.
+// It enforces a 2-second write deadline to prevent hanging the goroutine.
+func (s *Session) WritePump(ctx context.Context, conn *websocket.Conn) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-s.SendChan:
+			conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			if err := conn.WriteJSON(msg); err != nil {
+				conn.Close()
+				return
+			}
+		}
+	}
 }
 
 func DebugSnapshot(s *Session, speedKmh float32) NavigationDebug {
