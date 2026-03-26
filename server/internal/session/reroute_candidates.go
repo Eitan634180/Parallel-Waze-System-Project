@@ -52,7 +52,7 @@ func captureCongestionContext(s *Session, g *builder.Graph, store *traffic.Store
 	}
 
 	context := congestionContext{
-		currentRoute: cloneRoute(s.Route),
+		currentRoute: s.Route,
 		destination:  destination,
 		oldETA:       computeETALocked(s, g, store),
 	}

@@ -81,8 +81,4 @@ func rebuildPatchedRoute(oldRoute routing.Route, repairStepIdx int, patch []rout
 	}
 }
 
-func cloneRoute(route routing.Route) routing.Route {
-	cloned := route
-	cloned.Steps = append([]routing.Step(nil), route.Steps...)
-	return cloned
-}
+
