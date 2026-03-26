@@ -58,6 +58,10 @@ func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 // current live traffic multipliers in store.
 func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 	start := time.Now()
+	dirtyEdges := snapshotDirtyEdges(store)
+	if len(dirtyEdges) == 0 {
+		return
+	}
 
 	g.OverlayAdj.Mu.RLock()
 	offsets := append([]uint32(nil), g.OverlayAdj.Offsets...)
@@ -72,6 +76,9 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 		}
 		eid, ok := baseEdgeIDBetweenNodeIDs(g, oe.FromNodeID, oe.ToNodeID)
 		if !ok {
+			continue
+		}
+		if _, dirty := dirtyEdges[eid]; !dirty {
 			continue
 		}
 		updates = append(updates, overlayWeightUpdate{
@@ -97,7 +104,7 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 		go func() {
 			defer wg.Done()
 			for cell := range cellJobs {
-				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, store, cell, offsets, overlayEdges)}
+				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, store, cell, offsets, overlayEdges, dirtyEdges)}
 			}
 		}()
 	}
@@ -134,8 +141,12 @@ func computeCellCustomizationUpdates(
 	cell builder.Cell,
 	offsets []uint32,
 	overlayEdges []builder.OverlayEdge,
+	dirtyEdges map[builder.EdgeID]struct{},
 ) []overlayWeightUpdate {
 	if len(cell.BoundaryNodeIDs) < 2 {
+		return nil
+	}
+	if !cellHasDirtyIntraEdge(g, cell, dirtyEdges) {
 		return nil
 	}
 
@@ -181,6 +192,42 @@ func computeCellCustomizationUpdates(
 		}
 	}
 	return updates
+}
+
+func snapshotDirtyEdges(store *Store) map[builder.EdgeID]struct{} {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+
+	dirty := make(map[builder.EdgeID]struct{}, len(store.dirty))
+	for edgeID := range store.dirty {
+		dirty[edgeID] = struct{}{}
+	}
+	return dirty
+}
+
+func cellHasDirtyIntraEdge(g *builder.Graph, cell builder.Cell, dirtyEdges map[builder.EdgeID]struct{}) bool {
+	for _, nodeID := range cell.InternalNodeIDs {
+		nodeIdx, ok := g.NodeIdx[nodeID]
+		if !ok {
+			continue
+		}
+
+		for _, edgeID := range g.BaseAdj.Neighbours(nodeIdx) {
+			if _, dirty := dirtyEdges[edgeID]; !dirty {
+				continue
+			}
+
+			toIdx, ok := g.NodeIdx[g.Edges[edgeID].ToNodeID]
+			if !ok {
+				continue
+			}
+			if g.Nodes[toIdx].CellID == cell.ID {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func liveCellDijkstra(
