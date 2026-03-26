@@ -4,6 +4,8 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"runtime"
+	"sync"
 	"time"
 
 	"nav-system/internal/routing"
@@ -123,6 +125,13 @@ type geoBox struct {
 	maxLon float64
 }
 
+type randomRouteCandidate struct {
+	srcLat float64
+	srcLon float64
+	dstLat float64
+	dstLon float64
+}
+
 var telAvivBounds = geoBox{
 	minLat: 32.01,
 	maxLat: 32.15,
@@ -133,21 +142,20 @@ var telAvivBounds = geoBox{
 func (s *Server) randomSimulationRoutes(count int) []routing.Route {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	start := time.Now()
-	routes := make([]routing.Route, 0, count)
 	attempts := count * randomRouteAttemptFactor
-	for len(routes) < count && attempts > 0 {
-		attempts--
+	candidates := make([]randomRouteCandidate, 0, attempts)
+	for i := 0; i < attempts; i++ {
 		srcLat, srcLon := telAvivBounds.randomPoint(rng)
 		dstLat, dstLon := telAvivBounds.randomPoint(rng)
-		if distanceSquared(srcLat, srcLon, dstLat, dstLon) < minRandomRouteDistanceSq {
-			continue
-		}
-		computed := s.router.Compute(srcLat, srcLon, dstLat, dstLon, 1, s.liveWeightFunc())
-		if len(computed) == 0 {
-			continue
-		}
-		routes = append(routes, computed[0])
+		candidates = append(candidates, randomRouteCandidate{
+			srcLat: srcLat,
+			srcLon: srcLon,
+			dstLat: dstLat,
+			dstLon: dstLon,
+		})
 	}
+
+	routes := s.computeRandomSimulationCandidates(candidates, count)
 	logSlowOperation(
 		slowSimulationRouteLogThreshold,
 		start,
@@ -155,6 +163,89 @@ func (s *Server) randomSimulationRoutes(count int) []routing.Route {
 		count,
 		len(routes),
 	)
+	return routes
+}
+
+func (s *Server) computeRandomSimulationCandidates(candidates []randomRouteCandidate, limit int) []routing.Route {
+	if len(candidates) == 0 || limit <= 0 {
+		return nil
+	}
+
+	workerCount := runtime.NumCPU()
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	if workerCount > len(candidates) {
+		workerCount = len(candidates)
+	}
+
+	liveWeights := s.liveWeightFunc()
+	jobs := make(chan randomRouteCandidate, workerCount)
+	results := make(chan routing.Route, workerCount)
+	stop := make(chan struct{})
+
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				var candidate randomRouteCandidate
+				var ok bool
+				select {
+				case <-stop:
+					return
+				case candidate, ok = <-jobs:
+					if !ok {
+						return
+					}
+				}
+
+				if distanceSquared(candidate.srcLat, candidate.srcLon, candidate.dstLat, candidate.dstLon) < minRandomRouteDistanceSq {
+					continue
+				}
+
+				computed := s.router.Compute(candidate.srcLat, candidate.srcLon, candidate.dstLat, candidate.dstLon, 1, liveWeights)
+				if len(computed) == 0 {
+					continue
+				}
+				select {
+				case <-stop:
+					return
+				case results <- computed[0]:
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, candidate := range candidates {
+			select {
+			case <-stop:
+				return
+			case jobs <- candidate:
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	routes := make([]routing.Route, 0, limit)
+	for route := range results {
+		if len(routes) >= limit {
+			continue
+		}
+
+		routes = append(routes, route)
+		if len(routes) == limit {
+			close(stop)
+		}
+	}
+
 	return routes
 }
 
