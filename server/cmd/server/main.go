@@ -47,6 +47,14 @@ func main() {
 	traffic.CustomizeOverlayWeights(g, store)
 	srv := api.NewServer(g, store, mgr, router, sim)
 
+	warmCtx, warmCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if err := srv.WarmSearch(warmCtx); err != nil {
+		log.Printf("[main] Search warmup skipped: %v", err)
+	} else {
+		log.Printf("[main] Search warmup complete")
+	}
+	warmCancel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

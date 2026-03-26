@@ -1,7 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,6 +15,7 @@ import (
 const (
 	nominatimSearchURL = "https://nominatim.openstreetmap.org/search"
 	searchUserAgent    = "navigation-prototype/1.0"
+	searchWarmupQuery  = "Tel Aviv"
 )
 
 type nominatimSearchResult struct {
@@ -39,30 +43,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	values := url.Values{}
-	values.Set("q", query)
-	values.Set("format", "jsonv2")
-	values.Set("limit", strconv.Itoa(s.search.Limit))
-	values.Set("addressdetails", "0")
-	if s.search.Language != "" {
-		values.Set("accept-language", s.search.Language)
-	}
-	if s.search.CountryCodes != "" {
-		values.Set("countrycodes", s.search.CountryCodes)
-	}
-	if s.search.ViewBox != "" {
-		values.Set("viewbox", s.search.ViewBox)
-		values.Set("bounded", "1")
-	}
-
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, nominatimSearchURL+"?"+values.Encode(), nil)
+	req, err := s.newSearchRequest(r.Context(), query, s.search.Limit)
 	if err != nil {
 		http.Error(w, "failed to create search request", http.StatusInternalServerError)
 		return
-	}
-	req.Header.Set("User-Agent", searchUserAgent)
-	if s.search.Language != "" {
-		req.Header.Set("Accept-Language", s.search.Language)
 	}
 
 	resp, err := s.httpClient.Do(req)
@@ -105,4 +89,55 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		len(results),
 	)
 	writeJSON(w, http.StatusOK, results)
+}
+
+func (s *Server) WarmSearch(ctx context.Context) error {
+	req, err := s.newSearchRequest(ctx, searchWarmupQuery, 1)
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("search warmup upstream status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (s *Server) newSearchRequest(ctx context.Context, query string, limit int) (*http.Request, error) {
+	values := url.Values{}
+	values.Set("q", query)
+	values.Set("format", "jsonv2")
+	values.Set("limit", strconv.Itoa(limit))
+	values.Set("addressdetails", "0")
+	if s.search.Language != "" {
+		values.Set("accept-language", s.search.Language)
+	}
+	if s.search.CountryCodes != "" {
+		values.Set("countrycodes", s.search.CountryCodes)
+	}
+	if s.search.ViewBox != "" {
+		values.Set("viewbox", s.search.ViewBox)
+		values.Set("bounded", "1")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, nominatimSearchURL+"?"+values.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", searchUserAgent)
+	if s.search.Language != "" {
+		req.Header.Set("Accept-Language", s.search.Language)
+	}
+
+	return req, nil
 }
