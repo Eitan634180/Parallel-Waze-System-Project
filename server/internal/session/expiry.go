@@ -1,0 +1,39 @@
+package session
+
+import "context"
+
+// RunExpiry removes sessions whose last ping is too old.
+func (m *Manager) RunExpiry(ctx context.Context) {
+	ticker := newTicker(expiryCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.expireSessions()
+		}
+	}
+}
+
+func (m *Manager) expireSessions() {
+	cutoff := now().Add(-sessionExpiry)
+
+	m.mu.RLock()
+	sessions := make([]*Session, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		sessions = append(sessions, session)
+	}
+	m.mu.RUnlock()
+
+	for _, session := range sessions {
+		session.Mu.RLock()
+		expired := session.LastPing.Before(cutoff)
+		sessionID := session.ID
+		session.Mu.RUnlock()
+		if expired {
+			m.Delete(sessionID)
+		}
+	}
+}

@@ -1,19 +1,25 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"time"
 
+	"nav-system/internal/graph/builder"
+	"nav-system/internal/routing"
 	"nav-system/internal/session"
-	"nav-system/map/builder"
 
 	"github.com/gorilla/websocket"
 )
 
+const partialObservationMinEdgeAge = 2 * time.Second
+
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		return isAllowedBrowserOrigin(r.Header.Get("Origin"))
+	},
 }
 
 type pingMsg struct {
@@ -43,23 +49,35 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, sessionID stri
 		return
 	}
 
+	oldConn, needsEdgeInit := attachSessionConnection(sess, conn)
+	if oldConn != nil {
+		oldConn.Close()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	sess.Mu.Lock()
-	sess.Conn = conn
+	if sess.PumpCancel != nil {
+		sess.PumpCancel()
+	}
+	sess.PumpCancel = cancel
 	sess.Mu.Unlock()
-	s.initializeSessionEdge(sess)
+
+	go sess.WritePump(ctx, conn)
+
+	if needsEdgeInit {
+		s.initializeSessionEdge(sess)
+	}
 	s.sendInitialSpeedUpdates(sess)
 	defer func() {
-		sess.Mu.Lock()
-		currentEdgeID := sess.CurrentEdgeID
-		sess.Conn = nil
-		sess.Mu.Unlock()
+		ownsSession, currentEdgeID := detachSessionConnection(sess, conn)
+		cancel()
+		conn.Close()
+		if !ownsSession {
+			return
+		}
 		if currentEdgeID != nil {
 			s.store.LeaveEdge(builder.EdgeID(*currentEdgeID))
 		}
-
-		sess.WriteMu.Lock()
-		conn.Close()
-		sess.WriteMu.Unlock()
 		s.mgr.Delete(sessionID)
 	}()
 
@@ -81,6 +99,29 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, sessionID stri
 	}
 }
 
+func attachSessionConnection(sess *session.Session, conn *websocket.Conn) (*websocket.Conn, bool) {
+	sess.Mu.Lock()
+	defer sess.Mu.Unlock()
+
+	oldConn := sess.Conn
+	needsEdgeInit := oldConn == nil && sess.CurrentEdgeAt.IsZero()
+	sess.Conn = conn
+	return oldConn, needsEdgeInit
+}
+
+func detachSessionConnection(sess *session.Session, conn *websocket.Conn) (bool, *uint32) {
+	sess.Mu.Lock()
+	defer sess.Mu.Unlock()
+
+	if sess.Conn != conn {
+		return false, nil
+	}
+
+	currentEdgeID := sess.CurrentEdgeID
+	sess.Conn = nil
+	return true, currentEdgeID
+}
+
 func (s *Server) initializeSessionEdge(sess *session.Session) {
 	sess.Mu.Lock()
 	defer sess.Mu.Unlock()
@@ -96,6 +137,13 @@ func (s *Server) initializeSessionEdge(sess *session.Session) {
 
 func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 	now := time.Now()
+	var advanceSessionID string
+	var advanceRoute routing.Route
+	advanceFrom := -1
+	advanceTo := -1
+	var currentEdgeID *uint32
+	var currentEdgeAt time.Time
+
 	sess.Mu.Lock()
 	sess.LastPing = now
 
@@ -104,45 +152,23 @@ func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 		prevIdx = 0
 	}
 
-	newIdx := msg.StepIndex
-	if newIdx < prevIdx {
-		newIdx = prevIdx
-	}
-	if newIdx >= len(sess.Route.Steps) {
-		newIdx = len(sess.Route.Steps) - 1
-	}
-
-	for _, evt := range msg.EdgeEvents {
-		eid := builder.EdgeID(evt.EdgeID)
-		if int(eid) >= len(s.g.Edges) || evt.ObservedSec <= 0 {
-			continue
-		}
-		e := &s.g.Edges[eid]
-		if e.Weight <= 0 {
-			continue
-		}
-		s.store.RecordObservation(eid, evt.ObservedSec, e.Weight)
-	}
+	newIdx := normalizeSessionStepIndex(sess.Route, prevIdx, msg.StepIndex)
+	s.recordEdgeObservations(msg.EdgeEvents)
 
 	if newIdx > prevIdx {
-		for i := prevIdx; i < newIdx; i++ {
-			if i < 0 || i >= len(sess.Route.Steps) {
-				continue
-			}
-			edgeID := sess.Route.Steps[i].EdgeID
-			if edgeID != nil {
-				s.store.LeaveEdge(builder.EdgeID(*edgeID))
-			}
-		}
+		s.releaseTraversedEdges(sess.Route, prevIdx, newIdx)
 	}
 
-	s.mgr.AdvanceStep(sess, newIdx)
-	nextEdgeID := session.CurrentEdgeForStep(sess.Route, newIdx)
-	currentEdgeChanged := (nextEdgeID == nil) != (sess.CurrentEdgeID == nil)
-	if !currentEdgeChanged && nextEdgeID != nil && sess.CurrentEdgeID != nil {
-		currentEdgeChanged = *nextEdgeID != *sess.CurrentEdgeID
+	if newIdx > sess.StepIdx {
+		advanceSessionID = sess.ID
+		advanceRoute = sess.Route
+		advanceFrom = sess.StepIdx
+		advanceTo = newIdx
+		sess.StepIdx = newIdx
 	}
-	if currentEdgeChanged {
+
+	nextEdgeID := session.CurrentEdgeForStep(sess.Route, newIdx)
+	if edgeChanged(sess.CurrentEdgeID, nextEdgeID) {
 		if newIdx == prevIdx && sess.CurrentEdgeID != nil {
 			s.store.LeaveEdge(builder.EdgeID(*sess.CurrentEdgeID))
 		}
@@ -154,7 +180,15 @@ func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 	}
 	sess.LastLat = msg.Lat
 	sess.LastLon = msg.Lon
+	currentEdgeID = sess.CurrentEdgeID
+	currentEdgeAt = sess.CurrentEdgeAt
 	sess.Mu.Unlock()
+
+	if advanceFrom >= 0 {
+		s.mgr.AdvanceStep(advanceSessionID, advanceRoute, advanceFrom, advanceTo)
+	}
+
+	s.recordCurrentEdgeSpeedSample(currentEdgeID, currentEdgeAt, now, msg.SpeedKmh)
 
 	session.Check(
 		sess,
@@ -164,10 +198,78 @@ func (s *Server) processPing(sess *session.Session, msg pingMsg) {
 		s.mgr,
 		s.router,
 		s.liveWeightFunc(),
-		s.prepareRoute,
+		s.cacheRoute,
 	)
 	debug := session.DebugSnapshot(sess, msg.SpeedKmh)
 	_ = sess.Send(session.OutMsg{Type: "debug_update", Debug: &debug})
+}
+
+func (s *Server) recordEdgeObservations(events []edgeTravel) {
+	for _, event := range events {
+		edgeID := builder.EdgeID(event.EdgeID)
+		if int(edgeID) >= len(s.g.Edges) || event.ObservedSec <= 0 {
+			continue
+		}
+
+		edge := &s.g.Edges[edgeID]
+		if edge.Weight <= 0 {
+			continue
+		}
+
+		s.store.RecordObservation(edgeID, event.ObservedSec, edge.Weight)
+	}
+}
+
+func (s *Server) recordCurrentEdgeSpeedSample(edgeID *uint32, edgeAt, now time.Time, speedKmh float32) {
+	if edgeID == nil || speedKmh <= 0 || edgeAt.IsZero() || now.Sub(edgeAt) < partialObservationMinEdgeAge {
+		return
+	}
+
+	eid := builder.EdgeID(*edgeID)
+	if int(eid) >= len(s.g.Edges) {
+		return
+	}
+
+	edge := &s.g.Edges[eid]
+	if edge.Weight <= 0 || edge.DistanceM <= 0 {
+		return
+	}
+
+	s.store.RecordSpeedSample(eid, speedKmh, edge.Weight, edge.DistanceM)
+}
+
+func (s *Server) releaseTraversedEdges(route routing.Route, fromIdx, toIdx int) {
+	for i := fromIdx; i < toIdx; i++ {
+		if i < 0 || i >= len(route.Steps) {
+			continue
+		}
+
+		edgeID := route.Steps[i].EdgeID
+		if edgeID != nil {
+			s.store.LeaveEdge(builder.EdgeID(*edgeID))
+		}
+	}
+}
+
+func normalizeSessionStepIndex(route routing.Route, previousIndex, reportedIndex int) int {
+	if reportedIndex < previousIndex {
+		reportedIndex = previousIndex
+	}
+	if reportedIndex >= len(route.Steps) {
+		reportedIndex = len(route.Steps) - 1
+	}
+	return reportedIndex
+}
+
+func edgeChanged(current, next *uint32) bool {
+	switch {
+	case current == nil && next == nil:
+		return false
+	case current == nil || next == nil:
+		return true
+	default:
+		return *current != *next
+	}
 }
 
 func (s *Server) sendInitialSpeedUpdates(sess *session.Session) {
@@ -176,15 +278,14 @@ func (s *Server) sendInitialSpeedUpdates(sess *session.Session) {
 		if int(eid) >= len(s.g.Edges) {
 			continue
 		}
-		multiplier := s.store.Multiplier(eid)
-		if multiplier == 1.0 && s.store.Density(eid) == 0 {
-			continue
-		}
 		baseKmh := s.g.Edges[eid].SpeedKmh
 		if baseKmh <= 0 {
 			continue
 		}
 		recSpeed := s.store.RecommendedSpeedKmh(eid, baseKmh, s.g.Edges[eid].DistanceM)
+		if recSpeed == baseKmh && s.store.Density(eid) == 0 {
+			continue
+		}
 		edgeIDVal := uint32(eid)
 		recSpeedVal := recSpeed
 		_ = sess.Send(session.OutMsg{

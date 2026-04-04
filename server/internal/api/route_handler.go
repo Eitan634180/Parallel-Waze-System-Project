@@ -1,9 +1,10 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
+	"time"
 
+	"nav-system/internal/routing"
 	"nav-system/internal/session"
 )
 
@@ -16,59 +17,64 @@ type routeRequest struct {
 }
 
 type routeResponse struct {
-	Routes []routeWithID `json:"routes"`
-}
-
-type routeWithID struct {
-	ID           string      `json:"id"`
-	Steps        interface{} `json:"steps"`
-	TotalDistM   float32     `json:"total_dist_m"`
-	TotalTimeSec float32     `json:"total_time_sec"`
-	CongestionAhead bool     `json:"congestion_ahead"`
-	CongestedEdges  int      `json:"congested_edges"`
+	Routes []session.RoutePayload `json:"routes"`
 }
 
 func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
 
-	var req routeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+	req, ok := decodeJSON[routeRequest](w, r)
+	if !ok {
 		return
 	}
 
-	k := 1 + req.Alternatives
-	if k < 1 {
-		k = 1
-	}
-	if k > 5 {
-		k = 5
-	}
-
-	routes := s.router.Compute(req.SrcLat, req.SrcLon, req.DstLat, req.DstLon, k, s.liveWeightFunc())
+	start := time.Now()
+	routeCount := normalizedRouteCount(req.Alternatives)
+	routes := s.router.Compute(req.SrcLat, req.SrcLon, req.DstLat, req.DstLon, routeCount, s.liveWeightFunc())
+	logSlowOperation(
+		slowRouteRequestLogThreshold,
+		start,
+		"[api] route compute alternatives=%d returned=%d",
+		routeCount,
+		len(routes),
+	)
 	if len(routes) == 0 {
 		http.Error(w, "no route found", http.StatusNotFound)
 		return
 	}
 
-	// Assign stable UUIDs for routes that will be referenced by POST /session.
-	resp := routeResponse{Routes: make([]routeWithID, len(routes))}
-	for i, rt := range routes {
-		rt.CongestionAhead, rt.CongestedEdges = session.RouteCongestionSummary(rt, s.store, s.g)
-		rt = s.prepareRoute(rt)
-		routes[i] = rt
-		resp.Routes[i] = routeWithID{
-			ID:           rt.ID,
-			Steps:        rt.Steps,
-			TotalDistM:   rt.TotalDistM,
-			TotalTimeSec: rt.TotalTimeSec,
-			CongestionAhead: rt.CongestionAhead,
-			CongestedEdges:  rt.CongestedEdges,
-		}
+	response := routeResponse{Routes: make([]session.RoutePayload, 0, len(routes))}
+	for _, route := range routes {
+		response.Routes = append(response.Routes, s.routeResponsePayload(route))
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func normalizedRouteCount(alternatives int) int {
+	count := 1 + alternatives
+	if count < 1 {
+		return 1
+	}
+	if count > 5 {
+		return 5
+	}
+	return count
+}
+
+func (s *Server) routeResponsePayload(route routing.Route) session.RoutePayload {
+	route.CongestionAhead, route.CongestedEdges = session.RouteCongestionSummary(route, s.store, s.g)
+	route = s.cacheRoute(route)
+
+	return session.RoutePayload{
+		ID:              route.ID,
+		Steps:           route.Steps,
+		TotalDistM:      route.TotalDistM,
+		TotalTimeSec:    route.TotalTimeSec,
+		CongestionAhead: route.CongestionAhead,
+		CongestedEdges:  route.CongestedEdges,
+	}
 }

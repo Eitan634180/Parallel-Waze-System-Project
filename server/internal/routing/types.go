@@ -13,10 +13,10 @@ type Step struct {
 
 // Route is a complete source-to-destination path.
 type Route struct {
-	ID           string  `json:"id"` // UUIDv4
-	Steps        []Step  `json:"steps"`
-	TotalDistM   float32 `json:"total_dist_m"`
-	TotalTimeSec float32 `json:"total_time_sec"` // computed with live weights at query time
-	CongestionAhead bool `json:"congestion_ahead"`
-	CongestedEdges  int  `json:"congested_edges"`
+	ID              string  `json:"id"` // UUIDv4
+	Steps           []Step  `json:"steps"`
+	TotalDistM      float32 `json:"total_dist_m"`
+	TotalTimeSec    float32 `json:"total_time_sec"` // computed with live weights at query time
+	CongestionAhead bool    `json:"congestion_ahead"`
+	CongestedEdges  int     `json:"congested_edges"`
 }

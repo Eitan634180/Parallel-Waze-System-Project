@@ -7,12 +7,16 @@ import (
 	"sync"
 	"time"
 
+	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
 	"nav-system/internal/traffic"
-	"nav-system/map/builder"
 )
 
-const tickInterval = 250 * time.Millisecond
+const (
+	tickInterval                  = 250 * time.Millisecond
+	simObservationWarmupS         = float32(1.0)
+	simObservationSampleIntervalS = float32(1.0)
+)
 
 type CarSnapshot struct {
 	ID  string  `json:"id"`
@@ -25,6 +29,8 @@ type car struct {
 	route      routing.Route
 	stepIdx    int
 	progressM  float32
+	edgeTimeS  float32
+	lastObservationSampleS float32
 	lat        float64
 	lon        float64
 	paceBias   float32
@@ -84,18 +90,7 @@ func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) in
 		m.nextID++
 		id := carID(m.nextID)
 
-		maxStart := len(route.Steps) - 2
-		startIndex := minStep
-		if startIndex > maxStart {
-			startIndex = maxStart
-		}
-		if startIndex < 0 {
-			startIndex = 0
-		}
-
-		if maxStart > startIndex {
-			startIndex += m.rng.Intn(maxStart - startIndex + 1)
-		}
+		startIndex := weightedStartIndex(route, minStep, m.rng)
 
 		c := &car{
 			id:       id,
@@ -195,11 +190,16 @@ func (m *Manager) broadcastLocked() {
 }
 
 func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) bool {
-	remainingM := currentSpeedMps(c, g, store) * dtSec
+	remainingSec := dtSec
 
-	for remainingM > 0 {
+	for remainingSec > 0 {
 		if c.stepIdx >= len(c.route.Steps) {
 			return false
+		}
+
+		speedMps := currentSpeedMps(c, g, store)
+		if speedMps <= 0 {
+			return true
 		}
 
 		prev := c.route.Steps[c.stepIdx-1]
@@ -209,20 +209,32 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) b
 			legDist = 0.1
 		}
 		leftOnLeg := legDist - c.progressM
-		if leftOnLeg > remainingM {
-			c.progressM += remainingM
+		maxDistanceThisTick := speedMps * remainingSec
+		if leftOnLeg > maxDistanceThisTick {
+			c.progressM += maxDistanceThisTick
+			c.edgeTimeS += remainingSec
+			recordSimSpeedSample(c, cur, speedMps, g, store)
 			updateInterpolatedPosition(c, prev, cur, legDist)
 			return true
 		}
 
-		remainingM -= leftOnLeg
+		timeOnLeg := leftOnLeg / speedMps
+		c.edgeTimeS += timeOnLeg
+		recordSimSpeedSample(c, cur, speedMps, g, store)
+		remainingSec -= timeOnLeg
 		c.progressM = 0
 		c.lat = cur.Lat
 		c.lon = cur.Lon
 
 		if c.edgeActive && cur.EdgeID != nil {
-			store.LeaveEdge(builder.EdgeID(*cur.EdgeID))
+			eid := builder.EdgeID(*cur.EdgeID)
+			if int(eid) < len(g.Edges) && g.Edges[eid].Weight > 0 && c.edgeTimeS > 0 {
+				store.RecordObservation(eid, c.edgeTimeS, g.Edges[eid].Weight)
+			}
+			store.LeaveEdge(eid)
 			c.edgeActive = false
+			c.edgeTimeS = 0
+			c.lastObservationSampleS = 0
 		}
 
 		c.stepIdx++
@@ -232,10 +244,75 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) b
 		if nextEdge := c.route.Steps[c.stepIdx].EdgeID; nextEdge != nil {
 			store.EnterEdge(builder.EdgeID(*nextEdge))
 			c.edgeActive = true
+			c.edgeTimeS = 0
+			c.lastObservationSampleS = 0
 		}
 	}
 
 	return true
+}
+
+func weightedStartIndex(route routing.Route, minStep int, rng *rand.Rand) int {
+	maxStart := len(route.Steps) - 2
+	startIndex := minStep
+	if startIndex > maxStart {
+		startIndex = maxStart
+	}
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	if startIndex >= maxStart {
+		return startIndex
+	}
+
+	totalWeight := float32(0)
+	for i := startIndex; i <= maxStart; i++ {
+		totalWeight += routeLegWeight(route, i)
+	}
+	if totalWeight <= 0 {
+		return startIndex + rng.Intn(maxStart-startIndex+1)
+	}
+
+	target := rng.Float32() * totalWeight
+	for i := startIndex; i <= maxStart; i++ {
+		target -= routeLegWeight(route, i)
+		if target <= 0 {
+			return i
+		}
+	}
+	return maxStart
+}
+
+func routeLegWeight(route routing.Route, startIndex int) float32 {
+	if startIndex < 0 || startIndex+1 >= len(route.Steps) {
+		return 0
+	}
+	legDist := route.Steps[startIndex+1].DistanceM - route.Steps[startIndex].DistanceM
+	if legDist <= 0 {
+		return 0.1
+	}
+	return legDist
+}
+
+func recordSimSpeedSample(c *car, step routing.Step, speedMps float32, g *builder.Graph, store *traffic.Store) {
+	if !c.edgeActive || step.EdgeID == nil || speedMps <= 0 {
+		return
+	}
+	if c.edgeTimeS < simObservationWarmupS || c.edgeTimeS-c.lastObservationSampleS < simObservationSampleIntervalS {
+		return
+	}
+
+	eid := builder.EdgeID(*step.EdgeID)
+	if int(eid) >= len(g.Edges) {
+		return
+	}
+	edge := &g.Edges[eid]
+	if edge.Weight <= 0 || edge.DistanceM <= 0 {
+		return
+	}
+
+	store.RecordSpeedSample(eid, speedMps*3.6, edge.Weight, edge.DistanceM)
+	c.lastObservationSampleS = c.edgeTimeS
 }
 
 func currentSpeedMps(c *car, g *builder.Graph, store *traffic.Store) float32 {

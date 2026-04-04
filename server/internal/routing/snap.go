@@ -3,27 +3,21 @@ package routing
 import (
 	"math"
 
-	"nav-system/map/builder"
+	"nav-system/internal/geo"
+	"nav-system/internal/graph/builder"
 )
 
-// ---------------------------------------------------------------------------
-// Spatial grid snap
-// ---------------------------------------------------------------------------
-
-const gridSize = 500 // G×G cells covering the bounding box of all nodes
-
-// SnapIndex is a prebuilt spatial grid for O(1)-average nearest-node lookups.
+// SnapIndex is a prebuilt spatial grid for nearest-node lookups.
 type SnapIndex struct {
 	g       *builder.Graph
 	minX    float32
 	minY    float32
-	cellW   float32 // width of one grid cell in metres
+	cellW   float32
 	cellH   float32
-	buckets [][]uint32 // [gridSize*gridSize] slices of node internal indices
+	buckets [][]uint32
 }
 
-// BuildSnapIndex builds the spatial grid from the loaded graph.
-// Call once at server startup.
+// BuildSnapIndex builds the spatial grid once at startup.
 func BuildSnapIndex(g *builder.Graph) *SnapIndex {
 	if len(g.Nodes) == 0 {
 		return &SnapIndex{g: g}
@@ -32,35 +26,34 @@ func BuildSnapIndex(g *builder.Graph) *SnapIndex {
 	minX, minY := g.Nodes[0].X, g.Nodes[0].Y
 	maxX, maxY := minX, minY
 	for i := range g.Nodes {
-		n := &g.Nodes[i]
-		if n.X < minX {
-			minX = n.X
+		node := &g.Nodes[i]
+		if node.X < minX {
+			minX = node.X
 		}
-		if n.X > maxX {
-			maxX = n.X
+		if node.X > maxX {
+			maxX = node.X
 		}
-		if n.Y < minY {
-			minY = n.Y
+		if node.Y < minY {
+			minY = node.Y
 		}
-		if n.Y > maxY {
-			maxY = n.Y
+		if node.Y > maxY {
+			maxY = node.Y
 		}
 	}
 
-	// Add a tiny margin so maxX/maxY nodes don't overflow the last cell.
-	maxX += 1
-	maxY += 1
+	maxX++
+	maxY++
 
 	cellW := (maxX - minX) / gridSize
 	cellH := (maxY - minY) / gridSize
-
 	buckets := make([][]uint32, gridSize*gridSize)
+
 	for i := range g.Nodes {
-		n := &g.Nodes[i]
-		cx := int((n.X - minX) / cellW)
-		cy := int((n.Y - minY) / cellH)
-		idx := cy*gridSize + cx
-		buckets[idx] = append(buckets[idx], uint32(i))
+		node := &g.Nodes[i]
+		cellX := int((node.X - minX) / cellW)
+		cellY := int((node.Y - minY) / cellH)
+		bucketIdx := cellY*gridSize + cellX
+		buckets[bucketIdx] = append(buckets[bucketIdx], uint32(i))
 	}
 
 	return &SnapIndex{
@@ -73,91 +66,68 @@ func BuildSnapIndex(g *builder.Graph) *SnapIndex {
 	}
 }
 
-// Snap returns the internal node index of the graph node nearest to (lat, lon).
+// Snap returns the internal node index nearest to the given coordinates.
 func (si *SnapIndex) Snap(lat, lon float64) uint32 {
-	qx, qy := projectXY(lat, lon)
+	qx, qy := geo.Project(lat, lon)
 
-	cx0 := int((qx - si.minX) / si.cellW)
-	cy0 := int((qy - si.minY) / si.cellH)
-	cx0 = clamp(cx0, 0, gridSize-1)
-	cy0 = clamp(cy0, 0, gridSize-1)
+	cellX := clampGridCoord(qx, si.minX, si.cellW)
+	cellY := clampGridCoord(qy, si.minY, si.cellH)
 
 	bestIdx := uint32(0)
 	bestDist := float32(math.MaxFloat32)
 
-	// Spiral outward from the home cell until we find at least one candidate
-	// and the ring distance cannot improve on it.
 	for ring := 0; ; ring++ {
 		ringMinDist := float32(ring) * min32(si.cellW, si.cellH)
-		ringMinDistSq := ringMinDist * ringMinDist
-		if ring > 0 && ringMinDistSq > bestDist {
-			break // no closer node possible in larger rings
+		if ring > 0 && ringMinDist*ringMinDist > bestDist {
+			break
 		}
 
 		for dy := -ring; dy <= ring; dy++ {
 			for dx := -ring; dx <= ring; dx++ {
-				// Only process cells on the perimeter of this ring.
 				if abs(dx) != ring && abs(dy) != ring {
 					continue
 				}
-				cx := cx0 + dx
-				cy := cy0 + dy
-				if cx < 0 || cx >= gridSize || cy < 0 || cy >= gridSize {
+
+				bucketX := cellX + dx
+				bucketY := cellY + dy
+				if bucketX < 0 || bucketX >= gridSize || bucketY < 0 || bucketY >= gridSize {
 					continue
 				}
-				for _, ni := range si.buckets[cy*gridSize+cx] {
-					n := &si.g.Nodes[ni]
-					d := dist2(qx, qy, n.X, n.Y)
-					if d < bestDist {
-						bestDist = d
-						bestIdx = ni
+
+				for _, nodeIdx := range si.buckets[bucketY*gridSize+bucketX] {
+					node := &si.g.Nodes[nodeIdx]
+					dist := geo.DistanceSquared(qx, qy, node.X, node.Y)
+					if dist < bestDist {
+						bestDist = dist
+						bestIdx = nodeIdx
 					}
 				}
 			}
 		}
-
 	}
+
 	return bestIdx
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const (
-	earthRadiusM = 6_371_000.0
-	lat0Deg      = 31.5
-)
-
-var cosLat0 = float32(math.Cos(lat0Deg * math.Pi / 180.0))
-
-func projectXY(lat, lon float64) (x, y float32) {
-	x = float32(lon*math.Pi/180.0) * cosLat0 * earthRadiusM
-	y = float32(lat * math.Pi / 180.0 * earthRadiusM)
-	return
+func clampInt(value, minValue, maxValue int) int {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
 }
 
-func dist2(ax, ay, bx, by float32) float32 {
-	dx := ax - bx
-	dy := ay - by
-	return dx*dx + dy*dy
+func clampGridCoord(value, minValue, cellSize float32) int {
+	return clampInt(int((value-minValue)/cellSize), 0, gridSize-1)
 }
 
-func clamp(v, lo, hi int) int {
-	if v < lo {
-		return lo
+func abs(value int) int {
+	if value < 0 {
+		return -value
 	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
+	return value
 }
 
 func min32(a, b float32) float32 {

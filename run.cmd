@@ -4,9 +4,11 @@ setlocal
 set "ROOT=%~dp0"
 set "SERVER_DIR=%ROOT%server"
 set "CLIENT_DIR=%ROOT%client"
-set "DATA_DIR=%SERVER_DIR%\map\data"
-set "GOCACHE_DIR=%SERVER_DIR%\.gocache"
-set "SERVER_EXE=%SERVER_DIR%\server.exe"
+set "DATA_DIR=%SERVER_DIR%\data\map"
+set "CACHE_DIR=%ROOT%.cache"
+set "GOCACHE_DIR=%CACHE_DIR%\go-build"
+set "BIN_DIR=%CACHE_DIR%\bin"
+set "SERVER_EXE=%BIN_DIR%\server.exe"
 set "PBF_FILE=%DATA_DIR%\israel-latest.osm.pbf"
 set "CLIENT_URL=http://localhost:3000/navigation.html"
 
@@ -24,7 +26,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
+if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
 if not exist "%GOCACHE_DIR%" mkdir "%GOCACHE_DIR%"
+if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
 
 set "MAP_READY=1"
 if not exist "%DATA_DIR%\nodes.bin" set "MAP_READY=0"
@@ -39,7 +43,7 @@ if "%MAP_READY%"=="0" (
     echo Graph data is missing and the source PBF was not found:
     echo   %PBF_FILE%
     echo.
-    echo Put the PBF in server\map\data or build the graph manually.
+    echo Put the PBF in server\data\map or build the graph manually.
     pause
     exit /b 1
   )
@@ -48,7 +52,7 @@ if "%MAP_READY%"=="0" (
   pushd "%SERVER_DIR%"
   set "GOCACHE=%GOCACHE_DIR%"
   set "CGO_ENABLED=0"
-  go run .\map --pbf .\map\data\israel-latest.osm.pbf --out .\map\data
+  go run .\cmd\map-builder --pbf .\data\map\israel-latest.osm.pbf --out .\data\map
   if errorlevel 1 (
     echo.
     echo Map build failed.
@@ -63,7 +67,7 @@ echo Building Go server...
 pushd "%SERVER_DIR%"
 set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
-go build -o "%SERVER_EXE%" .\internal
+go build -o "%SERVER_EXE%" .\cmd\server
 if errorlevel 1 (
   echo.
   echo Server build failed.
@@ -74,7 +78,7 @@ if errorlevel 1 (
 popd
 
 echo Starting API server in a new window...
-start "Navigation Server" cmd /k "cd /d "%SERVER_DIR%" && set GOCACHE=%GOCACHE_DIR% && set CGO_ENABLED=0 && server.exe --addr :8080"
+start "Navigation Server" cmd /k "cd /d "%SERVER_DIR%" && set GOCACHE=%GOCACHE_DIR% && set CGO_ENABLED=0 && "%SERVER_EXE%" --addr :8080"
 
 echo Starting static client in a new window...
 start "Navigation Client" cmd /k "cd /d "%CLIENT_DIR%" && python -m http.server 3000"

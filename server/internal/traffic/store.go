@@ -4,38 +4,34 @@ import (
 	"math"
 	"sync"
 
-	"nav-system/map/builder"
+	"nav-system/internal/graph/builder"
 )
 
 const (
-	// ewmaAlpha is the smoothing factor for the Exponentially Weighted Moving Average.
-	// Higher = more reactive to new observations; lower = smoother.
+	// ewmaAlpha controls how quickly observed travel-time changes affect weight.
 	ewmaAlpha = float32(0.15)
 
-	// CongestionThreshold: edges with multiplier above this are considered congested.
+	// partialSampleAlpha is used for weaker in-progress speed samples from pings.
+	partialSampleAlpha = float32(0.08)
+
+	// CongestionThreshold marks edges that should be treated as congested.
 	CongestionThreshold = float32(1.5)
 
-	// SignificantShift is the minimum multiplier change that triggers a speed_update
-	// broadcast to subscribed sessions.
+	// SignificantShift is the minimum multiplier change that triggers a speed update.
 	SignificantShift = float32(0.10)
 
-	// Hint-speed model parameters. These are used only for speed_update guidance,
-	// not for routing or ETA.
+	// Hint-speed parameters are only used for speed-update guidance.
 	hintJamDensityVehPerKm = float32(120)
 	hintMinSpeedRatio      = float32(0.02)
 	hintMinEdgeLengthKm    = float32(0.02)
 	hintAlpha              = 1.0
 )
 
-// ---------------------------------------------------------------------------
-// Store
-// ---------------------------------------------------------------------------
-
 // Store holds the live traffic state for every edge that has been observed.
 // The zero value is NOT valid; use NewStore().
 type Store struct {
 	mu          sync.RWMutex
-	weight      map[builder.EdgeID]float32  // effective multiplier (1.0 = free-flow)
+	weight      map[builder.EdgeID]float32  // observed EWMA multiplier (1.0 = free-flow)
 	density     map[builder.EdgeID]int      // number of active sessions currently on edge
 	dirty       map[builder.EdgeID]struct{} // edges whose multiplier != 1.0
 	activity    map[builder.EdgeID]struct{} // edges whose density changed since last snapshot
@@ -55,12 +51,7 @@ func NewStore() *Store {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Density tracking
-// ---------------------------------------------------------------------------
-
 // EnterEdge increments the active-session count for an edge.
-// Called when a session advances onto an edge.
 func (s *Store) EnterEdge(id builder.EdgeID) {
 	s.mu.Lock()
 	s.density[id]++
@@ -69,7 +60,6 @@ func (s *Store) EnterEdge(id builder.EdgeID) {
 }
 
 // LeaveEdge decrements the active-session count for an edge.
-// Called when a session leaves an edge.
 func (s *Store) LeaveEdge(id builder.EdgeID) {
 	s.mu.Lock()
 	d := s.density[id] - 1
@@ -89,62 +79,50 @@ func (s *Store) Density(id builder.EdgeID) int {
 	return s.density[id]
 }
 
-// ---------------------------------------------------------------------------
-// EWMA weight update
-// ---------------------------------------------------------------------------
-
-// RecordObservation updates the edge multiplier using an EWMA of
-// (observedSec / baseSec). A ratio > 1 means the edge is slower than base.
+// RecordObservation updates the edge multiplier using an EWMA of observed/base time.
 func (s *Store) RecordObservation(id builder.EdgeID, observedSec, baseSec float32) {
 	if baseSec <= 0 {
 		return
 	}
-	ratio := observedSec / baseSec
+	s.recordObservedRatio(id, observedSec/baseSec, ewmaAlpha)
+}
 
+// RecordSpeedSample updates the observed multiplier from an in-progress speed sample.
+func (s *Store) RecordSpeedSample(id builder.EdgeID, speedKmh, baseSec, distanceM float32) {
+	if speedKmh <= 0 || baseSec <= 0 || distanceM <= 0 {
+		return
+	}
+	observedSec := distanceM / (speedKmh / 3.6)
+	if observedSec <= 0 {
+		return
+	}
+	s.recordObservedRatio(id, observedSec/baseSec, partialSampleAlpha)
+}
+
+func (s *Store) recordObservedRatio(id builder.EdgeID, ratio, alpha float32) {
+	if ratio <= 0 {
+		return
+	}
 	s.mu.Lock()
 	cur, ok := s.weight[id]
 	if !ok {
 		cur = 1.0
 	}
-	updated := ewmaAlpha*ratio + (1-ewmaAlpha)*cur
+	updated := alpha*ratio + (1-alpha)*cur
 	s.weight[id] = updated
 	s.dirty[id] = struct{}{}
 	s.mu.Unlock()
 }
 
-// ---------------------------------------------------------------------------
-// Reads
-// ---------------------------------------------------------------------------
-
-// EffectiveWeight returns base multiplied by the current traffic multiplier.
-func (s *Store) EffectiveWeight(id builder.EdgeID, base float32) float32 {
+// LiveWeight returns the routing/ETA cost for an edge based on observed traffic only.
+func (s *Store) LiveWeight(id builder.EdgeID, baseSec float32) float32 {
 	s.mu.RLock()
 	m, ok := s.weight[id]
 	s.mu.RUnlock()
 	if !ok {
-		return base
+		return baseSec
 	}
-	return base * m
-}
-
-// LiveWeight returns the routing/ETA cost for an edge after combining
-// observation-based slowdown with density-based slowdown.
-func (s *Store) LiveWeight(id builder.EdgeID, baseSec, baseKmh, distanceM float32) float32 {
-	observed := s.EffectiveWeight(id, baseSec)
-	if baseSec <= 0 || baseKmh <= 0 {
-		return observed
-	}
-
-	recommended := s.RecommendedSpeedKmh(id, baseKmh, distanceM)
-	if recommended <= 0 {
-		return observed
-	}
-
-	densityBased := distanceM / (recommended / 3.6)
-	if densityBased > observed {
-		return densityBased
-	}
-	return observed
+	return baseSec * m
 }
 
 // Multiplier returns the raw multiplier for an edge (1.0 if not observed).
@@ -158,9 +136,7 @@ func (s *Store) Multiplier(id builder.EdgeID) float32 {
 	return m
 }
 
-// RecommendedSpeedKmh returns a density-based hint speed for an edge in km/h.
-// It uses a modified Greenshields-style speed-density relationship:
-// v = v0 + (vf-v0) * (1 - k/kjam)^alpha
+// RecommendedSpeedKmh returns a density-based speed hint for an edge in km/h.
 func (s *Store) RecommendedSpeedKmh(id builder.EdgeID, baseKmh, distanceM float32) float32 {
 	if baseKmh <= 0 {
 		return baseKmh
@@ -201,20 +177,14 @@ func (s *Store) IsCongested(id builder.EdgeID) bool {
 	return s.Multiplier(id) > CongestionThreshold
 }
 
-// ---------------------------------------------------------------------------
-// Snapshot for background propagation worker
-// ---------------------------------------------------------------------------
-
-// ChangedEdge describes an edge whose multiplier has shifted significantly
-// since the last snapshot.
+// ChangedEdge describes an edge whose live state changed since the last snapshot.
 type ChangedEdge struct {
 	EdgeID        builder.EdgeID
+	OldMultiplier float32
 	NewMultiplier float32
 }
 
-// DirtySnapshot returns all dirty edges and flags those whose multiplier has
-// shifted by more than SignificantShift since the previous call.
-// It also updates the internal prev map for next comparison.
+// DirtySnapshot returns edges whose multiplier or density changed since the previous call.
 // Safe to call concurrently with EnterEdge/LeaveEdge/RecordObservation.
 func (s *Store) DirtySnapshot() []ChangedEdge {
 	s.mu.Lock()
@@ -229,8 +199,14 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 	}
 	var changed []ChangedEdge
 	for id := range edgeIDs {
-		cur := s.weight[id]
-		prev := s.prev[id]
+		cur, ok := s.weight[id]
+		if !ok {
+			cur = 1.0
+		}
+		prev, ok := s.prev[id]
+		if !ok {
+			prev = 1.0
+		}
 		delta := cur - prev
 		if delta < 0 {
 			delta = -delta
@@ -238,7 +214,7 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 		density := s.density[id]
 		densityChanged := density != s.prevDensity[id]
 		if delta >= SignificantShift || densityChanged {
-			changed = append(changed, ChangedEdge{EdgeID: id, NewMultiplier: cur})
+			changed = append(changed, ChangedEdge{EdgeID: id, OldMultiplier: prev, NewMultiplier: cur})
 			s.prev[id] = cur
 			s.prevDensity[id] = density
 		}
@@ -248,13 +224,7 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 	return changed
 }
 
-// ---------------------------------------------------------------------------
-// Decay (called by decay.Worker)
-// ---------------------------------------------------------------------------
-
-// ApplyDecay exponentially decays all dirty-edge multipliers back toward 1.0.
-// factor is the decay coefficient, e.g. 0.85.
-// Edges that return within tolerance of 1.0 are cleaned up.
+// ApplyDecay exponentially decays dirty-edge multipliers back toward 1.0.
 func (s *Store) ApplyDecay(factor, tolerance float32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -1,20 +1,20 @@
 package api
 
 import (
-	"encoding/json"
 	"log"
 	"math/rand"
 	"net/http"
+	"runtime"
+	"sync"
 	"time"
 
 	"nav-system/internal/routing"
 )
 
 const (
-	telAvivMinLat = 32.01
-	telAvivMaxLat = 32.15
-	telAvivMinLon = 34.74
-	telAvivMaxLon = 34.88
+	defaultSimulationCount   = 1
+	randomRouteAttemptFactor = 6
+	minRandomRouteDistanceSq = 0.0004
 )
 
 type simulationSpawnRequest struct {
@@ -29,8 +29,14 @@ type simulationSpawnResponse struct {
 }
 
 type simulationSnapshotMessage struct {
-	Type string                   `json:"type"`
-	Cars []map[string]interface{} `json:"cars"`
+	Type string                 `json:"type"`
+	Cars []simulationCarMessage `json:"cars"`
+}
+
+type simulationCarMessage struct {
+	ID  string  `json:"id"`
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
 }
 
 func (s *Server) handleSimulation(w http.ResponseWriter, r *http.Request) {
@@ -41,57 +47,41 @@ func (s *Server) handleSimulation(w http.ResponseWriter, r *http.Request) {
 		s.sim.Clear()
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 	}
 }
 
 func (s *Server) handleSimulationRandom(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
 
-	var req simulationSpawnRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+	req, ok := decodeJSON[simulationSpawnRequest](w, r)
+	if !ok {
 		return
 	}
-	if req.Count < 1 {
-		req.Count = 1
-	}
 
-	routes := s.generateRandomSimulationRoutes(req.Count)
+	count := normalizedSimulationCount(req.Count)
+	routes := s.randomSimulationRoutes(count)
 	created := s.sim.SpawnRoutes(routes, len(routes), 0)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(simulationSpawnResponse{Created: created, Active: s.sim.Count()})
+	writeJSON(w, http.StatusOK, simulationSpawnResponse{Created: created, Active: s.sim.Count()})
 }
 
 func (s *Server) spawnSimulationCars(w http.ResponseWriter, r *http.Request) {
-	var req simulationSpawnRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+	req, ok := decodeJSON[simulationSpawnRequest](w, r)
+	if !ok {
 		return
 	}
-	if req.Count < 1 {
-		req.Count = 1
-	}
 
-	routes := make([]routing.Route, 0, len(req.RouteIDs))
-	s.mu.RLock()
-	for _, id := range req.RouteIDs {
-		if entry, ok := s.routeCache[id]; ok {
-			routes = append(routes, entry.route)
-		}
-	}
-	s.mu.RUnlock()
+	routes := s.cachedRoutes(req.RouteIDs)
 	if len(routes) == 0 {
 		http.Error(w, "no routes found", http.StatusNotFound)
 		return
 	}
 
-	created := s.sim.SpawnRoutes(routes, req.Count, req.MinStepIndex)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(simulationSpawnResponse{Created: created, Active: s.sim.Count()})
+	created := s.sim.SpawnRoutes(routes, normalizedSimulationCount(req.Count), req.MinStepIndex)
+	writeJSON(w, http.StatusOK, simulationSpawnResponse{Created: created, Active: s.sim.Count()})
 }
 
 func (s *Server) handleSimulationWS(w http.ResponseWriter, r *http.Request) {
@@ -110,14 +100,10 @@ func (s *Server) handleSimulationWS(w http.ResponseWriter, r *http.Request) {
 	for snapshots := range ch {
 		payload := simulationSnapshotMessage{
 			Type: "snapshot",
-			Cars: make([]map[string]interface{}, 0, len(snapshots)),
+			Cars: make([]simulationCarMessage, 0, len(snapshots)),
 		}
 		for _, car := range snapshots {
-			payload.Cars = append(payload.Cars, map[string]interface{}{
-				"id":  car.ID,
-				"lat": car.Lat,
-				"lon": car.Lon,
-			})
+			payload.Cars = append(payload.Cars, simulationCarMessage{ID: car.ID, Lat: car.Lat, Lon: car.Lon})
 		}
 		if err := conn.WriteJSON(payload); err != nil {
 			return
@@ -125,27 +111,148 @@ func (s *Server) handleSimulationWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) generateRandomSimulationRoutes(count int) []routing.Route {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	routes := make([]routing.Route, 0, count)
-	attempts := count * 6
-	for len(routes) < count && attempts > 0 {
-		attempts--
-		srcLat := telAvivMinLat + rng.Float64()*(telAvivMaxLat-telAvivMinLat)
-		srcLon := telAvivMinLon + rng.Float64()*(telAvivMaxLon-telAvivMinLon)
-		dstLat := telAvivMinLat + rng.Float64()*(telAvivMaxLat-telAvivMinLat)
-		dstLon := telAvivMinLon + rng.Float64()*(telAvivMaxLon-telAvivMinLon)
-		if distanceSquared(srcLat, srcLon, dstLat, dstLon) < 0.0004 {
-			continue
-		}
-		computed := s.router.Compute(srcLat, srcLon, dstLat, dstLon, 1, s.liveWeightFunc())
-		if len(computed) == 0 {
-			continue
-		}
-		route := s.prepareRoute(computed[0])
-		routes = append(routes, route)
+func normalizedSimulationCount(count int) int {
+	if count < defaultSimulationCount {
+		return defaultSimulationCount
 	}
+	return count
+}
+
+type geoBox struct {
+	minLat float64
+	maxLat float64
+	minLon float64
+	maxLon float64
+}
+
+type randomRouteCandidate struct {
+	srcLat float64
+	srcLon float64
+	dstLat float64
+	dstLon float64
+}
+
+var telAvivBounds = geoBox{
+	minLat: 32.01,
+	maxLat: 32.15,
+	minLon: 34.74,
+	maxLon: 34.88,
+}
+
+func (s *Server) randomSimulationRoutes(count int) []routing.Route {
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	start := time.Now()
+	attempts := count * randomRouteAttemptFactor
+	candidates := make([]randomRouteCandidate, 0, attempts)
+	for i := 0; i < attempts; i++ {
+		srcLat, srcLon := telAvivBounds.randomPoint(rng)
+		dstLat, dstLon := telAvivBounds.randomPoint(rng)
+		candidates = append(candidates, randomRouteCandidate{
+			srcLat: srcLat,
+			srcLon: srcLon,
+			dstLat: dstLat,
+			dstLon: dstLon,
+		})
+	}
+
+	routes := s.computeRandomSimulationCandidates(candidates, count)
+	logSlowOperation(
+		slowSimulationRouteLogThreshold,
+		start,
+		"[api] random simulation routes requested=%d generated=%d",
+		count,
+		len(routes),
+	)
 	return routes
+}
+
+func (s *Server) computeRandomSimulationCandidates(candidates []randomRouteCandidate, limit int) []routing.Route {
+	if len(candidates) == 0 || limit <= 0 {
+		return nil
+	}
+
+	workerCount := runtime.NumCPU()
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	if workerCount > len(candidates) {
+		workerCount = len(candidates)
+	}
+
+	liveWeights := s.liveWeightFunc()
+	jobs := make(chan randomRouteCandidate, workerCount)
+	results := make(chan routing.Route, workerCount)
+	stop := make(chan struct{})
+
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				var candidate randomRouteCandidate
+				var ok bool
+				select {
+				case <-stop:
+					return
+				case candidate, ok = <-jobs:
+					if !ok {
+						return
+					}
+				}
+
+				if distanceSquared(candidate.srcLat, candidate.srcLon, candidate.dstLat, candidate.dstLon) < minRandomRouteDistanceSq {
+					continue
+				}
+
+				computed := s.router.Compute(candidate.srcLat, candidate.srcLon, candidate.dstLat, candidate.dstLon, 1, liveWeights)
+				if len(computed) == 0 {
+					continue
+				}
+				select {
+				case <-stop:
+					return
+				case results <- computed[0]:
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, candidate := range candidates {
+			select {
+			case <-stop:
+				return
+			case jobs <- candidate:
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	routes := make([]routing.Route, 0, limit)
+	for route := range results {
+		if len(routes) >= limit {
+			continue
+		}
+
+		routes = append(routes, route)
+		if len(routes) == limit {
+			close(stop)
+		}
+	}
+
+	return routes
+}
+
+func (b geoBox) randomPoint(rng *rand.Rand) (float64, float64) {
+	lat := b.minLat + rng.Float64()*(b.maxLat-b.minLat)
+	lon := b.minLon + rng.Float64()*(b.maxLon-b.minLon)
+	return lat, lon
 }
 
 func distanceSquared(lat1, lon1, lat2, lon2 float64) float64 {

@@ -3,15 +3,17 @@ package traffic
 import (
 	"container/heap"
 	"context"
+	"log"
 	"math"
 	"runtime"
 	"sync"
 	"time"
 
-	"nav-system/map/builder"
+	"nav-system/internal/graph/builder"
 )
 
-const customizationInterval = 10 * time.Second
+const customizationInterval = 5 * time.Second
+const slowCustomizationLogThreshold = 500 * time.Millisecond
 
 type overlayWeightUpdate struct {
 	edgeIdx uint32
@@ -41,13 +43,19 @@ func (pq *livePQ) Pop() interface{} {
 func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 	ticker := time.NewTicker(customizationInterval)
 	defer ticker.Stop()
+	previousDirtyEdges := make(map[builder.EdgeID]struct{})
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			CustomizeOverlayWeights(g, store)
+			currentDirtyEdges := snapshotDirtyEdges(store)
+			dirtyEdges := unionDirtyEdges(currentDirtyEdges, previousDirtyEdges)
+			if len(dirtyEdges) > 0 {
+				customizeOverlayWeights(g, store, dirtyEdges)
+			}
+			previousDirtyEdges = currentDirtyEdges
 		}
 	}
 }
@@ -55,6 +63,16 @@ func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 // CustomizeOverlayWeights recomputes all overlay edge weights against the
 // current live traffic multipliers in store.
 func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
+	dirtyEdges := snapshotDirtyEdges(store)
+	if len(dirtyEdges) == 0 {
+		return
+	}
+	customizeOverlayWeights(g, store, dirtyEdges)
+}
+
+func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}) {
+	start := time.Now()
+
 	g.OverlayAdj.Mu.RLock()
 	offsets := append([]uint32(nil), g.OverlayAdj.Offsets...)
 	overlayEdges := append([]builder.OverlayEdge(nil), g.OverlayAdj.OverlayEdges...)
@@ -70,9 +88,12 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 		if !ok {
 			continue
 		}
+		if _, dirty := dirtyEdges[eid]; !dirty {
+			continue
+		}
 		updates = append(updates, overlayWeightUpdate{
 			edgeIdx: uint32(idx),
-			weight:  store.LiveWeight(eid, g.Edges[eid].Weight, g.Edges[eid].SpeedKmh, g.Edges[eid].DistanceM),
+			weight:  store.LiveWeight(eid, g.Edges[eid].Weight),
 		})
 	}
 
@@ -93,7 +114,7 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 		go func() {
 			defer wg.Done()
 			for cell := range cellJobs {
-				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, store, cell, offsets, overlayEdges)}
+				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, store, cell, offsets, overlayEdges, dirtyEdges)}
 			}
 		}()
 	}
@@ -117,6 +138,11 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 		g.OverlayAdj.OverlayEdges[update.edgeIdx].Weight = update.weight
 	}
 	g.OverlayAdj.Mu.Unlock()
+
+	elapsed := time.Since(start)
+	if elapsed >= slowCustomizationLogThreshold {
+		log.Printf("[traffic] slow overlay customization updated=%d in %s", len(updates), elapsed.Round(time.Millisecond))
+	}
 }
 
 func computeCellCustomizationUpdates(
@@ -125,8 +151,12 @@ func computeCellCustomizationUpdates(
 	cell builder.Cell,
 	offsets []uint32,
 	overlayEdges []builder.OverlayEdge,
+	dirtyEdges map[builder.EdgeID]struct{},
 ) []overlayWeightUpdate {
 	if len(cell.BoundaryNodeIDs) < 2 {
+		return nil
+	}
+	if !cellHasDirtyIntraEdge(g, cell, dirtyEdges) {
 		return nil
 	}
 
@@ -174,6 +204,57 @@ func computeCellCustomizationUpdates(
 	return updates
 }
 
+func snapshotDirtyEdges(store *Store) map[builder.EdgeID]struct{} {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+
+	dirty := make(map[builder.EdgeID]struct{}, len(store.dirty))
+	for edgeID := range store.dirty {
+		dirty[edgeID] = struct{}{}
+	}
+	return dirty
+}
+
+func unionDirtyEdges(current, previous map[builder.EdgeID]struct{}) map[builder.EdgeID]struct{} {
+	if len(current) == 0 && len(previous) == 0 {
+		return nil
+	}
+
+	combined := make(map[builder.EdgeID]struct{}, len(current)+len(previous))
+	for edgeID := range current {
+		combined[edgeID] = struct{}{}
+	}
+	for edgeID := range previous {
+		combined[edgeID] = struct{}{}
+	}
+	return combined
+}
+
+func cellHasDirtyIntraEdge(g *builder.Graph, cell builder.Cell, dirtyEdges map[builder.EdgeID]struct{}) bool {
+	for _, nodeID := range cell.InternalNodeIDs {
+		nodeIdx, ok := g.NodeIdx[nodeID]
+		if !ok {
+			continue
+		}
+
+		for _, edgeID := range g.BaseAdj.Neighbours(nodeIdx) {
+			if _, dirty := dirtyEdges[edgeID]; !dirty {
+				continue
+			}
+
+			toIdx, ok := g.NodeIdx[g.Edges[edgeID].ToNodeID]
+			if !ok {
+				continue
+			}
+			if g.Nodes[toIdx].CellID == cell.ID {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func liveCellDijkstra(
 	g *builder.Graph,
 	store *Store,
@@ -197,6 +278,9 @@ func liveCellDijkstra(
 
 	for pq.Len() > 0 {
 		cur := heap.Pop(pq).(livePQItem)
+
+		// The queue may contain multiple entries for the same node with different costs.
+		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		best, hasBest := dist[cur.id]
 		if !hasBest || cur.cost > best {
 			continue
@@ -222,7 +306,7 @@ func liveCellDijkstra(
 				continue
 			}
 
-			newCost := best + store.LiveWeight(eid, e.Weight, e.SpeedKmh, e.DistanceM)
+			newCost := best + store.LiveWeight(eid, e.Weight)
 			if existing, has := dist[toID]; !has || newCost < existing {
 				dist[toID] = newCost
 				heap.Push(pq, livePQItem{id: toID, cost: newCost})
