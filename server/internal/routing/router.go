@@ -1,10 +1,6 @@
 package routing
 
-import (
-	"log"
-
-	"nav-system/internal/graph/builder"
-)
+import "nav-system/internal/graph/builder"
 
 // WeightFunc returns the effective travel time in seconds for an edge.
 type WeightFunc func(e *builder.Edge) float32
@@ -49,7 +45,6 @@ func (r *Router) Compute(srcLat, srcLon, dstLat, dstLon float64, k int, wf Weigh
 	for i := 0; i < k; i++ {
 		steps, usedOverlayEdges, ok := r.twoLevelSearch(srcIdx, dstIdx, penalizedWeight, overlayPenalties)
 		if !ok {
-			log.Printf("[routing] route search failed")
 			break
 		}
 

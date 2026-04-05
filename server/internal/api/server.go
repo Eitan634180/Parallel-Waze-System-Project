@@ -57,13 +57,13 @@ func NewServer(
 }
 
 func (s *Server) registerRoutes() {
-	s.mux.HandleFunc("/search", s.withCORS(s.handleSearch))
-	s.mux.HandleFunc("/route", s.withCORS(s.handleRoute))
-	s.mux.HandleFunc("/session", s.withCORS(s.handleSession))
-	s.mux.HandleFunc("/session/", s.withCORS(s.handleSessionID))
-	s.mux.HandleFunc("/simulation", s.withCORS(s.handleSimulation))
-	s.mux.HandleFunc("/simulation/random", s.withCORS(s.handleSimulationRandom))
-	s.mux.HandleFunc("/simulation/ws", s.withCORS(s.handleSimulationWS))
+	s.mux.HandleFunc(searchRoutePath, s.withCORS(s.handleSearch))
+	s.mux.HandleFunc(routeRoutePath, s.withCORS(s.handleRoute))
+	s.mux.HandleFunc(sessionRoutePath, s.withCORS(s.handleSession))
+	s.mux.HandleFunc(sessionSubtreeRoutePath, s.withCORS(s.handleSessionID))
+	s.mux.HandleFunc(simulationRoutePath, s.withCORS(s.handleSimulation))
+	s.mux.HandleFunc(simulationRandomRoutePath, s.withCORS(s.handleSimulationRandom))
+	s.mux.HandleFunc(simulationWSRoutePath, s.withCORS(s.handleSimulationWS))
 }
 
 // ServeHTTP implements http.Handler.
@@ -74,16 +74,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // withCORS wraps a handler with permissive CORS headers.
 func (s *Server) withCORS(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
+		origin := r.Header.Get(headerOrigin)
 		if origin != "" {
 			if !isAllowedBrowserOrigin(origin) {
-				http.Error(w, "origin not allowed", http.StatusForbidden)
+				http.Error(w, originNotAllowedMessage, http.StatusForbidden)
 				return
 			}
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set(headerAllowOrigin, origin)
+			w.Header().Set(headerVary, headerOrigin)
+			w.Header().Set(headerAllowMethods, corsAllowedMethods)
+			w.Header().Set(headerAllowHeaders, corsAllowedHeaders)
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

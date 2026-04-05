@@ -20,6 +20,11 @@ type routeResponse struct {
 	Routes []session.RoutePayload `json:"routes"`
 }
 
+const (
+	baseRouteCount = 1
+	maxRouteCount  = 5
+)
+
 func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w)
@@ -55,12 +60,12 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 func normalizedRouteCount(alternatives int) int {
-	count := 1 + alternatives
-	if count < 1 {
-		return 1
+	count := baseRouteCount + alternatives
+	if count < baseRouteCount {
+		return baseRouteCount
 	}
-	if count > 5 {
-		return 5
+	if count > maxRouteCount {
+		return maxRouteCount
 	}
 	return count
 }

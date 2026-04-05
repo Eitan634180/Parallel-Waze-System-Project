@@ -1,51 +1,61 @@
 import { formatDuration, getArrivalTime } from '../../utils/formatters.js';
+import { CSS_CLASSES, DOM_IDS, PANEL_TEXT, TRAFFIC_LEVELS } from '../ui-constants.js';
+
+const DISPLAY_STYLES = {
+    flex: 'flex',
+    none: 'none',
+};
+
+const DISTANCE_CONVERSION = {
+    metersPerKilometer: 1000,
+};
 
 export function updateETA(seconds) {
     const durationStr = formatDuration(seconds);
-    document.getElementById('eta-value').textContent = durationStr;
-    document.getElementById('hud-eta').textContent = durationStr;
-    document.getElementById('hud-arrival-time').textContent = getArrivalTime(seconds);
+    document.getElementById(DOM_IDS.etaValue).textContent = durationStr;
+    document.getElementById(DOM_IDS.hudEta).textContent = durationStr;
+    document.getElementById(DOM_IDS.hudArrivalTime).textContent = getArrivalTime(seconds);
 }
 
-export function updateDistance(meters, elementId = 'distance-value') {
-    const km = (meters / 1000).toFixed(1);
+export function updateDistance(meters, elementId = DOM_IDS.distanceValue) {
+    const km = (meters / DISTANCE_CONVERSION.metersPerKilometer).toFixed(1);
     document.getElementById(elementId).textContent = `${km} km`;
 }
 
-export function updateTrafficStatus(status = 'normal', detail = '') {
-    const el = document.getElementById('traffic-status');
+export function updateTrafficStatus(status = TRAFFIC_LEVELS.normal, detail = '') {
+    const el = document.getElementById(DOM_IDS.trafficStatus);
     if (!el) return;
 
-    if (typeof status === 'boolean') status = status ? 'congested' : 'normal';
+    if (typeof status === 'boolean') status = status ? TRAFFIC_LEVELS.congested : TRAFFIC_LEVELS.normal;
 
-    if (status === 'heavy') {
-        el.textContent = 'Heavy';
+    if (status === TRAFFIC_LEVELS.heavy) {
+        el.textContent = PANEL_TEXT.heavy;
         el.className = 'stat-value heavy';
-    } else if (status === 'congested') {
-        el.textContent = 'Slower';
+    } else if (status === TRAFFIC_LEVELS.congested) {
+        el.textContent = PANEL_TEXT.congested;
         el.className = 'stat-value congested';
     } else {
-        el.textContent = 'Normal';
+        el.textContent = PANEL_TEXT.normal;
         el.className = 'stat-value';
     }
     el.title = detail || '';
 }
 
 export function toggleDrivingHUD(isDriving) {
-    const hud = document.getElementById('driving-hud');
-    const sidebar = document.getElementById('sidebar');
-    const stopBtn = document.getElementById('stop-drive-btn');
-    const startBtn = document.getElementById('start-drive-btn');
+    const hud = document.getElementById(DOM_IDS.drivingHud);
+    const sidebar = document.getElementById(DOM_IDS.sidebar);
+    const stopBtn = document.getElementById(DOM_IDS.stopDriveButton);
+    const startBtn = document.getElementById(DOM_IDS.startDriveButton);
 
     if (isDriving) {
-        hud.classList.remove('hidden');
-        sidebar.classList.add('hidden');
-        stopBtn.style.display = 'flex';
-        startBtn.style.display = 'none';
+        hud.classList.remove(CSS_CLASSES.hidden);
+        sidebar.classList.add(CSS_CLASSES.hidden);
+        stopBtn.style.display = DISPLAY_STYLES.flex;
+        startBtn.style.display = DISPLAY_STYLES.none;
     } else {
-        hud.classList.add('hidden');
-        sidebar.classList.remove('hidden');
-        stopBtn.style.display = 'none';
+        hud.classList.add(CSS_CLASSES.hidden);
+        sidebar.classList.remove(CSS_CLASSES.hidden);
+        stopBtn.style.display = DISPLAY_STYLES.none;
         startBtn.style.display = '';
     }
 }

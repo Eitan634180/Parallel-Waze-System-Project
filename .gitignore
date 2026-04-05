@@ -2,3 +2,4 @@
 /server/data/map/*.bin
 /server/data/map/*.pbf
 /server/.gocache/
+/server/*.exe

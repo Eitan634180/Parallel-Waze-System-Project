@@ -1,9 +1,11 @@
 package builder
 
 import (
-	"fmt"
+	"log"
 	"sort"
 )
+
+const graphBuilderLogPrefix = "graph-builder:"
 
 // BuildGraph constructs the base graph from parsed OSM nodes and ways.
 func BuildGraph(pr *ParseResult) (*Graph, error) {
@@ -13,7 +15,7 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 		BoundaryNodeIdx: make(map[NodeID]uint32),
 	}
 
-	fmt.Println("[BUILDER] Building nodes ...")
+	log.Printf("%s building nodes", graphBuilderLogPrefix)
 
 	g.Nodes = make([]Node, 0, len(pr.Nodes))
 	for _, rn := range pr.Nodes {
@@ -29,8 +31,8 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 		})
 	}
 
-	fmt.Printf("[BUILDER] %d nodes built\n", len(g.Nodes))
-	fmt.Println("[BUILDER] Building edges ...")
+	log.Printf("%s nodes ready (%d)", graphBuilderLogPrefix, len(g.Nodes))
+	log.Printf("%s building edges", graphBuilderLogPrefix)
 
 	// Most ways contribute two directed edges per segment.
 	estimatedEdges := len(pr.Ways) * 4
@@ -96,10 +98,10 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 		}
 	}
 
-	fmt.Printf("[BUILDER] %d directed edges built\n", len(g.Edges))
-	fmt.Println("[BUILDER] Building base CSR adjacency list ...")
+	log.Printf("%s edges ready (%d directed)", graphBuilderLogPrefix, len(g.Edges))
+	log.Printf("%s building base adjacency", graphBuilderLogPrefix)
 	g.BaseAdj = buildCSR(adjTmp, len(g.Edges))
-	fmt.Println("[BUILDER] Base CSR done")
+	log.Printf("%s base adjacency ready", graphBuilderLogPrefix)
 
 	return g, nil
 }

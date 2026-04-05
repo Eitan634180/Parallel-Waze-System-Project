@@ -6,8 +6,16 @@ import { updateDistance, updateETA } from '../../ui/panels/hud-panel.js';
 import { sendLocationPing } from '../../services/ws/socket-client.js';
 import { processRawRoute, projectPositionOntoRoute } from '../routing/route-utils.js';
 import { createDriverProfile, createMotionState } from './traffic-model.js';
+import { DOM_IDS, PANEL_TEXT } from '../../ui/ui-constants.js';
 
 const SECONDS_PER_MINUTE = 60;
+const DEFAULT_REROUTE_REASON = 'traffic';
+const STEP_INDEX_OFFSET = 1;
+const ZERO_OFFSET = Object.freeze([0, 0]);
+
+function createZeroOffset() {
+    return [...ZERO_OFFSET];
+}
 
 export function handleDrivingReroute(message, context) {
     resetOffRouteState();
@@ -17,7 +25,7 @@ export function handleDrivingReroute(message, context) {
     const projectedPosition = state.drive.carPos
         ? projectPositionOntoRoute(routeObj, state.drive.carPos[0], state.drive.carPos[1])
         : null;
-    const reason = message.reroute_reason || 'traffic';
+    const reason = message.reroute_reason || DEFAULT_REROUTE_REASON;
 
     syncDebugRerouteState(reason);
     showRerouteAlert(reason, message.old_eta_sec, message.new_eta_sec);
@@ -40,7 +48,7 @@ export function handleDrivingReroute(message, context) {
     if (state.drive.isActive && state.drive.carPos) {
         const bearing = context.getBearing(state.drive.carPos);
         mapInstance.updateCarPositionAndRotation([state.drive.carPos[0], state.drive.carPos[1]], bearing);
-        const stepIndex = Math.min(state.drive.currentRoadIndex + 1, state.routing.activeObj.steps.length - 1);
+        const stepIndex = Math.min(state.drive.currentRoadIndex + STEP_INDEX_OFFSET, state.routing.activeObj.steps.length - STEP_INDEX_OFFSET);
         sendLocationPing(state.drive.carPos[0], state.drive.carPos[1], Math.round(context.getCurrentSpeedKmh()), stepIndex, []);
     }
 
@@ -48,7 +56,7 @@ export function handleDrivingReroute(message, context) {
 }
 
 function resetOffRouteState() {
-    state.drive.offRouteOffset = [0, 0];
+    state.drive.offRouteOffset = createZeroOffset();
     state.drive.isDrifting = false;
 }
 
@@ -67,12 +75,12 @@ function showRerouteAlert(reason, oldEtaSec, newEtaSec) {
         const distance = state.debug.serverData?.off_route_distance_m;
         const detail = typeof distance === 'number'
             ? `${distance.toFixed(1)} m away from the expected path.`
-            : 'Vehicle left the expected path.';
-        showAlert('Off-route reroute', detail);
+            : PANEL_TEXT.offRouteDescription;
+        showAlert(PANEL_TEXT.offRouteTitle, detail);
         return;
     }
 
-    showAlert('Traffic reroute', formatRerouteGainText(oldEtaSec, newEtaSec));
+    showAlert(PANEL_TEXT.trafficRerouteTitle, formatRerouteGainText(oldEtaSec, newEtaSec));
 }
 
 function syncDrivingProgressAfterReroute(routeObj, projectedPosition) {
@@ -95,16 +103,16 @@ function syncDrivingProgressAfterReroute(routeObj, projectedPosition) {
         if (!state.sim.motionState) {
             state.sim.motionState = createMotionState();
         }
-        updateDistance(state.drive.distanceLeft, 'hud-distance-left');
+        updateDistance(state.drive.distanceLeft, DOM_IDS.hudDistanceLeft);
         return;
     }
 
-    updateDistance(routeObj.distance, 'hud-distance-left');
+    updateDistance(routeObj.distance, DOM_IDS.hudDistanceLeft);
 }
 
 function formatRerouteGainText(oldEtaSec, newEtaSec) {
     if (oldEtaSec == null || newEtaSec == null) {
-        return 'Route updated for current traffic conditions.';
+        return PANEL_TEXT.routeUpdated;
     }
 
     const etaGainSec = Math.max(0, oldEtaSec - newEtaSec);
@@ -114,5 +122,5 @@ function formatRerouteGainText(oldEtaSec, newEtaSec) {
     if (etaGainSec > 0) {
         return `New path saves about ${Math.round(etaGainSec)} sec.`;
     }
-    return 'Route updated for current traffic conditions.';
+    return PANEL_TEXT.routeUpdated;
 }

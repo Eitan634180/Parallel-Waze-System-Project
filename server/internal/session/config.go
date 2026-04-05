@@ -32,4 +32,9 @@ const (
 
 	optimizationWorkerLimit = 10
 	maxHeuristicSpeedMps    = 120.0 / 3.6
+
+	rerouteReasonTraffic        = "traffic"
+	rerouteReasonLocalPatch     = "local_patch"
+	rerouteReasonOffRoute       = "off_route"
+	rerouteReasonTrafficCleared = "traffic_cleared"
 )

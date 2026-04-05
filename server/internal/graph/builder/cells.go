@@ -2,7 +2,7 @@ package builder
 
 import (
 	"container/heap"
-	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"runtime"
@@ -10,20 +10,12 @@ import (
 	"sync"
 )
 
-// =============================================================================
-// PART 1 — INERTIAL FLOW RECURSIVE BISECTION
-// =============================================================================
-// Algorithm (per partition step):
-//  1. Project all node (X,Y) coords onto a random unit vector d.
-//  2. Sort by projection score; label bottom-25% as Source set S, top-25% as Sink set T.
-//  3. Run Dinic's max-flow on edges from S→T (capacity=1 per directed edge).
-//  4. The min-cut identifies which nodes belong to the S-side vs T-side partition.
-//  5. Recurse on each half until |partition| ≤ maxCellSize.
+const cellBuilderLogPrefix = "cell-builder:"
 
-// PartitionCells runs Inertial Flow recursive bisection on the graph and
-// populates g.Cells, g.CellIdx.
+// PartitionCells recursively bisects the graph with Inertial Flow and fills
+// g.Cells and g.CellIdx.
 func PartitionCells(g *Graph, maxCellSize int) {
-	fmt.Printf("[CELLS] Partitioning %d nodes (maxCellSize=%d) …\n", len(g.Nodes), maxCellSize)
+	log.Printf("%s partitioning %d nodes (max size %d)", cellBuilderLogPrefix, len(g.Nodes), maxCellSize)
 
 	allNodeIdxs := make([]uint32, len(g.Nodes))
 	for i := range allNodeIdxs {
@@ -55,8 +47,6 @@ func PartitionCells(g *Graph, maxCellSize int) {
 		left, right := inertialFlowBisect(g, nodeIdxs, rng)
 
 		wg.Add(2)
-		// Run left half in a new goroutine only if it's large enough to matter.
-		// For small halves, run inline to avoid goroutine overhead.
 		rng2 := rand.New(rand.NewSource(rng.Int63()))
 		go bisect(left, rng2)
 		go bisect(right, rng)
@@ -67,7 +57,6 @@ func PartitionCells(g *Graph, maxCellSize int) {
 	bisect(allNodeIdxs, rng)
 	wg.Wait()
 
-	// Populate g.CellIdx from cellAssign
 	g.CellIdx = make(map[NodeID]CellID, len(g.Nodes))
 	for i, node := range g.Nodes {
 		cid := cellAssign[i]
@@ -75,18 +64,17 @@ func PartitionCells(g *Graph, maxCellSize int) {
 		g.CellIdx[node.ID] = cid
 	}
 
-	fmt.Printf("[CELLS] Partitioned into %d cells\n", len(g.Cells))
+	log.Printf("%s partitioned graph into %d cells", cellBuilderLogPrefix, len(g.Cells))
 }
 
-// inertialFlowBisect partitions nodeIdxs into two halves using Inertial Flow.
+// inertialFlowBisect partitions a node subset into two halves with one
+// Inertial Flow step.
 func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, right []uint32) {
 	n := len(nodeIdxs)
 
-	// 1. Random unit vector d
 	angle := rng.Float64() * 2 * math.Pi
 	dx, dy := math.Cos(angle), math.Sin(angle)
 
-	// 2. Project nodes onto d and sort
 	type scored struct {
 		idx   uint32
 		score float64
@@ -98,7 +86,6 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 	}
 	sort.Slice(scores, func(a, b int) bool { return scores[a].score < scores[b].score })
 
-	// 3. Label source (bottom 25%) and sink (top 25%)
 	q := n / 4
 	if q < 1 {
 		q = 1
@@ -113,61 +100,45 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 		sinkSet[scores[i].idx] = true
 	}
 
-	// 4. Dinic's max-flow → min-cut
-	// Build a local flow network over the current node subset.
-	localIdx := make(map[uint32]int, n) // graph node idx → local flow node idx
+	localIdx := make(map[uint32]int, n)
 	for i, s := range scores {
 		localIdx[s.idx] = i
 	}
 
-	// Virtual super-source (index n) and super-sink (index n+1)
-	S, T := n, n+1
-	totalNodes := n + 2
-
-	// Build the flow network (capacity = 1 per base-graph edge within the subset)
-	fn := newFlowNet(totalNodes)
-
-	// Super-source → all source nodes, super-sink ← all sink nodes
+	s, t := n, n+1
+	fn := newFlowNet(n + 2)
 	for idx := range sourceSet {
-		fn.addEdge(S, localIdx[idx], n) // large capacity from super-source
+		fn.addEdge(s, localIdx[idx], n)
 	}
 	for idx := range sinkSet {
-		fn.addEdge(localIdx[idx], T, n) // large capacity to super-sink
+		fn.addEdge(localIdx[idx], t, n)
 	}
 
-	// Internal edges (within the current subset).
-	// The cut objective should be symmetric even when the routing graph is not:
-	// a one-way road crossing a partition is still a cross-cell boundary later.
+	// Keep the cut symmetric even if the routing graph contains one-way roads.
 	addUndirectedSubsetEdges(fn, g, nodeIdxs, localIdx)
+	fn.maxflow(s, t)
 
-	// Run Dinic's
-	fn.maxflow(S, T)
-
-	// 5. BFS reachability from S in residual graph → assigns side
-	reachable := fn.reachableFrom(S)
-
-	// Split into left (S-side) and right (T-side)
+	reachable := fn.reachableFrom(s)
 	left = make([]uint32, 0, n/2)
 	right = make([]uint32, 0, n/2)
-	for _, s := range scores {
-		if reachable[localIdx[s.idx]] {
-			left = append(left, s.idx)
+	for _, node := range scores {
+		if reachable[localIdx[node.idx]] {
+			left = append(left, node.idx)
 		} else {
-			right = append(right, s.idx)
+			right = append(right, node.idx)
 		}
 	}
 
-	// Guard: if partitioning produced an empty side (fully connected subgraph),
-	// fall back to a simple geometric split to avoid infinite recursion.
+	// Fall back to a geometric split if the cut collapses to one side.
 	if len(left) == 0 || len(right) == 0 {
 		mid := n / 2
 		left = make([]uint32, mid)
 		right = make([]uint32, n-mid)
-		for i, s := range scores[:mid] {
-			left[i] = s.idx
+		for i, node := range scores[:mid] {
+			left[i] = node.idx
 		}
-		for i, s := range scores[mid:] {
-			right[i] = s.idx
+		for i, node := range scores[mid:] {
+			right[i] = node.idx
 		}
 	}
 
@@ -206,10 +177,6 @@ func addUndirectedSubsetEdges(fn *flowNet, g *Graph, nodeIdxs []uint32, localIdx
 		}
 	}
 }
-
-// =============================================================================
-// PART 2 — DINIC'S MAX-FLOW (simple implementation for unit-capacity graphs)
-// =============================================================================
 
 type flowEdge struct {
 	to, rev int
@@ -291,8 +258,7 @@ func (fn *flowNet) maxflow(s, t int) int {
 	}
 }
 
-// reachableFrom returns a boolean slice: reachable[i] = true if node i is
-// reachable from s in the residual graph (cap > 0 edges only).
+// reachableFrom reports which residual-network nodes remain reachable from s.
 func (fn *flowNet) reachableFrom(s int) []bool {
 	n := len(fn.graph)
 	vis := make([]bool, n)
@@ -311,18 +277,11 @@ func (fn *flowNet) reachableFrom(s int) []bool {
 	return vis
 }
 
-// =============================================================================
-// PART 3 — BOUNDARY NODE DETECTION
-// =============================================================================
-
-// DetectBoundaryNodes scans all edges and marks nodes as boundary nodes if
-// they have at least one edge crossing to a different cell.
-// Populates Cell.BoundaryNodeIDs, g.BoundaryNodes, g.BoundaryNodeIdx.
+// DetectBoundaryNodes marks nodes that touch edges crossing a cell boundary.
 func DetectBoundaryNodes(g *Graph) {
-	fmt.Println("[CELLS] Detecting boundary nodes …")
+	log.Printf("%s detecting boundary nodes", cellBuilderLogPrefix)
 
 	isBoundary := make([]bool, len(g.Nodes))
-
 	for i := range g.Nodes {
 		fromCellID := g.Nodes[i].CellID
 		for _, eid := range g.BaseAdj.Neighbours(uint32(i)) {
@@ -332,119 +291,97 @@ func DetectBoundaryNodes(g *Graph) {
 				continue
 			}
 			if g.Nodes[toIdx].CellID != fromCellID {
-				isBoundary[i] = true     // Mark the leaving node as a boundary
-				isBoundary[toIdx] = true // Mark the arriving node as a boundary
+				isBoundary[i] = true
+				isBoundary[toIdx] = true
 			}
 		}
 	}
 
-	// Build per-cell boundary node lists and global BoundaryNodes slice
 	g.BoundaryNodes = make([]NodeID, 0, 32768)
 	g.BoundaryNodeIdx = make(map[NodeID]uint32)
-
-	// Temporary map: cellID → indices of boundary nodes added so far
 	cellBoundary := make(map[CellID][]NodeID)
 
 	for i, node := range g.Nodes {
-		if isBoundary[i] {
-			bIdx := uint32(len(g.BoundaryNodes))
-			g.BoundaryNodes = append(g.BoundaryNodes, node.ID)
-			g.BoundaryNodeIdx[node.ID] = bIdx
-			cellBoundary[node.CellID] = append(cellBoundary[node.CellID], node.ID)
+		if !isBoundary[i] {
+			continue
 		}
+		bIdx := uint32(len(g.BoundaryNodes))
+		g.BoundaryNodes = append(g.BoundaryNodes, node.ID)
+		g.BoundaryNodeIdx[node.ID] = bIdx
+		cellBoundary[node.CellID] = append(cellBoundary[node.CellID], node.ID)
 	}
 
-	// Assign to cells
 	for i := range g.Cells {
 		g.Cells[i].BoundaryNodeIDs = cellBoundary[g.Cells[i].ID]
 	}
 
-	fmt.Printf("[CELLS] %d boundary nodes detected\n", len(g.BoundaryNodes))
+	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, len(g.BoundaryNodes))
 }
 
-// =============================================================================
-// PART 4 — OVERLAY GRAPH CONSTRUCTION (PARALLELISED)
-// =============================================================================
-// For each cell:
-//   - Add cross-cell edges (base-graph cut edges, IsCrossCell=true)
-//   - Run intra-cell Dijkstra from each boundary node → all other boundary
-//     nodes in the same cell → emit shortcut edges (IsCrossCell=false)
-//
-// All cells are processed concurrently via a worker pool.
-
-// BuildOverlayGraph constructs the overlay adjacency list and stores it in g.OverlayAdj.
+// BuildOverlayGraph constructs the overlay adjacency list for all boundary
+// nodes. Each cell contributes cross-cell edges and intra-cell shortcuts.
 func BuildOverlayGraph(g *Graph, numWorkers int) {
 	if numWorkers <= 0 {
 		numWorkers = runtime.NumCPU()
 	}
-	fmt.Printf("[OVERLAY] Building overlay graph (%d workers) …\n", numWorkers)
+	log.Printf("%s building overlay graph with %d workers", cellBuilderLogPrefix, numWorkers)
 
 	type cellResult struct {
-		cellIdx int
-		edges   []OverlayEdge
+		edges []OverlayEdge
 	}
 
 	jobs := make(chan int, len(g.Cells))
 	results := make(chan cellResult, len(g.Cells))
 
-	// Launch worker pool
 	var wg sync.WaitGroup
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for ci := range jobs {
-				edges := computeCellOverlayEdges(g, &g.Cells[ci])
-				results <- cellResult{cellIdx: ci, edges: edges}
+				results <- cellResult{edges: computeCellOverlayEdges(g, &g.Cells[ci])}
 			}
 		}()
 	}
 
-	// Enqueue all cells
 	for i := range g.Cells {
 		jobs <- i
 	}
 	close(jobs)
 
-	// Close results after all workers done
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
-	// Collect all overlay edges
-	allEdges := make([][]OverlayEdge, len(g.Nodes)) // indexed by boundary node overlay index
-	_ = allEdges
-
-	// We'll build a per-boundary-node adjacency, then convert to CSR.
-	// adjFrom[overlayIdx] = []OverlayEdge
 	adjFrom := make([][]OverlayEdge, len(g.BoundaryNodes))
-
 	totalEdges := 0
-	for r := range results {
-		_ = r.cellIdx
-		for _, e := range r.edges {
-			fromIdx, ok := g.BoundaryNodeIdx[e.FromNodeID]
+	for result := range results {
+		for _, edge := range result.edges {
+			fromIdx, ok := g.BoundaryNodeIdx[edge.FromNodeID]
 			if !ok {
 				continue
 			}
-			adjFrom[fromIdx] = append(adjFrom[fromIdx], e)
+			adjFrom[fromIdx] = append(adjFrom[fromIdx], edge)
 			totalEdges++
 		}
 	}
 
-	// Build overlay CSR
 	offsets := make([]uint32, len(g.BoundaryNodes)+1)
 	edges := make([]OverlayEdge, 0, totalEdges)
-	for i, nbrs := range adjFrom {
+	for i, neighbours := range adjFrom {
 		offsets[i] = uint32(len(edges))
-		edges = append(edges, nbrs...)
+		edges = append(edges, neighbours...)
 	}
 	offsets[len(g.BoundaryNodes)] = uint32(len(edges))
 
 	g.OverlayAdj = OverlayAdjList{Offsets: offsets, OverlayEdges: edges}
-	fmt.Printf("[OVERLAY] Done: %d overlay edges (%d cross-cell + %d shortcuts)\n",
-		totalEdges, countCrossCell(edges), totalEdges-countCrossCell(edges))
+	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
+		cellBuilderLogPrefix,
+		totalEdges,
+		countCrossCell(edges),
+		totalEdges-countCrossCell(edges),
+	)
 }
 
 func countCrossCell(edges []OverlayEdge) int {
@@ -457,38 +394,33 @@ func countCrossCell(edges []OverlayEdge) int {
 	return n
 }
 
-// computeCellOverlayEdges computes all overlay edges for one cell:
-//  1. Cross-cell edges (cut edges in base graph)
-//  2. Intra-cell shortcuts via Dijkstra from each boundary node
+// computeCellOverlayEdges emits cross-cell edges and intra-cell shortcuts for
+// one cell.
 func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 	var result []OverlayEdge
 
-	// 1. Cross-cell edges: base-graph edges where from is in this cell and
-	//    to is in a DIFFERENT cell, and both endpoints are boundary nodes.
 	for _, nid := range cell.InternalNodeIDs {
 		fromIdx, ok := g.NodeIdx[nid]
 		if !ok {
 			continue
 		}
-		fromCellID := g.Nodes[fromIdx].CellID
-		if fromCellID != cell.ID {
+		if g.Nodes[fromIdx].CellID != cell.ID {
 			continue
 		}
-		_, fromIsBoundary := g.BoundaryNodeIdx[nid]
-		if !fromIsBoundary {
+		if _, fromIsBoundary := g.BoundaryNodeIdx[nid]; !fromIsBoundary {
 			continue
 		}
+
 		for _, eid := range g.BaseAdj.Neighbours(fromIdx) {
 			e := &g.Edges[eid]
-			toIdx, ok2 := g.NodeIdx[e.ToNodeID]
-			if !ok2 {
+			toIdx, ok := g.NodeIdx[e.ToNodeID]
+			if !ok {
 				continue
 			}
 			if g.Nodes[toIdx].CellID == cell.ID {
-				continue // same cell — not a cross-cell edge
+				continue
 			}
-			_, toIsBoundary := g.BoundaryNodeIdx[e.ToNodeID]
-			if !toIsBoundary {
+			if _, toIsBoundary := g.BoundaryNodeIdx[e.ToNodeID]; !toIsBoundary {
 				continue
 			}
 			result = append(result, OverlayEdge{
@@ -501,12 +433,10 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 		}
 	}
 
-	// 2. Intra-cell shortcuts: for each boundary node, Dijkstra within cell
 	if len(cell.BoundaryNodeIDs) < 2 {
 		return result
 	}
 
-	// Build a local node-index set for fast membership testing
 	inCell := make(map[NodeID]struct{}, len(cell.InternalNodeIDs))
 	for _, nid := range cell.InternalNodeIDs {
 		inCell[nid] = struct{}{}
@@ -535,18 +465,13 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 	return result
 }
 
-// =============================================================================
-// PART 5 — INTRA-CELL DIJKSTRA
-// =============================================================================
-
 type distInfo struct {
 	weight float32
 	distM  float32
 }
 
-// cellDijkstra runs Dijkstra from srcID within the nodes of the given cell,
-// stopping when all boundary nodes have been settled.  Returns a map of
-// boundary node ID → best (weight, distM).
+// cellDijkstra runs Dijkstra inside one cell and returns settled boundary
+// distances from the source boundary node.
 func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[NodeID]struct{}) map[NodeID]distInfo {
 	const inf = float32(math.MaxFloat32)
 
@@ -567,19 +492,17 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 		cur := heap.Pop(pq).(dijkstraItem)
 		curID := cur.id
 
-		// The queue may contain multiple entries for the same node with different costs.
-		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
+		// Skip stale queue entries after a better path has already been recorded.
 		best, hasBest := dist[curID]
 		if !hasBest || cur.weight > best.weight {
 			continue
 		}
 
-		// Check if this is a boundary node (count settled boundary nodes)
 		if _, isBoundary := targetSet[curID]; isBoundary {
 			settled++
 			delete(targetSet, curID)
 			if settled == totalBoundary {
-				break // all boundary nodes settled — done
+				break
 			}
 		}
 
@@ -591,15 +514,12 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 		for _, eid := range g.BaseAdj.Neighbours(curIdx) {
 			e := &g.Edges[eid]
 			toID := e.ToNodeID
-
-			// Stay within the cell
-			if _, inC := inCell[toID]; !inC {
+			if _, ok := inCell[toID]; !ok {
 				continue
 			}
 
 			newW := best.weight + e.Weight
 			newD := best.distM + e.DistanceM
-
 			if existing, hasDist := dist[toID]; !hasDist || newW < existing.weight {
 				dist[toID] = distInfo{newW, newD}
 				heap.Push(pq, dijkstraItem{id: toID, weight: newW})
@@ -607,7 +527,6 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 		}
 	}
 
-	// Return only boundary node distances
 	result := make(map[NodeID]distInfo, len(boundaryNodes))
 	for _, bid := range boundaryNodes {
 		if d, ok := dist[bid]; ok {
@@ -616,10 +535,6 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 	}
 	return result
 }
-
-// ---------------------------------------------------------------------------
-// Min-heap for Dijkstra
-// ---------------------------------------------------------------------------
 
 type dijkstraItem struct {
 	id     NodeID

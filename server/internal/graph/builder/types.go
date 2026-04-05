@@ -2,22 +2,14 @@ package builder
 
 import "sync"
 
-// ---------------------------------------------------------------------------
-// ID type aliases
-// ---------------------------------------------------------------------------
-
-// NodeID is an OSM node ID (64-bit, matches OSM spec).
+// NodeID is an OSM node ID.
 type NodeID = uint64
 
-// EdgeID indexes into the Graph.Edges slice (32-bit is enough for ~4B edges).
+// EdgeID indexes into Graph.Edges.
 type EdgeID = uint32
 
-// CellID indexes into the Graph.Cells slice.
+// CellID indexes into Graph.Cells.
 type CellID = uint32
-
-// ---------------------------------------------------------------------------
-// Road classification
-// ---------------------------------------------------------------------------
 
 const (
 	RoadMotorway     uint8 = 1
@@ -30,7 +22,8 @@ const (
 	RoadUnclassified uint8 = 8
 )
 
-// DefaultSpeedKmh returns the assumed speed for a road class when no maxspeed tag is present.
+// DefaultSpeedKmh returns the fallback speed for a road class when maxspeed is
+// missing from the source data.
 func DefaultSpeedKmh(class uint8) float32 {
 	switch class {
 	case RoadMotorway:
@@ -52,25 +45,16 @@ func DefaultSpeedKmh(class uint8) float32 {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Node
-// ---------------------------------------------------------------------------
-
-// Node represents a road-network vertex (OSM node on a highway way).
+// Node is a routable graph vertex.
 type Node struct {
 	ID     NodeID
-	Lat    float64 // geographic latitude  (WGS-84)
-	Lon    float64 // geographic longitude (WGS-84)
-	X      float32 // equirectangular projected X (meters) — for A* heuristic
-	Y      float32 // equirectangular projected Y (meters) — for A* heuristic
-	CellID CellID  // which partition cell this node belongs to
+	Lat    float64 // WGS-84 latitude.
+	Lon    float64 // WGS-84 longitude.
+	X      float32 // Projected X in meters for heuristics.
+	Y      float32 // Projected Y in meters for heuristics.
+	CellID CellID  // Owning partition cell.
 }
 
-// ---------------------------------------------------------------------------
-// Edge (base graph, directed)
-// ---------------------------------------------------------------------------
-
-// Edge flags (bit positions).
 const (
 	FlagOneWay uint8 = 1 << 0
 	FlagToll   uint8 = 1 << 1
@@ -81,112 +65,72 @@ type Edge struct {
 	ID         EdgeID
 	FromNodeID NodeID
 	ToNodeID   NodeID
-	Weight     float32 // primary cost: travel time in seconds
-	DistanceM  float32 // physical length in metres
-	SpeedKmh   float32 // speed used to compute Weight
+	Weight     float32 // Travel time in seconds.
+	DistanceM  float32 // Physical length in meters.
+	SpeedKmh   float32 // Speed used to compute Weight.
 	RoadClass  uint8
-	Flags      uint8 // bitmask of FlagOneWay, FlagToll, …
+	Flags      uint8
 }
 
 func (e *Edge) IsOneWay() bool { return e.Flags&FlagOneWay != 0 }
 
-// ---------------------------------------------------------------------------
-// Overlay edge
-// ---------------------------------------------------------------------------
-
-// OverlayEdge is an edge in the overlay (two-level) graph.
-//
-// Two kinds exist:
-//
-//	Cross-cell edge  (IsCrossCell == true):
-//	  Copied directly from the base graph. Connects a boundary node in one cell
-//	  to a boundary node in a neighbouring cell. These are the partition cut edges.
-//
-//	Intra-cell shortcut  (IsCrossCell == false):
-//	  Precomputed via intra-cell Dijkstra. Connects two boundary nodes in the SAME
-//	  cell. Weight = shortest-path cost through cell interior.
-//	  The full node sequence is NOT stored — it is re-derived lazily via a small
-//	  intra-cell Dijkstra during route reconstruction.
+// OverlayEdge is an edge in the two-level overlay graph. Cross-cell edges are
+// copied from the base graph; shortcut edges summarize the best path inside one
+// cell between two boundary nodes.
 type OverlayEdge struct {
 	FromNodeID  NodeID
 	ToNodeID    NodeID
-	Weight      float32 // travel time (seconds)
-	DistanceM   float32 // shortest-path distance (metres)
+	Weight      float32 // Travel time in seconds.
+	DistanceM   float32 // Shortest-path distance in meters.
 	IsCrossCell bool
 }
 
-// ---------------------------------------------------------------------------
-// CSR adjacency list
-// ---------------------------------------------------------------------------
-
-// AdjacencyList stores directed adjacency in Compressed Sparse Row format for
-// cache-friendly iteration.
-//
-// For node with internal index i:
-//
-//	outgoing edge IDs = EdgeIDs[ Offsets[i] : Offsets[i+1] ]
+// AdjacencyList stores outgoing base-graph edges in CSR form.
 type AdjacencyList struct {
-	Offsets []uint32 // length = num_nodes + 1
-	EdgeIDs []EdgeID // flat list of outgoing edge IDs, length = num_edges
+	Offsets []uint32
+	EdgeIDs []EdgeID
 }
 
-// Neighbours returns the slice of EdgeIDs leaving node at internal index idx.
+// Neighbours returns all outgoing edges for the internal node index.
 func (a *AdjacencyList) Neighbours(idx uint32) []EdgeID {
 	return a.EdgeIDs[a.Offsets[idx]:a.Offsets[idx+1]]
 }
 
-// ---------------------------------------------------------------------------
-// Cell
-// ---------------------------------------------------------------------------
-
-// Cell is one partition region produced by Inertial Flow recursive bisection.
+// Cell is one partition region produced by recursive bisection.
 type Cell struct {
 	ID              CellID
-	InternalNodeIDs []NodeID // ALL nodes assigned to this cell (includes boundary)
-	BoundaryNodeIDs []NodeID // nodes that have at least one cross-cell edge
+	InternalNodeIDs []NodeID
+	BoundaryNodeIDs []NodeID
 }
 
-// ---------------------------------------------------------------------------
-// Overlay adjacency list
-// ---------------------------------------------------------------------------
-
-// OverlayAdjList is a CSR adjacency list for overlay edges only.
-// The "index" space is the set of boundary nodes; use OverlayNodeIndex to map
-// NodeID → index.
+// OverlayAdjList stores outgoing overlay edges in CSR form over boundary nodes.
 type OverlayAdjList struct {
 	Mu           sync.RWMutex
-	Offsets      []uint32      // length = num_boundary_nodes + 1
-	OverlayEdges []OverlayEdge // flat list indexed by Offsets
+	Offsets      []uint32
+	OverlayEdges []OverlayEdge
 }
 
-// Neighbours returns overlay edges leaving boundary node at internal overlay index idx.
+// Neighbours returns all outgoing overlay edges for the boundary-node index.
 func (o *OverlayAdjList) Neighbours(idx uint32) []OverlayEdge {
 	return o.OverlayEdges[o.Offsets[idx]:o.Offsets[idx+1]]
 }
 
-// ---------------------------------------------------------------------------
-// Graph — top-level container
-// ---------------------------------------------------------------------------
-
-// Graph holds all data structures for the road network.
+// Graph contains the base graph, partition metadata, and overlay graph.
 type Graph struct {
-	// Base graph
-	Nodes   []Node            // indexed by internal node index (0-based)
-	Edges   []Edge            // indexed by EdgeID
-	NodeIdx map[NodeID]uint32 // OSM NodeID → internal array index
-	BaseAdj AdjacencyList     // base-graph adjacency (index = internal node index)
+	Nodes   []Node
+	Edges   []Edge
+	NodeIdx map[NodeID]uint32
+	BaseAdj AdjacencyList
 
-	// Partition
 	Cells           []Cell
-	CellIdx         map[NodeID]CellID // NodeID → CellID (boundary nodes appear here too)
-	BoundaryNodeIdx map[NodeID]uint32 // NodeID → index in the overlay node list
-	BoundaryNodes   []NodeID          // ordered list of all boundary nodes
+	CellIdx         map[NodeID]CellID
+	BoundaryNodeIdx map[NodeID]uint32
+	BoundaryNodes   []NodeID
 
-	// Overlay graph
 	OverlayAdj OverlayAdjList
 }
 
-// NodeByID returns a pointer to the Node for a given OSM NodeID.
+// NodeByID returns the node for an OSM ID, or nil if it is missing.
 func (g *Graph) NodeByID(id NodeID) *Node {
 	idx, ok := g.NodeIdx[id]
 	if !ok {

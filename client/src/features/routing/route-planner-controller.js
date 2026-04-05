@@ -8,6 +8,13 @@ import { updateETA, updateDistance, updateTrafficStatus } from '../../ui/panels/
 import { renderEdgeDebugInfo, setRouteInspectorButtonState } from '../../ui/panels/debug-panel.js';
 import { getRouteTrafficStatus } from '../driving/traffic-evaluator.js';
 import { processRawRoute } from './route-utils.js';
+import { CSS_CLASSES, DOM_IDS, PANEL_TEXT, TRAFFIC_LEVELS, UI_KEYS } from '../../ui/ui-constants.js';
+
+const FIRST_ROUTE_INDEX = 0;
+const ROUTE_OPTION_SELECTOR = '.route-option-card';
+const ROUTE_LOG_MESSAGES = {
+    calculateFailed: 'Route calculation failed',
+};
 
 export function initializeRoutePlanner() {
     const invalidateRoutingState = (key) => {
@@ -18,8 +25,8 @@ export function initializeRoutePlanner() {
     };
 
     setupSearchInput(
-        'source-input',
-        'source-suggestions',
+        DOM_IDS.sourceInput,
+        DOM_IDS.sourceSuggestions,
         (location) => {
             state.routing.source = location;
             syncNavigateButton();
@@ -28,8 +35,8 @@ export function initializeRoutePlanner() {
     );
 
     setupSearchInput(
-        'dest-input',
-        'dest-suggestions',
+        DOM_IDS.destInput,
+        DOM_IDS.destSuggestions,
         (location) => {
             state.routing.dest = location;
             syncNavigateButton();
@@ -37,12 +44,12 @@ export function initializeRoutePlanner() {
         () => invalidateRoutingState('dest'),
     );
 
-    document.getElementById('navigate-btn').addEventListener('click', handleCalculateRoute);
-    document.getElementById('close-route').addEventListener('click', closeRoutePanel);
+    document.getElementById(DOM_IDS.navigateButton).addEventListener('click', handleCalculateRoute);
+    document.getElementById(DOM_IDS.closeRoute).addEventListener('click', closeRoutePanel);
 }
 
 function syncNavigateButton() {
-    document.getElementById('navigate-btn').disabled = !(state.routing.source && state.routing.dest);
+    document.getElementById(DOM_IDS.navigateButton).disabled = !(state.routing.source && state.routing.dest);
 }
 
 function clearCurrentRoute() {
@@ -52,10 +59,10 @@ function clearCurrentRoute() {
     state.routing.activeLegs = [];
     state.sim.recommendedSpeeds.clear();
 
-    document.getElementById('route-panel').classList.add('hidden');
+    document.getElementById(DOM_IDS.routePanel).classList.add(CSS_CLASSES.hidden);
     updateETA(null);
     updateDistance(0);
-    updateTrafficStatus('normal');
+    updateTrafficStatus(TRAFFIC_LEVELS.normal);
 
     state.debug.inspectorEnabled = false;
     setRouteInspectorButtonState(false);
@@ -78,13 +85,13 @@ async function handleCalculateRoute() {
         );
 
         state.routing.allRoutes = rawRoutes.map((route) => processRawRoute(route));
-        document.getElementById('route-panel').classList.remove('hidden');
+        document.getElementById(DOM_IDS.routePanel).classList.remove(CSS_CLASSES.hidden);
         renderRouteOptions(state.routing.allRoutes, handleRouteSelection);
-        handleRouteSelection(0);
+        handleRouteSelection(FIRST_ROUTE_INDEX);
         mapInstance.drawEndpointMarkers(state.routing.source, state.routing.dest);
     } catch (err) {
-        console.error('Route error:', err);
-        showAlert('Route calculation failed', err.message);
+        console.error(ROUTE_LOG_MESSAGES.calculateFailed, err);
+        showAlert(PANEL_TEXT.routeCalculationFailed, err.message);
     } finally {
         toggleLoadingState(false);
     }
@@ -100,8 +107,8 @@ function handleRouteSelection(index) {
     mapInstance.setRouteInspectorRoute(route);
     renderEdgeDebugInfo(null);
 
-    document.querySelectorAll('.route-option-card').forEach((element) => element.classList.remove('active'));
-    document.getElementById(`route-option-${index}`)?.classList.add('active');
+    document.querySelectorAll(ROUTE_OPTION_SELECTOR).forEach((element) => element.classList.remove(CSS_CLASSES.active));
+    document.getElementById(`${UI_KEYS.routeOptionIdPrefix}${index}`)?.classList.add(CSS_CLASSES.active);
 
     updateETA(route.dynamicETA);
     updateDistance(route.distance);
@@ -114,7 +121,7 @@ function handleRouteSelection(index) {
 }
 
 function closeRoutePanel() {
-    document.getElementById('route-panel').classList.add('hidden');
+    document.getElementById(DOM_IDS.routePanel).classList.add(CSS_CLASSES.hidden);
     state.debug.inspectorEnabled = false;
     setRouteInspectorButtonState(false);
     renderEdgeDebugInfo(null);

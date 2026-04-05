@@ -15,6 +15,7 @@ const (
 	defaultSimulationCount   = 1
 	randomRouteAttemptFactor = 6
 	minRandomRouteDistanceSq = 0.0004
+	simulationWSLogPrefix    = "api: simulation websocket"
 )
 
 type simulationSpawnRequest struct {
@@ -87,7 +88,7 @@ func (s *Server) spawnSimulationCars(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSimulationWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("simulation websocket upgrade: %v", err)
+		log.Printf("%s upgrade failed: %v", simulationWSLogPrefix, err)
 		return
 	}
 

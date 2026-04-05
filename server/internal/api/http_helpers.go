@@ -28,7 +28,7 @@ func decodeJSON[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(headerContentType, jsonContentType)
 	if status > 0 {
 		w.WriteHeader(status)
 	}

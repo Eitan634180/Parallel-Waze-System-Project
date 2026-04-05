@@ -141,7 +141,7 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 
 	elapsed := time.Since(start)
 	if elapsed >= slowCustomizationLogThreshold {
-		log.Printf("[traffic] slow overlay customization updated=%d in %s", len(updates), elapsed.Round(time.Millisecond))
+		log.Printf("traffic: overlay customization slow (updates=%d duration=%s)", len(updates), elapsed.Round(time.Millisecond))
 	}
 }
 
@@ -279,8 +279,7 @@ func liveCellDijkstra(
 	for pq.Len() > 0 {
 		cur := heap.Pop(pq).(livePQItem)
 
-		// The queue may contain multiple entries for the same node with different costs.
-		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
+		// Skip stale queue entries after a better path has already been recorded.
 		best, hasBest := dist[cur.id]
 		if !hasBest || cur.cost > best {
 			continue

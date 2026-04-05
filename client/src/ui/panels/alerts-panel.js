@@ -1,49 +1,59 @@
 import { formatDuration } from '../../utils/formatters.js';
+import { CSS_CLASSES, DOM_IDS, PANEL_TEXT, UI_TIMINGS } from '../ui-constants.js';
+
+const ANIMATIONS = {
+    toastIn: 'toastIn 0.3s ease forwards',
+    toastOut: 'toastOut 0.3s ease forwards',
+};
+
+const DISTANCE_CONVERSION = {
+    metersPerKilometer: 1000,
+};
 
 export function showAlert(title, message) {
-    const toast = document.getElementById('alert-toast');
-    document.getElementById('alert-title').textContent = title;
-    document.getElementById('alert-message').textContent = message;
-    toast.classList.remove('hidden');
-    toast.style.animation = 'toastIn 0.3s ease forwards';
+    const toast = document.getElementById(DOM_IDS.alertToast);
+    document.getElementById(DOM_IDS.alertTitle).textContent = title;
+    document.getElementById(DOM_IDS.alertMessage).textContent = message;
+    toast.classList.remove(CSS_CLASSES.hidden);
+    toast.style.animation = ANIMATIONS.toastIn;
 
     setTimeout(() => {
-        toast.style.animation = 'toastOut 0.3s ease forwards';
-        setTimeout(() => toast.classList.add('hidden'), 400);
-    }, 5000);
+        toast.style.animation = ANIMATIONS.toastOut;
+        setTimeout(() => toast.classList.add(CSS_CLASSES.hidden), UI_TIMINGS.alertHideAnimationBufferMs);
+    }, UI_TIMINGS.alertHideDelayMs);
 }
 
 export function onArrival(distance, eta) {
-    document.getElementById('arrival-overlay')?.remove();
+    document.getElementById(DOM_IDS.arrivalOverlay)?.remove();
 
     const overlay = document.createElement('div');
-    overlay.id = 'arrival-overlay';
+    overlay.id = DOM_IDS.arrivalOverlay;
     overlay.innerHTML = `
     <div class="arrival-card">
             <div class="arrival-icon">&#x1F6A9;</div>
-            <h2>Arrived</h2>
-            <p>You have reached your destination</p>
+            <h2>${PANEL_TEXT.arrivalTitle}</h2>
+            <p>${PANEL_TEXT.arrivalDescription}</p>
             <div class="arrival-stats">
                 <div class="a-stat">
                     <span class="a-label">Total Distance</span>
-                    <span class="a-val">${(distance / 1000).toFixed(1)} km</span>
+                    <span class="a-val">${(distance / DISTANCE_CONVERSION.metersPerKilometer).toFixed(1)} km</span>
                 </div>
                 <div class="a-stat">
                     <span class="a-label">Driving Time</span>
                     <span class="a-val">${formatDuration(eta)}</span>
                 </div>
             </div>
-            <button type="button" id="arrival-close-btn">Close</button>
+            <button type="button" id="${DOM_IDS.arrivalCloseButton}">${PANEL_TEXT.arrivalButton}</button>
         </div>
     `;
     document.body.appendChild(overlay);
-    document.getElementById('arrival-close-btn')?.addEventListener('click', () => {
+    document.getElementById(DOM_IDS.arrivalCloseButton)?.addEventListener('click', () => {
         overlay.remove();
     });
 }
 
 export function toggleLoadingState(isLoading) {
-    document.getElementById('navigate-btn').disabled = isLoading;
-    if (isLoading) document.body.classList.add('loading');
-    else document.body.classList.remove('loading');
+    document.getElementById(DOM_IDS.navigateButton).disabled = isLoading;
+    if (isLoading) document.body.classList.add(CSS_CLASSES.loading);
+    else document.body.classList.remove(CSS_CLASSES.loading);
 }

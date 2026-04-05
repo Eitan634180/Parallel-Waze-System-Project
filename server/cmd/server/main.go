@@ -19,26 +19,29 @@ import (
 	"nav-system/internal/traffic"
 )
 
+const serverLogPrefix = "server:"
+
 func main() {
 	dataDir := flag.String("data", "./data/map", "Directory containing binary graph files")
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	flag.Parse()
 
-	log.Printf("[main] Loading graph from %s...", *dataDir)
+	log.Printf("%s loading graph from %s", serverLogPrefix, *dataDir)
 	t := time.Now()
 	g, err := builder.LoadGraph(*dataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
-	log.Printf("[main] Graph ready in %s - %d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges",
+	log.Printf("%s graph ready in %s (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
+		serverLogPrefix,
 		time.Since(t).Round(time.Millisecond),
 		len(g.Nodes), len(g.Edges), len(g.Cells),
 		len(g.BoundaryNodes), len(g.OverlayAdj.OverlayEdges))
 
-	log.Println("[main] Building spatial snap index...")
+	log.Printf("%s building snap index", serverLogPrefix)
 	t = time.Now()
 	si := routing.BuildSnapIndex(g)
-	log.Printf("[main] Snap index built in %s", time.Since(t).Round(time.Millisecond))
+	log.Printf("%s snap index ready in %s", serverLogPrefix, time.Since(t).Round(time.Millisecond))
 
 	store := traffic.NewStore()
 	mgr := session.NewManager()
@@ -49,9 +52,9 @@ func main() {
 
 	warmCtx, warmCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	if err := srv.WarmSearch(warmCtx); err != nil {
-		log.Printf("[main] Search warmup skipped: %v", err)
+		log.Printf("%s search warmup skipped: %v", serverLogPrefix, err)
 	} else {
-		log.Printf("[main] Search warmup complete")
+		log.Printf("%s search warmup complete", serverLogPrefix)
 	}
 	warmCancel()
 
@@ -72,7 +75,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("[main] Listening on %s", *addr)
+		log.Printf("%s listening on %s", serverLogPrefix, *addr)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe: %v", err)
 		}
@@ -82,10 +85,10 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("[main] Shutting down...")
+	log.Printf("%s shutting down", serverLogPrefix)
 	cancel()
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutCancel()
 	_ = httpSrv.Shutdown(shutCtx)
-	log.Println("[main] Goodbye.")
+	log.Printf("%s stopped", serverLogPrefix)
 }

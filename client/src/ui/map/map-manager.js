@@ -2,6 +2,7 @@ import { clearMapLayers, clearRouteLayers, drawAlternatives, drawEndpointMarkers
 import { clearDebugCars, removeDebugCar, setDebugCarsVisible, syncDebugCars, upsertDebugCar } from './layers/debug-cars-layer.js';
 import { refreshRouteInspector } from './layers/route-inspector.js';
 import { initCarMarker, removeCarMarker, updateCarPositionAndRotation } from './layers/vehicle-layer.js';
+import { MAP_DEFAULTS, MAP_TILES } from './map-config.js';
 
 class MapManager {
     constructor() {
@@ -27,15 +28,15 @@ class MapManager {
 
     initMap(containerId = 'map') {
         this.map = L.map(containerId, {
-            center: [32.0853, 34.7818],
-            zoom: 12,
+            center: MAP_DEFAULTS.center,
+            zoom: MAP_DEFAULTS.zoom,
             zoomControl: true,
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-            subdomains: 'abcd',
-            maxZoom: 19,
+        L.tileLayer(MAP_TILES.url, {
+            attribution: MAP_TILES.attribution,
+            subdomains: MAP_TILES.subdomains,
+            maxZoom: MAP_DEFAULTS.maxZoom,
         }).addTo(this.map);
     }
 

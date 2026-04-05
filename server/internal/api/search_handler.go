@@ -45,25 +45,25 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	req, err := s.newSearchRequest(r.Context(), query, s.search.Limit)
 	if err != nil {
-		http.Error(w, "failed to create search request", http.StatusInternalServerError)
+		http.Error(w, searchRequestFailedMsg, http.StatusInternalServerError)
 		return
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "search upstream unavailable", http.StatusBadGateway)
+		http.Error(w, searchUpstreamUnavailableMsg, http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "search upstream failed", http.StatusBadGateway)
+		http.Error(w, searchUpstreamFailedMsg, http.StatusBadGateway)
 		return
 	}
 
 	var upstream []nominatimSearchResult
 	if err := json.NewDecoder(resp.Body).Decode(&upstream); err != nil {
-		http.Error(w, "failed to decode search results", http.StatusBadGateway)
+		http.Error(w, searchDecodeFailedMsg, http.StatusBadGateway)
 		return
 	}
 
@@ -136,7 +136,7 @@ func (s *Server) newSearchRequest(ctx context.Context, query string, limit int) 
 	}
 	req.Header.Set("User-Agent", searchUserAgent)
 	if s.search.Language != "" {
-		req.Header.Set("Accept-Language", s.search.Language)
+		req.Header.Set(headerAcceptLanguage, s.search.Language)
 	}
 
 	return req, nil

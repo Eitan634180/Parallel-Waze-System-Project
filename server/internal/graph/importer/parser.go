@@ -6,6 +6,7 @@ package importer
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/paulmach/osm"
 	"github.com/paulmach/osm/osmpbf"
 )
+
+const importerLogPrefix = "importer:"
 
 var highwayClass = map[string]uint8{
 	"motorway":       builder.RoadMotorway,
@@ -47,7 +50,7 @@ func isRoutable(highwayVal string) uint8 {
 func ParsePBF(path string) (*builder.ParseResult, error) {
 	procs := runtime.NumCPU()
 
-	fmt.Println("[OSM] Pass 1: scanning ways ...")
+	log.Printf("%s pass 1: scanning ways", importerLogPrefix)
 
 	needed := make(map[uint64]struct{})
 	var ways []*builder.RawWay
@@ -89,8 +92,8 @@ func ParsePBF(path string) (*builder.ParseResult, error) {
 		return nil, fmt.Errorf("pass 1: %w", err)
 	}
 
-	fmt.Printf("[OSM] Pass 1 done: %d routable ways, %d unique node refs\n", len(ways), len(needed))
-	fmt.Println("[OSM] Pass 2: scanning nodes ...")
+	log.Printf("%s pass 1 complete (%d routable ways, %d unique node refs)", importerLogPrefix, len(ways), len(needed))
+	log.Printf("%s pass 2: scanning nodes", importerLogPrefix)
 
 	nodes := make(map[uint64]*builder.RawNode, len(needed))
 	if err := scanPBF(path, procs, func(obj osm.Object) {
@@ -107,7 +110,7 @@ func ParsePBF(path string) (*builder.ParseResult, error) {
 		return nil, fmt.Errorf("pass 2: %w", err)
 	}
 
-	fmt.Printf("[OSM] Pass 2 done: %d nodes loaded\n", len(nodes))
+	log.Printf("%s pass 2 complete (%d nodes loaded)", importerLogPrefix, len(nodes))
 	return &builder.ParseResult{Nodes: nodes, Ways: ways}, nil
 }
 

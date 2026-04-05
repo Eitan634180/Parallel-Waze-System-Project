@@ -1,4 +1,19 @@
 import { SERVER_URL } from '../../app/app-config.js';
+import { API_PATHS, WS_MESSAGE_TYPES, WS_PROTOCOL } from '../service-config.js';
+
+const SOCKET_ERRORS = {
+    sessionConnectionFailed: 'WebSocket connection failed',
+    simulationConnectionFailed: 'Simulation websocket connection failed',
+};
+const SOCKET_LOG_MESSAGES = {
+    sessionMessageParseFailed: 'Session websocket message parse failed',
+    sessionSocketError: 'Session websocket error',
+    simulationMessageParseFailed: 'Simulation websocket message parse failed',
+};
+
+function toWsUrl(path) {
+    return SERVER_URL.replace(WS_PROTOCOL.httpSchemePattern, WS_PROTOCOL.wsScheme) + path;
+}
 
 let socket = null;
 let simulationSocket = null;
@@ -9,7 +24,7 @@ export function connectToSession(sessionId, callbacks) {
         socket.close();
     }
 
-    const wsUrl = SERVER_URL.replace(/^http/, 'ws') + `/session/${sessionId}/ws`;
+    const wsUrl = toWsUrl(`${API_PATHS.session}/${sessionId}/ws`);
 
     return new Promise((resolve, reject) => {
         let opened = false;
@@ -19,27 +34,26 @@ export function connectToSession(sessionId, callbacks) {
         socket.onopen = () => {
             opened = true;
             settled = true;
-            console.log('Connected to navigation session');
             resolve();
         };
 
         socket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                if (message.type === 'eta_update' && callbacks.onEtaUpdate) callbacks.onEtaUpdate(message);
-                else if (message.type === 'reroute' && callbacks.onReroute) callbacks.onReroute(message);
-                else if (message.type === 'speed_update' && callbacks.onSpeedUpdate) callbacks.onSpeedUpdate(message);
-                else if (message.type === 'debug_update' && callbacks.onDebugUpdate) callbacks.onDebugUpdate(message.debug);
+                if (message.type === WS_MESSAGE_TYPES.etaUpdate && callbacks.onEtaUpdate) callbacks.onEtaUpdate(message);
+                else if (message.type === WS_MESSAGE_TYPES.reroute && callbacks.onReroute) callbacks.onReroute(message);
+                else if (message.type === WS_MESSAGE_TYPES.speedUpdate && callbacks.onSpeedUpdate) callbacks.onSpeedUpdate(message);
+                else if (message.type === WS_MESSAGE_TYPES.debugUpdate && callbacks.onDebugUpdate) callbacks.onDebugUpdate(message.debug);
             } catch (err) {
-                console.error('Failed to parse websocket message:', err);
+                console.error(SOCKET_LOG_MESSAGES.sessionMessageParseFailed, err);
             }
         };
 
         socket.onerror = (error) => {
-            console.error('WebSocket encountered an error:', error);
+            console.error(SOCKET_LOG_MESSAGES.sessionSocketError, error);
             if (!settled) {
                 settled = true;
-                reject(new Error('WebSocket connection failed'));
+                reject(new Error(SOCKET_ERRORS.sessionConnectionFailed));
             }
         };
 
@@ -47,7 +61,7 @@ export function connectToSession(sessionId, callbacks) {
             socket = null;
             if (!settled) {
                 settled = true;
-                reject(new Error('WebSocket connection failed'));
+                reject(new Error(SOCKET_ERRORS.sessionConnectionFailed));
                 return;
             }
             if (opened && callbacks.onClose) {
@@ -67,7 +81,7 @@ export function disconnectSession() {
 export function sendLocationPing(lat, lng, speedKmh, stepIndex, edgeEvents = []) {
     if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
-            type: 'ping', lat, lon: lng, speed_kmh: speedKmh, step_index: stepIndex, edge_events: edgeEvents,
+            type: WS_MESSAGE_TYPES.ping, lat, lon: lng, speed_kmh: speedKmh, step_index: stepIndex, edge_events: edgeEvents,
         }));
     }
 }
@@ -78,7 +92,7 @@ export function connectToSimulation(callbacks) {
         simulationSocket.close();
     }
 
-    const wsUrl = SERVER_URL.replace(/^http/, 'ws') + '/simulation/ws';
+    const wsUrl = toWsUrl(API_PATHS.simulationWS);
 
     return new Promise((resolve, reject) => {
         let settled = false;
@@ -91,23 +105,23 @@ export function connectToSimulation(callbacks) {
         simulationSocket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                if (message.type === 'snapshot' && callbacks.onSnapshot) callbacks.onSnapshot(message.cars || []);
+                if (message.type === WS_MESSAGE_TYPES.snapshot && callbacks.onSnapshot) callbacks.onSnapshot(message.cars || []);
             } catch (err) {
-                console.error('Failed to parse simulation websocket message:', err);
+                console.error(SOCKET_LOG_MESSAGES.simulationMessageParseFailed, err);
             }
         };
 
         simulationSocket.onerror = () => {
             if (!settled) {
                 settled = true;
-                reject(new Error('Simulation websocket connection failed'));
+                reject(new Error(SOCKET_ERRORS.simulationConnectionFailed));
             }
         };
         simulationSocket.onclose = (event) => {
             simulationSocket = null;
             if (!settled) {
                 settled = true;
-                reject(new Error('Simulation websocket connection failed'));
+                reject(new Error(SOCKET_ERRORS.simulationConnectionFailed));
                 return;
             }
             if (callbacks.onClose) {

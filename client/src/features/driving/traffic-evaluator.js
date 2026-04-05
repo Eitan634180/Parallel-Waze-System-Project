@@ -1,27 +1,35 @@
 import { state } from '../../app/app-state.js';
+import { PANEL_TEXT, TRAFFIC_LEVELS } from '../../ui/ui-constants.js';
+
+const TRAFFIC_THRESHOLDS = {
+    aheadWindowSize: 6,
+    heavySlowEdgeCount: 2,
+    heavyWorstRatio: 0.6,
+    slowdownRatio: 0.95,
+};
 
 export function getRouteTrafficStatus(route) {
     if (route?.congestionAhead) {
         return {
-            level: route.congestedEdges > 1 ? 'heavy' : 'congested',
+            level: route.congestedEdges > 1 ? TRAFFIC_LEVELS.heavy : TRAFFIC_LEVELS.congested,
             detail: `${route.congestedEdges} congested edge${route.congestedEdges === 1 ? '' : 's'} reported on this route.`,
         };
     }
-    return { level: 'normal', detail: 'No slowdowns detected on the selected route.' };
+    return { level: TRAFFIC_LEVELS.normal, detail: 'No slowdowns detected on the selected route.' };
 }
 
 export function computeTrafficStatus() {
     if (state.debug.serverData) {
         if (state.debug.serverData.congestion_ahead) {
             return {
-                level: state.debug.serverData.congested_edges > 1 ? 'heavy' : 'congested',
+                level: state.debug.serverData.congested_edges > 1 ? TRAFFIC_LEVELS.heavy : TRAFFIC_LEVELS.congested,
                 detail: `${state.debug.serverData.congested_edges} congested edge${state.debug.serverData.congested_edges === 1 ? '' : 's'} reported by server.`,
             };
         }
-        return { level: 'normal', detail: 'No slowdowns detected on the active route.' };
+        return { level: TRAFFIC_LEVELS.normal, detail: PANEL_TEXT.activeRouteClear };
     }
 
-    const ahead = (state.routing.activeLegs || []).slice(state.drive.currentRoadIndex, state.drive.currentRoadIndex + 6);
+    const ahead = (state.routing.activeLegs || []).slice(state.drive.currentRoadIndex, state.drive.currentRoadIndex + TRAFFIC_THRESHOLDS.aheadWindowSize);
     let slowEdges = 0;
     let worstRatio = 1;
 
@@ -32,7 +40,7 @@ export function computeTrafficStatus() {
         if (recommended == null || base <= 0) return;
 
         const ratio = recommended / base;
-        if (ratio < 0.95) {
+        if (ratio < TRAFFIC_THRESHOLDS.slowdownRatio) {
             slowEdges++;
             worstRatio = Math.min(worstRatio, ratio);
         }
@@ -43,11 +51,11 @@ export function computeTrafficStatus() {
     }
 
     if (slowEdges === 0) {
-        return { level: 'normal', detail: 'No slowdowns detected on the active route.' };
+        return { level: TRAFFIC_LEVELS.normal, detail: PANEL_TEXT.activeRouteClear };
     }
 
-    if (worstRatio <= 0.6 || slowEdges >= 2) {
-        return { level: 'heavy', detail: `${slowEdges} route edges have heavy slowdowns.` };
+    if (worstRatio <= TRAFFIC_THRESHOLDS.heavyWorstRatio || slowEdges >= TRAFFIC_THRESHOLDS.heavySlowEdgeCount) {
+        return { level: TRAFFIC_LEVELS.heavy, detail: `${slowEdges} route edges have heavy slowdowns.` };
     }
-    return { level: 'congested', detail: `${slowEdges} route edge has a measurable slowdown.` };
+    return { level: TRAFFIC_LEVELS.congested, detail: `${slowEdges} route edge has a measurable slowdown.` };
 }

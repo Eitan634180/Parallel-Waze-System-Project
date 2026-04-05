@@ -1,26 +1,14 @@
 package builder
 
-// serialize.go — binary save / load for all graph data structures.
-//
-// File layout (all files):
-//   [4 bytes] magic   – "NAVI"
-//   [2 bytes] version – uint16, little-endian
-//   [8 bytes] count   – uint64, little-endian (number of records)
-//   [N bytes] data    – packed structs, little-endian
-//
-// Files produced:
-//   nodes.bin      – Node records
-//   edges.bin      – Edge records
-//   base_adj.bin   – AdjacencyList (offsets + edge IDs)
-//   cells.bin      – Cell records (variable-length node-ID slices)
-//   overlay_adj.bin – OverlayAdjList (offsets + OverlayEdge records)
-//   boundary.bin   – ordered BoundaryNodes slice
+// serialize.go saves and loads the graph in compact binary files with a shared
+// header: 4-byte magic, 2-byte version, and an 8-byte record count.
 
 import (
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -28,52 +16,53 @@ import (
 const (
 	magic   = "NAVI"
 	version = uint16(1)
+
+	nodesFileName      = "nodes.bin"
+	edgesFileName      = "edges.bin"
+	baseAdjFileName    = "base_adj.bin"
+	cellsFileName      = "cells.bin"
+	boundaryFileName   = "boundary.bin"
+	overlayAdjFileName = "overlay_adj.bin"
+
+	graphStoreLogPrefix = "graph-store:"
 )
 
 var le = binary.LittleEndian
 
-// ---------------------------------------------------------------------------
-// Save
-// ---------------------------------------------------------------------------
-
 // SaveGraph writes all graph data to the given directory.
 func SaveGraph(g *Graph, dir string) error {
-	fmt.Printf("[SAVE] Writing graph to %s …\n", dir)
+	log.Printf("%s writing graph to %s", graphStoreLogPrefix, dir)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-
-	if err := saveNodes(g, filepath.Join(dir, "nodes.bin")); err != nil {
+	if err := saveNodes(g, filepath.Join(dir, nodesFileName)); err != nil {
 		return fmt.Errorf("nodes: %w", err)
 	}
-	if err := saveEdges(g, filepath.Join(dir, "edges.bin")); err != nil {
+	if err := saveEdges(g, filepath.Join(dir, edgesFileName)); err != nil {
 		return fmt.Errorf("edges: %w", err)
 	}
-	if err := saveBaseAdj(g, filepath.Join(dir, "base_adj.bin")); err != nil {
+	if err := saveBaseAdj(g, filepath.Join(dir, baseAdjFileName)); err != nil {
 		return fmt.Errorf("base_adj: %w", err)
 	}
-	if err := saveCells(g, filepath.Join(dir, "cells.bin")); err != nil {
+	if err := saveCells(g, filepath.Join(dir, cellsFileName)); err != nil {
 		return fmt.Errorf("cells: %w", err)
 	}
-	if err := saveBoundary(g, filepath.Join(dir, "boundary.bin")); err != nil {
+	if err := saveBoundary(g, filepath.Join(dir, boundaryFileName)); err != nil {
 		return fmt.Errorf("boundary: %w", err)
 	}
-	if err := saveOverlayAdj(g, filepath.Join(dir, "overlay_adj.bin")); err != nil {
+	if err := saveOverlayAdj(g, filepath.Join(dir, overlayAdjFileName)); err != nil {
 		return fmt.Errorf("overlay_adj: %w", err)
 	}
 
-	fmt.Println("[SAVE] Done.")
+	log.Printf("%s graph write complete", graphStoreLogPrefix)
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Load
-// ---------------------------------------------------------------------------
-
 // LoadGraph reads all graph data from the given directory.
 func LoadGraph(dir string) (*Graph, error) {
-	fmt.Printf("[LOAD] Reading graph from %s …\n", dir)
+	log.Printf("%s reading graph from %s", graphStoreLogPrefix, dir)
+
 	g := &Graph{
 		NodeIdx:         make(map[NodeID]uint32),
 		CellIdx:         make(map[NodeID]CellID),
@@ -81,47 +70,43 @@ func LoadGraph(dir string) (*Graph, error) {
 	}
 
 	var err error
-
-	if g.Nodes, err = loadNodes(filepath.Join(dir, "nodes.bin")); err != nil {
+	if g.Nodes, err = loadNodes(filepath.Join(dir, nodesFileName)); err != nil {
 		return nil, fmt.Errorf("nodes: %w", err)
 	}
-	// Rebuild NodeIdx
 	for i, n := range g.Nodes {
 		g.NodeIdx[n.ID] = uint32(i)
 		g.CellIdx[n.ID] = n.CellID
 	}
 
-	if g.Edges, err = loadEdges(filepath.Join(dir, "edges.bin")); err != nil {
+	if g.Edges, err = loadEdges(filepath.Join(dir, edgesFileName)); err != nil {
 		return nil, fmt.Errorf("edges: %w", err)
 	}
-
-	if g.BaseAdj, err = loadBaseAdj(filepath.Join(dir, "base_adj.bin")); err != nil {
+	if g.BaseAdj, err = loadBaseAdj(filepath.Join(dir, baseAdjFileName)); err != nil {
 		return nil, fmt.Errorf("base_adj: %w", err)
 	}
-
-	if g.Cells, err = loadCells(filepath.Join(dir, "cells.bin")); err != nil {
+	if g.Cells, err = loadCells(filepath.Join(dir, cellsFileName)); err != nil {
 		return nil, fmt.Errorf("cells: %w", err)
 	}
-
-	if g.BoundaryNodes, err = loadBoundary(filepath.Join(dir, "boundary.bin")); err != nil {
+	if g.BoundaryNodes, err = loadBoundary(filepath.Join(dir, boundaryFileName)); err != nil {
 		return nil, fmt.Errorf("boundary: %w", err)
 	}
 	for i, nid := range g.BoundaryNodes {
 		g.BoundaryNodeIdx[nid] = uint32(i)
 	}
-
-	if g.OverlayAdj, err = loadOverlayAdj(filepath.Join(dir, "overlay_adj.bin")); err != nil {
+	if g.OverlayAdj, err = loadOverlayAdj(filepath.Join(dir, overlayAdjFileName)); err != nil {
 		return nil, fmt.Errorf("overlay_adj: %w", err)
 	}
 
-	fmt.Printf("[LOAD] Done: %d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges\n",
-		len(g.Nodes), len(g.Edges), len(g.Cells), len(g.BoundaryNodes), len(g.OverlayAdj.OverlayEdges))
+	log.Printf("%s graph ready (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
+		graphStoreLogPrefix,
+		len(g.Nodes),
+		len(g.Edges),
+		len(g.Cells),
+		len(g.BoundaryNodes),
+		len(g.OverlayAdj.OverlayEdges),
+	)
 	return g, nil
 }
-
-// ---------------------------------------------------------------------------
-// Nodes
-// ---------------------------------------------------------------------------
 
 // nodeBin is the fixed-width on-disk representation of a Node.
 type nodeBin struct {
@@ -133,7 +118,7 @@ type nodeBin struct {
 	CellID uint32
 }
 
-const nodeBinSize = 8 + 8 + 8 + 4 + 4 + 4 // = 36 bytes
+const nodeBinSize = 8 + 8 + 8 + 4 + 4 + 4
 
 func saveNodes(g *Graph, path string) error {
 	f, err := createFile(path)
@@ -141,6 +126,7 @@ func saveNodes(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+
 	if err := writeHeader(f, uint64(len(g.Nodes))); err != nil {
 		return err
 	}
@@ -159,6 +145,7 @@ func loadNodes(path string) ([]Node, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	nodes := make([]Node, count)
 	for i := range nodes {
 		var b nodeBin
@@ -170,10 +157,6 @@ func loadNodes(path string) ([]Node, error) {
 	return nodes, nil
 }
 
-// ---------------------------------------------------------------------------
-// Edges
-// ---------------------------------------------------------------------------
-
 type edgeBin struct {
 	ID         uint32
 	FromNodeID uint64
@@ -183,7 +166,7 @@ type edgeBin struct {
 	SpeedKmh   float32
 	RoadClass  uint8
 	Flags      uint8
-	Pad        [2]byte // align to 4 bytes
+	Pad        [2]byte
 }
 
 func saveEdges(g *Graph, path string) error {
@@ -192,15 +175,21 @@ func saveEdges(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+
 	if err := writeHeader(f, uint64(len(g.Edges))); err != nil {
 		return err
 	}
 	for i := range g.Edges {
 		e := &g.Edges[i]
 		if err := writeFixed(f, edgeBin{
-			ID: e.ID, FromNodeID: e.FromNodeID, ToNodeID: e.ToNodeID,
-			Weight: e.Weight, DistanceM: e.DistanceM, SpeedKmh: e.SpeedKmh,
-			RoadClass: e.RoadClass, Flags: e.Flags,
+			ID:         e.ID,
+			FromNodeID: e.FromNodeID,
+			ToNodeID:   e.ToNodeID,
+			Weight:     e.Weight,
+			DistanceM:  e.DistanceM,
+			SpeedKmh:   e.SpeedKmh,
+			RoadClass:  e.RoadClass,
+			Flags:      e.Flags,
 		}); err != nil {
 			return err
 		}
@@ -214,6 +203,7 @@ func loadEdges(path string) ([]Edge, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	edges := make([]Edge, count)
 	for i := range edges {
 		var b edgeBin
@@ -221,17 +211,18 @@ func loadEdges(path string) ([]Edge, error) {
 			return nil, err
 		}
 		edges[i] = Edge{
-			ID: b.ID, FromNodeID: b.FromNodeID, ToNodeID: b.ToNodeID,
-			Weight: b.Weight, DistanceM: b.DistanceM, SpeedKmh: b.SpeedKmh,
-			RoadClass: b.RoadClass, Flags: b.Flags,
+			ID:         b.ID,
+			FromNodeID: b.FromNodeID,
+			ToNodeID:   b.ToNodeID,
+			Weight:     b.Weight,
+			DistanceM:  b.DistanceM,
+			SpeedKmh:   b.SpeedKmh,
+			RoadClass:  b.RoadClass,
+			Flags:      b.Flags,
 		}
 	}
 	return edges, nil
 }
-
-// ---------------------------------------------------------------------------
-// Base adjacency list
-// ---------------------------------------------------------------------------
 
 func saveBaseAdj(g *Graph, path string) error {
 	f, err := createFile(path)
@@ -243,8 +234,6 @@ func saveBaseAdj(g *Graph, path string) error {
 	if err := writeHeader(f, uint64(len(g.BaseAdj.Offsets))); err != nil {
 		return err
 	}
-
-	// Write offsets count (= num_nodes + 1), then offsets, then edge IDs
 	for _, o := range g.BaseAdj.Offsets {
 		if err := writeUint32(f, o); err != nil {
 			return err
@@ -292,13 +281,8 @@ func loadBaseAdj(path string) (AdjacencyList, error) {
 	if !hasHeader {
 		return AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}, nil
 	}
-
 	return AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}, nil
 }
-
-// ---------------------------------------------------------------------------
-// Cells (variable-length node-ID slices)
-// ---------------------------------------------------------------------------
 
 func saveCells(g *Graph, path string) error {
 	f, err := createFile(path)
@@ -306,6 +290,7 @@ func saveCells(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+
 	if err := writeHeader(f, uint64(len(g.Cells))); err != nil {
 		return err
 	}
@@ -340,19 +325,35 @@ func loadCells(path string) ([]Cell, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	cells := make([]Cell, count)
 	for i := range cells {
-		id, _ := readUint32(f)
-		ic, _ := readUint64(f)
+		id, err := readUint32(f)
+		if err != nil {
+			return nil, err
+		}
+		ic, err := readUint64(f)
+		if err != nil {
+			return nil, err
+		}
 		internal := make([]NodeID, ic)
 		for j := range internal {
-			v, _ := readUint64(f)
+			v, err := readUint64(f)
+			if err != nil {
+				return nil, err
+			}
 			internal[j] = v
 		}
-		bc, _ := readUint64(f)
+		bc, err := readUint64(f)
+		if err != nil {
+			return nil, err
+		}
 		boundary := make([]NodeID, bc)
 		for j := range boundary {
-			v, _ := readUint64(f)
+			v, err := readUint64(f)
+			if err != nil {
+				return nil, err
+			}
 			boundary[j] = v
 		}
 		cells[i] = Cell{ID: id, InternalNodeIDs: internal, BoundaryNodeIDs: boundary}
@@ -360,16 +361,13 @@ func loadCells(path string) ([]Cell, error) {
 	return cells, nil
 }
 
-// ---------------------------------------------------------------------------
-// Boundary nodes list
-// ---------------------------------------------------------------------------
-
 func saveBoundary(g *Graph, path string) error {
 	f, err := createFile(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
 	if err := writeHeader(f, uint64(len(g.BoundaryNodes))); err != nil {
 		return err
 	}
@@ -387,17 +385,17 @@ func loadBoundary(path string) ([]NodeID, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	nodes := make([]NodeID, count)
 	for i := range nodes {
-		v, _ := readUint64(f)
+		v, err := readUint64(f)
+		if err != nil {
+			return nil, err
+		}
 		nodes[i] = v
 	}
 	return nodes, nil
 }
-
-// ---------------------------------------------------------------------------
-// Overlay adjacency list
-// ---------------------------------------------------------------------------
 
 type overlayEdgeBin struct {
 	FromNodeID  uint64
@@ -472,13 +470,8 @@ func loadOverlayAdj(path string) (OverlayAdjList, error) {
 			IsCrossCell: b.IsCrossCell != 0,
 		}
 	}
-
 	return OverlayAdjList{Offsets: offsets, OverlayEdges: edges}, nil
 }
-
-// ---------------------------------------------------------------------------
-// Low-level I/O helpers
-// ---------------------------------------------------------------------------
 
 func createFile(path string) (*os.File, error) {
 	return os.Create(path)
@@ -499,6 +492,7 @@ func openFile(path string) (*os.File, uint64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+
 	hdr := make([]byte, 4)
 	if _, err := io.ReadFull(f, hdr); err != nil {
 		f.Close()
@@ -508,11 +502,13 @@ func openFile(path string) (*os.File, uint64, error) {
 		f.Close()
 		return nil, 0, fmt.Errorf("bad magic in %s", path)
 	}
+
 	var ver uint16
 	if err := binary.Read(f, le, &ver); err != nil {
 		f.Close()
 		return nil, 0, err
 	}
+
 	var count uint64
 	if err := binary.Read(f, le, &count); err != nil {
 		f.Close()
@@ -536,6 +532,7 @@ func openSequenceFile(path string) (*os.File, uint64, bool, error) {
 			f.Close()
 			return nil, 0, false, err
 		}
+
 		var count uint64
 		if err := binary.Read(f, le, &count); err != nil {
 			f.Close()
