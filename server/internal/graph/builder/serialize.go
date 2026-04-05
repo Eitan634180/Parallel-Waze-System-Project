@@ -5,6 +5,7 @@ package builder
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ const (
 	cellsFileName      = "cells.bin"
 	boundaryFileName   = "boundary.bin"
 	overlayAdjFileName = "overlay_adj.bin"
+	metaFileName       = "meta.json"
 
 	graphStoreLogPrefix = "graph-store:"
 )
@@ -53,6 +55,9 @@ func SaveGraph(g *Graph, dir string) error {
 	}
 	if err := saveOverlayAdj(g, filepath.Join(dir, overlayAdjFileName)); err != nil {
 		return fmt.Errorf("overlay_adj: %w", err)
+	}
+	if err := saveMeta(g, filepath.Join(dir, metaFileName)); err != nil {
+		return fmt.Errorf("meta: %w", err)
 	}
 
 	log.Printf("%s graph write complete", graphStoreLogPrefix)
@@ -95,6 +100,11 @@ func LoadGraph(dir string) (*Graph, error) {
 	}
 	if g.OverlayAdj, err = loadOverlayAdj(filepath.Join(dir, overlayAdjFileName)); err != nil {
 		return nil, fmt.Errorf("overlay_adj: %w", err)
+	}
+	if err := loadMeta(g, filepath.Join(dir, metaFileName)); err != nil {
+		// Older graphs won't have meta.json — log and continue with zero bbox.
+		log.Printf("%s meta.json unavailable (%v), recomputing bounding box from nodes", graphStoreLogPrefix, err)
+		g.BBox = boundingBoxFromNodes(g.Nodes)
 	}
 
 	log.Printf("%s graph ready (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
@@ -471,6 +481,34 @@ func loadOverlayAdj(path string) (OverlayAdjList, error) {
 		}
 	}
 	return OverlayAdjList{Offsets: offsets, OverlayEdges: edges}, nil
+}
+
+// graphMeta is the JSON structure written to meta.json alongside the binary files.
+type graphMeta struct {
+	BBox BoundingBox `json:"bbox"`
+}
+
+func saveMeta(g *Graph, path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return json.NewEncoder(f).Encode(graphMeta{BBox: g.BBox})
+}
+
+func loadMeta(g *Graph, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	var m graphMeta
+	if err := json.NewDecoder(f).Decode(&m); err != nil {
+		return err
+	}
+	g.BBox = m.BBox
+	return nil
 }
 
 func createFile(path string) (*os.File, error) {

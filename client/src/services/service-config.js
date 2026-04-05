@@ -23,6 +23,7 @@ export const API_PATHS = {
     simulation: '/simulation',
     simulationRandom: '/simulation/random',
     simulationWS: '/simulation/ws',
+    systemInfo: '/system/info',
 };
 
 export const WS_PROTOCOL = {

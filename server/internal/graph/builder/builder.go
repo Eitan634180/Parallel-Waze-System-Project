@@ -2,6 +2,7 @@ package builder
 
 import (
 	"log"
+	"math"
 	"sort"
 )
 
@@ -32,6 +33,12 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 	}
 
 	log.Printf("%s nodes ready (%d)", graphBuilderLogPrefix, len(g.Nodes))
+
+	// Compute bounding box from all nodes.
+	bbox := boundingBoxFromNodes(g.Nodes)
+	g.BBox = bbox
+	log.Printf("%s bounding box: lat [%.4f, %.4f] lon [%.4f, %.4f]",
+		graphBuilderLogPrefix, bbox.MinLat, bbox.MaxLat, bbox.MinLon, bbox.MaxLon)
 	log.Printf("%s building edges", graphBuilderLogPrefix)
 
 	// Most ways contribute two directed edges per segment.
@@ -133,4 +140,33 @@ func (g *Graph) SortedEdgesFrom(nodeID NodeID) []EdgeID {
 		return g.Edges[out[i]].ToNodeID < g.Edges[out[j]].ToNodeID
 	})
 	return out
+}
+
+func boundingBoxFromNodes(nodes []Node) BoundingBox {
+	if len(nodes) == 0 {
+		return BoundingBox{}
+	}
+
+	bbox := BoundingBox{
+		MinLat: math.Inf(1),
+		MaxLat: math.Inf(-1),
+		MinLon: math.Inf(1),
+		MaxLon: math.Inf(-1),
+	}
+	for i := range nodes {
+		node := &nodes[i]
+		if node.Lat < bbox.MinLat {
+			bbox.MinLat = node.Lat
+		}
+		if node.Lat > bbox.MaxLat {
+			bbox.MaxLat = node.Lat
+		}
+		if node.Lon < bbox.MinLon {
+			bbox.MinLon = node.Lon
+		}
+		if node.Lon > bbox.MaxLon {
+			bbox.MaxLon = node.Lon
+		}
+	}
+	return bbox
 }

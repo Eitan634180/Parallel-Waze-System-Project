@@ -8,6 +8,7 @@ const (
 	simulationRoutePath       = "/simulation"
 	simulationRandomRoutePath = "/simulation/random"
 	simulationWSRoutePath     = "/simulation/ws"
+	systemInfoRoutePath       = "/system/info"
 
 	headerOrigin                 = "Origin"
 	headerVary                   = "Vary"

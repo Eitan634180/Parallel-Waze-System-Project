@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"nav-system/internal/api"
 	"nav-system/internal/graph/builder"
+	"nav-system/internal/mapstore"
 	"nav-system/internal/routing"
 	"nav-system/internal/session"
 	"nav-system/internal/simulation"
@@ -22,9 +24,31 @@ import (
 const serverLogPrefix = "server:"
 
 func main() {
-	dataDir := flag.String("data", "./data/map", "Directory containing binary graph files")
+	dataDir := flag.String("data", "", "Directory containing binary graph files (auto-detected if empty)")
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	flag.Parse()
+
+	// If --data is not specified, find the region automatically.
+	if *dataDir == "" {
+		mapRoot := filepath.Join(".", "data", "map")
+		regions, err := mapstore.ListReady(mapRoot)
+		if err != nil {
+			log.Fatalf("scanning map directory: %v", err)
+		}
+		switch len(regions) {
+		case 0:
+			log.Fatalf("%s no preprocessed regions found in %s. Run region-picker first.", serverLogPrefix, mapRoot)
+		case 1:
+			*dataDir = regions[0].Dir
+			log.Printf("%s auto-selected region: %s", serverLogPrefix, regions[0].ID)
+		default:
+			log.Printf("%s multiple regions available in %s:", serverLogPrefix, mapRoot)
+			for _, r := range regions {
+				log.Printf("%s   %s", serverLogPrefix, r.ID)
+			}
+			log.Fatalf("%s specify --data <dir> to choose a region", serverLogPrefix)
+		}
+	}
 
 	log.Printf("%s loading graph from %s", serverLogPrefix, *dataDir)
 	t := time.Now()

@@ -108,3 +108,9 @@ export async function clearSimulationCars() {
         throw new Error(message || REQUEST_ERRORS.clearSimulationCarsFailed);
     }
 }
+
+// fetchSystemInfo loads map metadata for the active server-side region.
+export async function fetchSystemInfo() {
+    const res = await fetch(`${SERVER_URL}${API_PATHS.systemInfo}`);
+    return parseJsonResponse(res);
+}

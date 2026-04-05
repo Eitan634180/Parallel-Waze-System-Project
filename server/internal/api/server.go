@@ -52,6 +52,10 @@ func NewServer(
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 		mux:        http.NewServeMux(),
 	}
+	// Set Nominatim ViewBox from the graph's bounding box (if not overridden by env).
+	if s.search.ViewBox == "" && g.BBox.MaxLat != 0 {
+		s.search.ViewBox = g.BBox.NominatimViewBox()
+	}
 	s.registerRoutes()
 	return s
 }
@@ -64,6 +68,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc(simulationRoutePath, s.withCORS(s.handleSimulation))
 	s.mux.HandleFunc(simulationRandomRoutePath, s.withCORS(s.handleSimulationRandom))
 	s.mux.HandleFunc(simulationWSRoutePath, s.withCORS(s.handleSimulationWS))
+	s.mux.HandleFunc(systemInfoRoutePath, s.withCORS(s.handleSystemInfo))
 }
 
 // ServeHTTP implements http.Handler.

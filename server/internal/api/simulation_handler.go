@@ -16,6 +16,7 @@ const (
 	randomRouteAttemptFactor = 6
 	minRandomRouteDistanceSq = 0.0004
 	simulationWSLogPrefix    = "api: simulation websocket"
+	simulationBBoxMissingLog = "api: random simulation skipped because graph bounding box is unavailable"
 )
 
 type simulationSpawnRequest struct {
@@ -133,21 +134,26 @@ type randomRouteCandidate struct {
 	dstLon float64
 }
 
-var telAvivBounds = geoBox{
-	minLat: 32.01,
-	maxLat: 32.15,
-	minLon: 34.74,
-	maxLon: 34.88,
-}
-
 func (s *Server) randomSimulationRoutes(count int) []routing.Route {
+	if s.g.BBox.IsZero() {
+		log.Printf(simulationBBoxMissingLog)
+		return nil
+	}
+
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	start := time.Now()
 	attempts := count * randomRouteAttemptFactor
 	candidates := make([]randomRouteCandidate, 0, attempts)
+
+	bbox := geoBox{
+		minLat: s.g.BBox.MinLat,
+		maxLat: s.g.BBox.MaxLat,
+		minLon: s.g.BBox.MinLon,
+		maxLon: s.g.BBox.MaxLon,
+	}
 	for i := 0; i < attempts; i++ {
-		srcLat, srcLon := telAvivBounds.randomPoint(rng)
-		dstLat, dstLon := telAvivBounds.randomPoint(rng)
+		srcLat, srcLon := bbox.randomPoint(rng)
+		dstLat, dstLon := bbox.randomPoint(rng)
 		candidates = append(candidates, randomRouteCandidate{
 			srcLat: srcLat,
 			srcLon: srcLon,
