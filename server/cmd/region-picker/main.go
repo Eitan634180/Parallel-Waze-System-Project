@@ -20,7 +20,7 @@ const (
 	defaultMapRoot           = "./data/map"
 	defaultCacheFile         = "./data/geofabrik-index.json"
 	geofabrikIndexURL        = "https://download.geofabrik.de/index-v1.json"
-	indexMaxAge              = 24 * time.Hour
+	indexMaxAge              = 168 * time.Hour
 	pickerLogPrefix          = "region-picker:"
 	downloadNewRegionOption  = "n"
 	browseParentOption       = "b"

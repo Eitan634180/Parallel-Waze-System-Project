@@ -12,6 +12,16 @@ import (
 
 const cellBuilderLogPrefix = "cell-builder:"
 
+const (
+	minInertialFlowQuartile  = 1
+	partitionSeed            = 42
+	inertialFlowQuartileDiv  = 4
+	flowTerminalNodeCount    = 2
+	flowSinkNodeOffset       = 1
+	unitFlowCapacity         = 1
+	boundaryNodeCapacityHint = 32768
+)
+
 // PartitionCells recursively bisects the graph with Inertial Flow and fills
 // g.Cells and g.CellIdx.
 func PartitionCells(g *Graph, maxCellSize int) {
@@ -25,6 +35,8 @@ func PartitionCells(g *Graph, maxCellSize int) {
 	cellAssign := make([]CellID, len(g.Nodes))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+
+	sem := make(chan struct{}, runtime.NumCPU())
 
 	var bisect func(nodeIdxs []uint32, rng *rand.Rand)
 	bisect = func(nodeIdxs []uint32, rng *rand.Rand) {
@@ -48,11 +60,24 @@ func PartitionCells(g *Graph, maxCellSize int) {
 
 		wg.Add(2)
 		rng2 := rand.New(rand.NewSource(rng.Int63()))
-		go bisect(left, rng2)
-		go bisect(right, rng)
+
+		spawn := func(child []uint32, childRNG *rand.Rand) {
+			select {
+			case sem <- struct{}{}:
+				go func() {
+					defer func() { <-sem }()
+					bisect(child, childRNG)
+				}()
+			default:
+				bisect(child, childRNG)
+			}
+		}
+
+		spawn(left, rng2)
+		spawn(right, rng)
 	}
 
-	rng := rand.New(rand.NewSource(42))
+	rng := rand.New(rand.NewSource(partitionSeed))
 	wg.Add(1)
 	bisect(allNodeIdxs, rng)
 	wg.Wait()
@@ -68,7 +93,7 @@ func PartitionCells(g *Graph, maxCellSize int) {
 }
 
 // inertialFlowBisect partitions a node subset into two halves with one
-// Inertial Flow step.
+// inertial-flow step.
 func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, right []uint32) {
 	n := len(nodeIdxs)
 
@@ -86,18 +111,9 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 	}
 	sort.Slice(scores, func(a, b int) bool { return scores[a].score < scores[b].score })
 
-	q := n / 4
-	if q < 1 {
-		q = 1
-	}
-
-	sourceSet := make(map[uint32]bool, q)
-	sinkSet := make(map[uint32]bool, q)
-	for i := 0; i < q; i++ {
-		sourceSet[scores[i].idx] = true
-	}
-	for i := n - q; i < n; i++ {
-		sinkSet[scores[i].idx] = true
+	q := n / inertialFlowQuartileDiv
+	if q < minInertialFlowQuartile {
+		q = minInertialFlowQuartile
 	}
 
 	localIdx := make(map[uint32]int, n)
@@ -105,13 +121,14 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 		localIdx[s.idx] = i
 	}
 
-	s, t := n, n+1
-	fn := newFlowNet(n + 2)
-	for idx := range sourceSet {
-		fn.addEdge(s, localIdx[idx], n)
+	s, t := n, n+flowSinkNodeOffset
+	fn := newFlowNet(n + flowTerminalNodeCount)
+
+	for i := 0; i < q; i++ {
+		fn.addEdge(s, localIdx[scores[i].idx], n)
 	}
-	for idx := range sinkSet {
-		fn.addEdge(localIdx[idx], t, n)
+	for i := n - q; i < n; i++ {
+		fn.addEdge(localIdx[scores[i].idx], t, n)
 	}
 
 	// Keep the cut symmetric even if the routing graph contains one-way roads.
@@ -172,8 +189,8 @@ func addUndirectedSubsetEdges(fn *flowNet, g *Graph, nodeIdxs []uint32, localIdx
 			}
 			seen[key] = struct{}{}
 
-			fn.addEdge(u, v, 1)
-			fn.addEdge(v, u, 1)
+			fn.addEdge(u, v, unitFlowCapacity)
+			fn.addEdge(v, u, unitFlowCapacity)
 		}
 	}
 }
@@ -187,6 +204,7 @@ type flowNet struct {
 	graph [][]flowEdge
 	level []int
 	iter  []int
+	q     []int
 }
 
 func newFlowNet(n int) *flowNet {
@@ -194,6 +212,7 @@ func newFlowNet(n int) *flowNet {
 		graph: make([][]flowEdge, n),
 		level: make([]int, n),
 		iter:  make([]int, n),
+		q:     make([]int, 0, n),
 	}
 }
 
@@ -206,15 +225,17 @@ func (fn *flowNet) bfs(s int) {
 	for i := range fn.level {
 		fn.level[i] = -1
 	}
-	q := []int{s}
+
+	fn.q = fn.q[:0]
+	fn.q = append(fn.q, s)
 	fn.level[s] = 0
-	for len(q) > 0 {
-		v := q[0]
-		q = q[1:]
+
+	for head := 0; head < len(fn.q); head++ {
+		v := fn.q[head]
 		for _, e := range fn.graph[v] {
 			if e.cap > 0 && fn.level[e.to] < 0 {
 				fn.level[e.to] = fn.level[v] + 1
-				q = append(q, e.to)
+				fn.q = append(fn.q, e.to)
 			}
 		}
 	}
@@ -297,7 +318,7 @@ func DetectBoundaryNodes(g *Graph) {
 		}
 	}
 
-	g.BoundaryNodes = make([]NodeID, 0, 32768)
+	g.BoundaryNodes = make([]NodeID, 0, boundaryNodeCapacityHint)
 	g.BoundaryNodeIdx = make(map[NodeID]uint32)
 	cellBoundary := make(map[CellID][]NodeID)
 

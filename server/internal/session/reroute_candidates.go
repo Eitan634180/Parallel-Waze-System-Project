@@ -39,7 +39,7 @@ func attemptCongestionReroute(
 		reason = rerouteReasonLocalPatch
 	}
 
-	applyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA)
+	applyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA, nil)
 }
 
 func captureCongestionContext(s *Session, g *builder.Graph, store *traffic.Store) (congestionContext, bool) {

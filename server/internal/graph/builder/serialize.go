@@ -4,6 +4,7 @@ package builder
 // header: 4-byte magic, 2-byte version, and an 8-byte record count.
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -15,8 +16,8 @@ import (
 )
 
 const (
-	magic   = "NAVI"
-	version = uint16(1)
+	fileMagic   = "NAVI"
+	fileVersion = uint16(1)
 
 	nodesFileName      = "nodes.bin"
 	edgesFileName      = "edges.bin"
@@ -27,6 +28,11 @@ const (
 	metaFileName       = "meta.json"
 
 	graphStoreLogPrefix = "graph-store:"
+	graphDataDirPerm    = 0o755
+	headerMagicSize     = 4
+	crossCellFalse      = uint8(0)
+	crossCellTrue       = uint8(1)
+	fileBufferSize      = 1 << 20
 )
 
 var le = binary.LittleEndian
@@ -35,7 +41,7 @@ var le = binary.LittleEndian
 func SaveGraph(g *Graph, dir string) error {
 	log.Printf("%s writing graph to %s", graphStoreLogPrefix, dir)
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, graphDataDirPerm); err != nil {
 		return err
 	}
 	if err := saveNodes(g, filepath.Join(dir, nodesFileName)); err != nil {
@@ -68,16 +74,14 @@ func SaveGraph(g *Graph, dir string) error {
 func LoadGraph(dir string) (*Graph, error) {
 	log.Printf("%s reading graph from %s", graphStoreLogPrefix, dir)
 
-	g := &Graph{
-		NodeIdx:         make(map[NodeID]uint32),
-		CellIdx:         make(map[NodeID]CellID),
-		BoundaryNodeIdx: make(map[NodeID]uint32),
-	}
+	g := &Graph{}
 
 	var err error
 	if g.Nodes, err = loadNodes(filepath.Join(dir, nodesFileName)); err != nil {
 		return nil, fmt.Errorf("nodes: %w", err)
 	}
+	g.NodeIdx = make(map[NodeID]uint32, len(g.Nodes))
+	g.CellIdx = make(map[NodeID]CellID, len(g.Nodes))
 	for i, n := range g.Nodes {
 		g.NodeIdx[n.ID] = uint32(i)
 		g.CellIdx[n.ID] = n.CellID
@@ -95,6 +99,7 @@ func LoadGraph(dir string) (*Graph, error) {
 	if g.BoundaryNodes, err = loadBoundary(filepath.Join(dir, boundaryFileName)); err != nil {
 		return nil, fmt.Errorf("boundary: %w", err)
 	}
+	g.BoundaryNodeIdx = make(map[NodeID]uint32, len(g.BoundaryNodes))
 	for i, nid := range g.BoundaryNodes {
 		g.BoundaryNodeIdx[nid] = uint32(i)
 	}
@@ -102,7 +107,7 @@ func LoadGraph(dir string) (*Graph, error) {
 		return nil, fmt.Errorf("overlay_adj: %w", err)
 	}
 	if err := loadMeta(g, filepath.Join(dir, metaFileName)); err != nil {
-		// Older graphs won't have meta.json — log and continue with zero bbox.
+		// Older graphs may not have meta.json, so recover the bbox from nodes.
 		log.Printf("%s meta.json unavailable (%v), recomputing bounding box from nodes", graphStoreLogPrefix, err)
 		g.BBox = boundingBoxFromNodes(g.Nodes)
 	}
@@ -128,25 +133,24 @@ type nodeBin struct {
 	CellID uint32
 }
 
-const nodeBinSize = 8 + 8 + 8 + 4 + 4 + 4
-
 func saveNodes(g *Graph, path string) error {
 	f, err := createFile(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	bw := bufio.NewWriterSize(f, fileBufferSize)
 
-	if err := writeHeader(f, uint64(len(g.Nodes))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.Nodes))); err != nil {
 		return err
 	}
 	for i := range g.Nodes {
 		n := &g.Nodes[i]
-		if err := writeFixed(f, nodeBin{n.ID, n.Lat, n.Lon, n.X, n.Y, n.CellID}); err != nil {
+		if err := writeFixed(bw, nodeBin{n.ID, n.Lat, n.Lon, n.X, n.Y, n.CellID}); err != nil {
 			return err
 		}
 	}
-	return nil
+	return bw.Flush()
 }
 
 func loadNodes(path string) ([]Node, error) {
@@ -155,11 +159,12 @@ func loadNodes(path string) ([]Node, error) {
 		return nil, err
 	}
 	defer f.Close()
+	br := bufio.NewReaderSize(f, fileBufferSize)
 
 	nodes := make([]Node, count)
 	for i := range nodes {
 		var b nodeBin
-		if err := binary.Read(f, le, &b); err != nil {
+		if err := binary.Read(br, le, &b); err != nil {
 			return nil, err
 		}
 		nodes[i] = Node{ID: b.ID, Lat: b.Lat, Lon: b.Lon, X: b.X, Y: b.Y, CellID: b.CellID}
@@ -185,13 +190,14 @@ func saveEdges(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+	bw := bufio.NewWriterSize(f, fileBufferSize)
 
-	if err := writeHeader(f, uint64(len(g.Edges))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.Edges))); err != nil {
 		return err
 	}
 	for i := range g.Edges {
 		e := &g.Edges[i]
-		if err := writeFixed(f, edgeBin{
+		if err := writeFixed(bw, edgeBin{
 			ID:         e.ID,
 			FromNodeID: e.FromNodeID,
 			ToNodeID:   e.ToNodeID,
@@ -204,7 +210,7 @@ func saveEdges(g *Graph, path string) error {
 			return err
 		}
 	}
-	return nil
+	return bw.Flush()
 }
 
 func loadEdges(path string) ([]Edge, error) {
@@ -213,11 +219,12 @@ func loadEdges(path string) ([]Edge, error) {
 		return nil, err
 	}
 	defer f.Close()
+	br := bufio.NewReaderSize(f, fileBufferSize)
 
 	edges := make([]Edge, count)
 	for i := range edges {
 		var b edgeBin
-		if err := binary.Read(f, le, &b); err != nil {
+		if err := binary.Read(br, le, &b); err != nil {
 			return nil, err
 		}
 		edges[i] = Edge{
@@ -240,56 +247,55 @@ func saveBaseAdj(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+	bw := bufio.NewWriterSize(f, fileBufferSize)
 
-	if err := writeHeader(f, uint64(len(g.BaseAdj.Offsets))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.BaseAdj.Offsets))); err != nil {
 		return err
 	}
 	for _, o := range g.BaseAdj.Offsets {
-		if err := writeUint32(f, o); err != nil {
+		if err := writeUint32(bw, o); err != nil {
 			return err
 		}
 	}
-	if err := writeUint64(f, uint64(len(g.BaseAdj.EdgeIDs))); err != nil {
+	if err := writeUint64(bw, uint64(len(g.BaseAdj.EdgeIDs))); err != nil {
 		return err
 	}
 	for _, e := range g.BaseAdj.EdgeIDs {
-		if err := writeUint32(f, e); err != nil {
+		if err := writeUint32(bw, e); err != nil {
 			return err
 		}
 	}
-	return nil
+	return bw.Flush()
 }
 
 func loadBaseAdj(path string) (AdjacencyList, error) {
-	f, offsetCount, hasHeader, err := openSequenceFile(path)
+	f, offsetCount, _, err := openSequenceFile(path)
 	if err != nil {
 		return AdjacencyList{}, err
 	}
 	defer f.Close()
+	br := bufio.NewReaderSize(f, fileBufferSize)
 
 	offsets := make([]uint32, offsetCount)
 	for i := range offsets {
-		v, err := readUint32(f)
+		v, err := readUint32(br)
 		if err != nil {
 			return AdjacencyList{}, err
 		}
 		offsets[i] = v
 	}
 
-	edgeCount, err := readUint64(f)
+	edgeCount, err := readUint64(br)
 	if err != nil {
 		return AdjacencyList{}, err
 	}
 	edgeIDs := make([]uint32, edgeCount)
 	for i := range edgeIDs {
-		v, err := readUint32(f)
+		v, err := readUint32(br)
 		if err != nil {
 			return AdjacencyList{}, err
 		}
 		edgeIDs[i] = v
-	}
-	if !hasHeader {
-		return AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}, nil
 	}
 	return AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}, nil
 }
@@ -300,33 +306,34 @@ func saveCells(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+	bw := bufio.NewWriterSize(f, fileBufferSize)
 
-	if err := writeHeader(f, uint64(len(g.Cells))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.Cells))); err != nil {
 		return err
 	}
 	for i := range g.Cells {
 		c := &g.Cells[i]
-		if err := writeUint32(f, c.ID); err != nil {
+		if err := writeUint32(bw, c.ID); err != nil {
 			return err
 		}
-		if err := writeUint64(f, uint64(len(c.InternalNodeIDs))); err != nil {
+		if err := writeUint64(bw, uint64(len(c.InternalNodeIDs))); err != nil {
 			return err
 		}
 		for _, nid := range c.InternalNodeIDs {
-			if err := writeUint64(f, nid); err != nil {
+			if err := writeUint64(bw, nid); err != nil {
 				return err
 			}
 		}
-		if err := writeUint64(f, uint64(len(c.BoundaryNodeIDs))); err != nil {
+		if err := writeUint64(bw, uint64(len(c.BoundaryNodeIDs))); err != nil {
 			return err
 		}
 		for _, nid := range c.BoundaryNodeIDs {
-			if err := writeUint64(f, nid); err != nil {
+			if err := writeUint64(bw, nid); err != nil {
 				return err
 			}
 		}
 	}
-	return nil
+	return bw.Flush()
 }
 
 func loadCells(path string) ([]Cell, error) {
@@ -335,32 +342,33 @@ func loadCells(path string) ([]Cell, error) {
 		return nil, err
 	}
 	defer f.Close()
+	br := bufio.NewReaderSize(f, fileBufferSize)
 
 	cells := make([]Cell, count)
 	for i := range cells {
-		id, err := readUint32(f)
+		id, err := readUint32(br)
 		if err != nil {
 			return nil, err
 		}
-		ic, err := readUint64(f)
+		ic, err := readUint64(br)
 		if err != nil {
 			return nil, err
 		}
 		internal := make([]NodeID, ic)
 		for j := range internal {
-			v, err := readUint64(f)
+			v, err := readUint64(br)
 			if err != nil {
 				return nil, err
 			}
 			internal[j] = v
 		}
-		bc, err := readUint64(f)
+		bc, err := readUint64(br)
 		if err != nil {
 			return nil, err
 		}
 		boundary := make([]NodeID, bc)
 		for j := range boundary {
-			v, err := readUint64(f)
+			v, err := readUint64(br)
 			if err != nil {
 				return nil, err
 			}
@@ -377,16 +385,17 @@ func saveBoundary(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+	bw := bufio.NewWriterSize(f, fileBufferSize)
 
-	if err := writeHeader(f, uint64(len(g.BoundaryNodes))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.BoundaryNodes))); err != nil {
 		return err
 	}
 	for _, nid := range g.BoundaryNodes {
-		if err := writeUint64(f, nid); err != nil {
+		if err := writeUint64(bw, nid); err != nil {
 			return err
 		}
 	}
-	return nil
+	return bw.Flush()
 }
 
 func loadBoundary(path string) ([]NodeID, error) {
@@ -395,10 +404,11 @@ func loadBoundary(path string) ([]NodeID, error) {
 		return nil, err
 	}
 	defer f.Close()
+	br := bufio.NewReaderSize(f, fileBufferSize)
 
 	nodes := make([]NodeID, count)
 	for i := range nodes {
-		v, err := readUint64(f)
+		v, err := readUint64(br)
 		if err != nil {
 			return nil, err
 		}
@@ -422,28 +432,29 @@ func saveOverlayAdj(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+	bw := bufio.NewWriterSize(f, fileBufferSize)
 
-	if err := writeHeader(f, uint64(len(g.OverlayAdj.Offsets))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.OverlayAdj.Offsets))); err != nil {
 		return err
 	}
 	for _, o := range g.OverlayAdj.Offsets {
-		if err := writeUint32(f, o); err != nil {
+		if err := writeUint32(bw, o); err != nil {
 			return err
 		}
 	}
-	if err := writeUint64(f, uint64(len(g.OverlayAdj.OverlayEdges))); err != nil {
+	if err := writeUint64(bw, uint64(len(g.OverlayAdj.OverlayEdges))); err != nil {
 		return err
 	}
 	for _, e := range g.OverlayAdj.OverlayEdges {
-		cc := uint8(0)
+		cc := crossCellFalse
 		if e.IsCrossCell {
-			cc = 1
+			cc = crossCellTrue
 		}
-		if err := writeFixed(f, overlayEdgeBin{e.FromNodeID, e.ToNodeID, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
+		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeID, e.ToNodeID, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
 			return err
 		}
 	}
-	return nil
+	return bw.Flush()
 }
 
 func loadOverlayAdj(path string) (OverlayAdjList, error) {
@@ -452,24 +463,25 @@ func loadOverlayAdj(path string) (OverlayAdjList, error) {
 		return OverlayAdjList{}, err
 	}
 	defer f.Close()
+	br := bufio.NewReaderSize(f, fileBufferSize)
 
 	offsets := make([]uint32, offsetCount)
 	for i := range offsets {
-		v, err := readUint32(f)
+		v, err := readUint32(br)
 		if err != nil {
 			return OverlayAdjList{}, err
 		}
 		offsets[i] = v
 	}
 
-	edgeCount, err := readUint64(f)
+	edgeCount, err := readUint64(br)
 	if err != nil {
 		return OverlayAdjList{}, err
 	}
 	edges := make([]OverlayEdge, edgeCount)
 	for i := range edges {
 		var b overlayEdgeBin
-		if err := binary.Read(f, le, &b); err != nil {
+		if err := binary.Read(br, le, &b); err != nil {
 			return OverlayAdjList{}, err
 		}
 		edges[i] = OverlayEdge{
@@ -483,7 +495,7 @@ func loadOverlayAdj(path string) (OverlayAdjList, error) {
 	return OverlayAdjList{Offsets: offsets, OverlayEdges: edges}, nil
 }
 
-// graphMeta is the JSON structure written to meta.json alongside the binary files.
+// graphMeta stores fields written to meta.json alongside the binary files.
 type graphMeta struct {
 	BBox BoundingBox `json:"bbox"`
 }
@@ -494,7 +506,11 @@ func saveMeta(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	return json.NewEncoder(f).Encode(graphMeta{BBox: g.BBox})
+	bw := bufio.NewWriterSize(f, fileBufferSize)
+	if err := json.NewEncoder(bw).Encode(graphMeta{BBox: g.BBox}); err != nil {
+		return err
+	}
+	return bw.Flush()
 }
 
 func loadMeta(g *Graph, path string) error {
@@ -503,8 +519,9 @@ func loadMeta(g *Graph, path string) error {
 		return err
 	}
 	defer f.Close()
+	br := bufio.NewReaderSize(f, fileBufferSize)
 	var m graphMeta
-	if err := json.NewDecoder(f).Decode(&m); err != nil {
+	if err := json.NewDecoder(br).Decode(&m); err != nil {
 		return err
 	}
 	g.BBox = m.BBox
@@ -516,10 +533,10 @@ func createFile(path string) (*os.File, error) {
 }
 
 func writeHeader(w io.Writer, count uint64) error {
-	if _, err := w.Write([]byte(magic)); err != nil {
+	if _, err := w.Write([]byte(fileMagic)); err != nil {
 		return err
 	}
-	if err := binary.Write(w, le, version); err != nil {
+	if err := binary.Write(w, le, fileVersion); err != nil {
 		return err
 	}
 	return binary.Write(w, le, count)
@@ -531,12 +548,12 @@ func openFile(path string) (*os.File, uint64, error) {
 		return nil, 0, err
 	}
 
-	hdr := make([]byte, 4)
+	hdr := make([]byte, headerMagicSize)
 	if _, err := io.ReadFull(f, hdr); err != nil {
 		f.Close()
 		return nil, 0, err
 	}
-	if string(hdr) != magic {
+	if string(hdr) != fileMagic {
 		f.Close()
 		return nil, 0, fmt.Errorf("bad magic in %s", path)
 	}
@@ -561,10 +578,10 @@ func openSequenceFile(path string) (*os.File, uint64, bool, error) {
 		return nil, 0, false, err
 	}
 
-	hdr := make([]byte, 4)
+	hdr := make([]byte, headerMagicSize)
 	n, err := io.ReadFull(f, hdr)
 	switch {
-	case err == nil && string(hdr) == magic:
+	case err == nil && string(hdr) == fileMagic:
 		var ver uint16
 		if err := binary.Read(f, le, &ver); err != nil {
 			f.Close()

@@ -69,7 +69,7 @@ func (m *Manager) optimizationWorker(
 			}
 
 			reason := rerouteReasonTrafficCleared
-			applyRouteUpdate(session, candidate, g, store, m, prepareRoute, now(), reason, &oldETA, &newETA)
+			applyRouteUpdate(session, candidate, g, store, m, prepareRoute, now(), reason, &oldETA, &newETA, nil)
 		}
 	}
 }

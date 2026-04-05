@@ -13,6 +13,9 @@ import (
 
 const (
 	defaultSimulationCount   = 1
+	defaultRouteAlternatives = 1
+	maxSimulationCount       = 1000
+	minSimulationWorkers     = 1
 	randomRouteAttemptFactor = 6
 	minRandomRouteDistanceSq = 0.0004
 	simulationWSLogPrefix    = "api: simulation websocket"
@@ -99,6 +102,16 @@ func (s *Server) handleSimulationWS(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 	}()
 
+	// Consume control frames so dead clients are noticed even on this server-push socket.
+	go func() {
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				conn.Close()
+				return
+			}
+		}
+	}()
+
 	for snapshots := range ch {
 		payload := simulationSnapshotMessage{
 			Type: "snapshot",
@@ -117,6 +130,9 @@ func normalizedSimulationCount(count int) int {
 	if count < defaultSimulationCount {
 		return defaultSimulationCount
 	}
+	if count > maxSimulationCount {
+		return maxSimulationCount
+	}
 	return count
 }
 
@@ -127,23 +143,13 @@ type geoBox struct {
 	maxLon float64
 }
 
-type randomRouteCandidate struct {
-	srcLat float64
-	srcLon float64
-	dstLat float64
-	dstLon float64
-}
-
 func (s *Server) randomSimulationRoutes(count int) []routing.Route {
 	if s.g.BBox.IsZero() {
 		log.Printf(simulationBBoxMissingLog)
 		return nil
 	}
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	start := time.Now()
-	attempts := count * randomRouteAttemptFactor
-	candidates := make([]randomRouteCandidate, 0, attempts)
 
 	bbox := geoBox{
 		minLat: s.g.BBox.MinLat,
@@ -151,18 +157,8 @@ func (s *Server) randomSimulationRoutes(count int) []routing.Route {
 		minLon: s.g.BBox.MinLon,
 		maxLon: s.g.BBox.MaxLon,
 	}
-	for i := 0; i < attempts; i++ {
-		srcLat, srcLon := bbox.randomPoint(rng)
-		dstLat, dstLon := bbox.randomPoint(rng)
-		candidates = append(candidates, randomRouteCandidate{
-			srcLat: srcLat,
-			srcLon: srcLon,
-			dstLat: dstLat,
-			dstLon: dstLon,
-		})
-	}
 
-	routes := s.computeRandomSimulationCandidates(candidates, count)
+	routes := s.computeRandomSimulationCandidates(bbox, count)
 	logSlowOperation(
 		slowSimulationRouteLogThreshold,
 		start,
@@ -173,46 +169,49 @@ func (s *Server) randomSimulationRoutes(count int) []routing.Route {
 	return routes
 }
 
-func (s *Server) computeRandomSimulationCandidates(candidates []randomRouteCandidate, limit int) []routing.Route {
-	if len(candidates) == 0 || limit <= 0 {
+func (s *Server) computeRandomSimulationCandidates(bbox geoBox, limit int) []routing.Route {
+	if limit <= 0 {
 		return nil
 	}
 
+	attempts := limit * randomRouteAttemptFactor
 	workerCount := runtime.NumCPU()
-	if workerCount < 1 {
-		workerCount = 1
+	if workerCount < minSimulationWorkers {
+		workerCount = minSimulationWorkers
 	}
-	if workerCount > len(candidates) {
-		workerCount = len(candidates)
+	if workerCount > attempts {
+		workerCount = attempts
 	}
 
 	liveWeights := s.liveWeightFunc()
-	jobs := make(chan randomRouteCandidate, workerCount)
+	jobs := make(chan struct{}, workerCount)
 	results := make(chan routing.Route, workerCount)
 	stop := make(chan struct{})
 
 	var wg sync.WaitGroup
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
-		go func() {
+		go func(workerID int) {
 			defer wg.Done()
+			rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
 			for {
-				var candidate randomRouteCandidate
-				var ok bool
 				select {
 				case <-stop:
 					return
-				case candidate, ok = <-jobs:
+				case _, ok := <-jobs:
 					if !ok {
 						return
 					}
 				}
 
-				if distanceSquared(candidate.srcLat, candidate.srcLon, candidate.dstLat, candidate.dstLon) < minRandomRouteDistanceSq {
+				srcLat, srcLon := bbox.randomPoint(rng)
+				dstLat, dstLon := bbox.randomPoint(rng)
+
+				if distanceSquared(srcLat, srcLon, dstLat, dstLon) < minRandomRouteDistanceSq {
 					continue
 				}
 
-				computed := s.router.Compute(candidate.srcLat, candidate.srcLon, candidate.dstLat, candidate.dstLon, 1, liveWeights)
+				computed := s.router.Compute(srcLat, srcLon, dstLat, dstLon, defaultRouteAlternatives, liveWeights)
 				if len(computed) == 0 {
 					continue
 				}
@@ -222,16 +221,16 @@ func (s *Server) computeRandomSimulationCandidates(candidates []randomRouteCandi
 				case results <- computed[0]:
 				}
 			}
-		}()
+		}(i)
 	}
 
 	go func() {
 		defer close(jobs)
-		for _, candidate := range candidates {
+		for i := 0; i < attempts; i++ {
 			select {
 			case <-stop:
 				return
-			case jobs <- candidate:
+			case jobs <- struct{}{}:
 			}
 		}
 	}()

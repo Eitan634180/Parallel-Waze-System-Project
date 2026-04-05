@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	slowRouteRequestLogThreshold      = 150 * time.Millisecond
-	slowSearchRequestLogThreshold     = 300 * time.Millisecond
-	slowSimulationRouteLogThreshold   = 250 * time.Millisecond
-	slowSessionCreationLogThreshold   = 50 * time.Millisecond
+	slowRouteRequestLogThreshold    = 150 * time.Millisecond
+	slowSearchRequestLogThreshold   = 300 * time.Millisecond
+	slowSimulationRouteLogThreshold = 250 * time.Millisecond
+	slowSessionCreationLogThreshold = 50 * time.Millisecond
 )
 
 func methodNotAllowed(w http.ResponseWriter) {

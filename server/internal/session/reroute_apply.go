@@ -25,6 +25,7 @@ func doReroute(
 ) {
 	s.Mu.RLock()
 	destination, ok := routeDestination(s.Route)
+	version := sessionVersion{stepIdx: s.StepIdx, routeID: s.Route.ID}
 	s.Mu.RUnlock()
 	if !ok {
 		return
@@ -40,7 +41,7 @@ func doReroute(
 		return
 	}
 
-	applyRouteUpdate(s, newRoutes[0], g, store, mgr, prepareRoute, now, reason, oldETA, newETA)
+	applyRouteUpdate(s, newRoutes[0], g, store, mgr, prepareRoute, now, reason, oldETA, newETA, &version)
 }
 
 func applyRouteUpdate(
@@ -54,15 +55,29 @@ func applyRouteUpdate(
 	reason string,
 	oldETA *float32,
 	newETA *float32,
+	expectedVersion *sessionVersion,
 ) routing.Route {
 	candidate.CongestionAhead, candidate.CongestedEdges = RouteCongestionSummary(candidate, store, g)
 	route := prepareRoute(candidate)
+	if sessionVersionChanged(s, expectedVersion) {
+		return routing.Route{}
+	}
 
 	replaceSessionRoute(s, route, store, mgr, now, reason)
 	sendRerouteMessage(s, route, reason, oldETA, newETA)
 	sendCurrentSpeedHints(s, store, g)
 
 	return route
+}
+
+func sessionVersionChanged(s *Session, expected *sessionVersion) bool {
+	if expected == nil {
+		return false
+	}
+
+	s.Mu.RLock()
+	defer s.Mu.RUnlock()
+	return s.StepIdx != expected.stepIdx || s.Route.ID != expected.routeID
 }
 
 func replaceSessionRoute(s *Session, route routing.Route, store *traffic.Store, mgr *Manager, now time.Time, reason string) {

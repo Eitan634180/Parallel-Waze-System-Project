@@ -21,7 +21,7 @@ func distanceFromExpectedPathMLocked(s *Session, lat, lon float64, g *builder.Gr
 	px, py := geo.Project(lat, lon)
 	best := distanceFromExpectedProjectionMLocked(s, g, px, py)
 
-	if lon >= minLatitude && lon <= maxLatitude && lat >= minLongitude && lat <= maxLongitude {
+	if lat < minLatitude || lat > maxLatitude {
 		swappedX, swappedY := geo.Project(lon, lat)
 		swappedBest := distanceFromExpectedProjectionMLocked(s, g, swappedX, swappedY)
 		if swappedBest < best {
