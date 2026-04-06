@@ -1,10 +1,9 @@
 package routing
 
 import (
-	"container/heap"
-
 	"nav-system/internal/geo"
 	"nav-system/internal/graph/builder"
+	"nav-system/internal/utilities"
 )
 
 // LocalRepairOverlay searches for a short overlay detour around a congested cross-cell edge.
@@ -35,11 +34,11 @@ func (r *Router) LocalRepairOverlay(
 	}
 
 	costs[srcNodeID] = 0
-	pq := &localAstarPQ{}
-	heap.Push(pq, localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
+	pq := utilities.NewHeap(func(a, b localAstarItem) bool { return a.f < b.f })
+	pq.Push(localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(localAstarItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
@@ -83,7 +82,7 @@ func (r *Router) LocalRepairOverlay(
 					prevNodeID: current.id,
 					edgeIdx:    edgeIdx,
 				}
-				heap.Push(pq, localAstarItem{
+				pq.Push(localAstarItem{
 					id:   overlayEdge.ToNodeID,
 					g:    nextCost,
 					f:    nextCost + heuristic(overlayEdge.ToNodeID),
@@ -125,11 +124,11 @@ func (r *Router) LocalRepairOriginal(
 	}
 
 	costs[srcNodeID] = 0
-	pq := &localAstarPQ{}
-	heap.Push(pq, localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
+	pq := utilities.NewHeap(func(a, b localAstarItem) bool { return a.f < b.f })
+	pq.Push(localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(localAstarItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
@@ -171,7 +170,7 @@ func (r *Router) LocalRepairOriginal(
 					prevNodeID: current.id,
 					edgeID:     edgeID,
 				}
-				heap.Push(pq, localAstarItem{
+				pq.Push(localAstarItem{
 					id:   edge.ToNodeID,
 					g:    nextCost,
 					f:    nextCost + heuristic(edge.ToNodeID),

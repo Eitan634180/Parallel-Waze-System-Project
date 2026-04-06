@@ -1,10 +1,9 @@
 package routing
 
 import (
-	"container/heap"
-
 	"nav-system/internal/geo"
 	"nav-system/internal/graph/builder"
+	"nav-system/internal/utilities"
 )
 
 func (r *Router) twoLevelSearch(
@@ -91,11 +90,11 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 		return geo.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
-	pq := &astarPQ{}
-	heap.Push(pq, astarItem{id: srcID, f: heuristic(srcIdx), g: 0})
+	pq := utilities.NewHeap(func(a, b astarItem) bool { return a.f < b.f })
+	pq.Push(astarItem{id: srcID, f: heuristic(srcIdx), g: 0})
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(astarItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
@@ -123,7 +122,7 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
-				heap.Push(pq, astarItem{
+				pq.Push(astarItem{
 					id: edge.ToNodeID,
 					g:  nextCost,
 					f:  nextCost + heuristic(nextIdx),
@@ -145,17 +144,17 @@ func (r *Router) overlayAStar(
 	costs = make(map[builder.NodeID]float32, len(injectionCosts)+len(dstSet))
 	pred = make(map[builder.NodeID]overlayPredEntry, len(injectionCosts)+len(dstSet))
 
-	pq := &astarPQ{}
+	pq := utilities.NewHeap(func(a, b astarItem) bool { return a.f < b.f })
 	for nodeID, cost := range injectionCosts {
 		costs[nodeID] = cost
-		heap.Push(pq, astarItem{id: nodeID, f: cost + heuristic(nodeID), g: cost})
+		pq.Push(astarItem{id: nodeID, f: cost + heuristic(nodeID), g: cost})
 	}
 
 	settledDestinations := 0
 	totalDestinations := len(dstSet)
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(astarItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
@@ -192,7 +191,7 @@ func (r *Router) overlayAStar(
 					prevNodeID: current.id,
 					edgeIdx:    edgeIdx,
 				}
-				heap.Push(pq, astarItem{
+				pq.Push(astarItem{
 					id: overlayEdge.ToNodeID,
 					g:  nextCost,
 					f:  nextCost + heuristic(overlayEdge.ToNodeID),

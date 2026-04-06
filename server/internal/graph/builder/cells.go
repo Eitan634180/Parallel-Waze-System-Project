@@ -1,13 +1,14 @@
 package builder
 
 import (
-	"container/heap"
 	"log"
 	"math"
 	"math/rand"
 	"runtime"
 	"sort"
 	"sync"
+
+	"nav-system/internal/utilities"
 )
 
 const cellBuilderLogPrefix = "cell-builder:"
@@ -503,14 +504,14 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 		targetSet[nid] = struct{}{}
 	}
 
-	pq := &dijkstraPQ{}
-	heap.Push(pq, dijkstraItem{id: srcID, weight: 0})
+	pq := utilities.NewHeap(func(a, b dijkstraItem) bool { return a.weight < b.weight })
+	pq.Push(dijkstraItem{id: srcID, weight: 0})
 
 	settled := 0
 	totalBoundary := len(boundaryNodes)
 
 	for pq.Len() > 0 {
-		cur := heap.Pop(pq).(dijkstraItem)
+		cur := pq.Pop()
 		curID := cur.id
 
 		// Skip stale queue entries after a better path has already been recorded.
@@ -543,7 +544,7 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 			newD := best.distM + e.DistanceM
 			if existing, hasDist := dist[toID]; !hasDist || newW < existing.weight {
 				dist[toID] = distInfo{newW, newD}
-				heap.Push(pq, dijkstraItem{id: toID, weight: newW})
+				pq.Push(dijkstraItem{id: toID, weight: newW})
 			}
 		}
 	}
@@ -560,18 +561,4 @@ func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[Nod
 type dijkstraItem struct {
 	id     NodeID
 	weight float32
-}
-
-type dijkstraPQ []dijkstraItem
-
-func (pq dijkstraPQ) Len() int            { return len(pq) }
-func (pq dijkstraPQ) Less(i, j int) bool  { return pq[i].weight < pq[j].weight }
-func (pq dijkstraPQ) Swap(i, j int)       { pq[i], pq[j] = pq[j], pq[i] }
-func (pq *dijkstraPQ) Push(x interface{}) { *pq = append(*pq, x.(dijkstraItem)) }
-func (pq *dijkstraPQ) Pop() interface{} {
-	old := *pq
-	n := len(old)
-	x := old[n-1]
-	*pq = old[:n-1]
-	return x
 }
