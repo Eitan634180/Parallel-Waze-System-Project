@@ -4,7 +4,7 @@ import { mapInstance } from '../../ui/map/map-manager.js';
 import { updateDistance, updateETA, updateTrafficStatus, toggleDrivingHUD } from '../../ui/panels/hud-panel.js';
 import { onArrival, showAlert } from '../../ui/panels/alerts-panel.js';
 import { renderMainCarDebug } from '../../ui/panels/debug-panel.js';
-import { ensureSimulationFeed, getLatestSimulationCars } from '../debug/debug-cars-service.js';
+import { ensureSimulationFeed, getNearbySimulationCars } from '../debug/debug-cars-service.js';
 import { advanceSpeedKmh, createDriverProfile, createMotionState, resolveTargetSpeedKmh } from './traffic-model.js';
 import { calculateBearing, calculateNewPosition, limitMovementByTraffic } from './driving-physics.js';
 import { computeTrafficStatus, getRouteTrafficStatus } from './traffic-evaluator.js';
@@ -108,7 +108,7 @@ export async function startDriving() {
     state.sim.driverProfile = createDriverProfile();
     state.sim.motionState = createMotionState();
     state.debug.serverData = null;
-    state.sim.cars = getLatestSimulationCars();
+    state.sim.cars = [];
     renderMainCarDebug(null);
     resetDrivingRuntime();
 
@@ -135,7 +135,7 @@ function updateSimulation(elapsedMs) {
     }
 
     if (state.drive.currentRoadIndex >= state.routing.activeLegs.length) {
-        const actualTimeSec = state.drive.startTimeMs 
+        const actualTimeSec = state.drive.startTimeMs
             ? (Date.now() - state.drive.startTimeMs) / MS_PER_SECOND
             : state.routing.activeObj.dynamicETA;
 
@@ -156,7 +156,7 @@ function updateSimulation(elapsedMs) {
         state.sim.driverProfile,
     );
     state.sim.motionState.speedKmh = advanceSpeedKmh(state.sim.motionState.speedKmh || speedKmhValue, targetSpeedKmh, elapsedMs, state.sim.driverProfile);
-    state.sim.cars = getLatestSimulationCars();
+    state.sim.cars = getNearbySimulationCars(state.drive.carPos?.[0], state.drive.carPos?.[1]);
     const unclampedSpeedKmh = state.sim.motionState.speedKmh;
     const unclampedMetersThisTick = (unclampedSpeedKmh / KMH_PER_MPS) * (elapsedMs / MS_PER_SECOND);
     const metersThisTick = limitMovementByTraffic(unclampedMetersThisTick, unclampedSpeedKmh);

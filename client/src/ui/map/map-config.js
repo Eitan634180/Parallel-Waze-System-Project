@@ -2,6 +2,7 @@ export const MAP_DEFAULTS = {
     center: [32.0853, 34.7818],
     debugCarZIndexOffset: 600,
     fitBoundsPadding: [100, 100],
+    initialBBoxInsetFraction: 0.3,
     maxZoom: 19,
     zoom: 12,
 };

@@ -7,7 +7,7 @@ export function loadConfig(argv) {
     headless: args.headless !== 'false',
     commuteDegrees: Math.max(0.01, Number(args['commute-deg'] || 0.25)),
     insetFraction: clamp(Number(args.inset || 0.1), 0, 0.4),
-    staggerMs: Math.max(0, Number(args.stagger || 0)),
+    staggerMs: Math.max(300, Number(args.stagger || 0)),
     statsMs: Math.max(1000, Number(args.stats || 5000)),
   };
 }
