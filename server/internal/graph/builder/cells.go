@@ -5,7 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
-	"sort"
+	"slices"
 	"sync"
 
 	"nav-system/internal/utilities"
@@ -39,6 +39,16 @@ func PartitionCells(g *Graph, maxCellSize int) {
 
 	sem := make(chan struct{}, runtime.NumCPU())
 
+	localIdxPool := &sync.Pool{
+		New: func() interface{} {
+			s := make([]int, len(g.Nodes))
+			for i := range s {
+				s[i] = -1
+			}
+			return &s
+		},
+	}
+
 	var bisect func(nodeIdxs []uint32, rng *rand.Rand)
 	bisect = func(nodeIdxs []uint32, rng *rand.Rand) {
 		defer wg.Done()
@@ -57,7 +67,7 @@ func PartitionCells(g *Graph, maxCellSize int) {
 			return
 		}
 
-		left, right := inertialFlowBisect(g, nodeIdxs, rng)
+		left, right := inertialFlowBisect(g, nodeIdxs, rng, localIdxPool)
 
 		wg.Add(2)
 		rng2 := rand.New(rand.NewSource(rng.Int63()))
@@ -95,7 +105,7 @@ func PartitionCells(g *Graph, maxCellSize int) {
 
 // inertialFlowBisect partitions a node subset into two halves with one
 // inertial-flow step.
-func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, right []uint32) {
+func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand, pool *sync.Pool) (left, right []uint32) {
 	n := len(nodeIdxs)
 
 	angle := rng.Float64() * 2 * math.Pi
@@ -110,14 +120,23 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 		nd := &g.Nodes[idx]
 		scores[i] = scored{idx: idx, score: float64(nd.X)*dx + float64(nd.Y)*dy}
 	}
-	sort.Slice(scores, func(a, b int) bool { return scores[a].score < scores[b].score })
+	slices.SortFunc(scores, func(a, b scored) int {
+		if a.score < b.score {
+			return -1
+		}
+		if a.score > b.score {
+			return 1
+		}
+		return 0
+	})
 
 	q := n / inertialFlowQuartileDiv
 	if q < minInertialFlowQuartile {
 		q = minInertialFlowQuartile
 	}
 
-	localIdx := make(map[uint32]int, n)
+	localIdxPtr := pool.Get().(*[]int)
+	localIdx := *localIdxPtr
 	for i, s := range scores {
 		localIdx[s.idx] = i
 	}
@@ -160,38 +179,51 @@ func inertialFlowBisect(g *Graph, nodeIdxs []uint32, rng *rand.Rand) (left, righ
 		}
 	}
 
+	for _, node := range scores {
+		localIdx[node.idx] = -1
+	}
+	pool.Put(localIdxPtr)
+
 	return left, right
 }
 
 // addUndirectedSubsetEdges adds one unit-capacity undirected edge for each
 // pair of subset nodes connected by at least one base-graph edge.
-func addUndirectedSubsetEdges(fn *flowNet, g *Graph, nodeIdxs []uint32, localIdx map[uint32]int) {
-	seen := make(map[uint64]struct{}, len(nodeIdxs))
+func addUndirectedSubsetEdges(fn *flowNet, g *Graph, nodeIdxs []uint32, localIdx []int) {
+	seen := make([]uint64, 0, len(nodeIdxs)*2)
 	for _, idx := range nodeIdxs {
 		u := localIdx[idx]
 		for _, eid := range g.BaseAdj.Neighbours(idx) {
-			toID := g.Edges[eid].ToNodeID
-			toIdx, ok := g.NodeIdx[toID]
-			if !ok {
-				continue
-			}
-			v, inSubset := localIdx[toIdx]
-			if !inSubset || u == v {
+			toIdx := g.Edges[eid].ToNodeIdx
+			v := localIdx[toIdx]
+			if v == -1 || u == v {
 				continue
 			}
 
-			a, b := idx, toIdx
+			a, b := u, v
 			if a > b {
 				a, b = b, a
 			}
-			key := uint64(a)<<32 | uint64(b)
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
+			seen = append(seen, uint64(uint32(a))<<32|uint64(uint32(b)))
+		}
+	}
 
-			fn.addEdge(u, v, unitFlowCapacity)
-			fn.addEdge(v, u, unitFlowCapacity)
+	if len(seen) == 0 {
+		return
+	}
+
+	slices.Sort(seen)
+
+	prev := seen[0]
+	fn.addEdge(int(prev>>32), int(uint32(prev)), unitFlowCapacity)
+	fn.addEdge(int(uint32(prev)), int(prev>>32), unitFlowCapacity)
+
+	for i := 1; i < len(seen); i++ {
+		curr := seen[i]
+		if curr != prev {
+			fn.addEdge(int(curr>>32), int(uint32(curr)), unitFlowCapacity)
+			fn.addEdge(int(uint32(curr)), int(curr>>32), unitFlowCapacity)
+			prev = curr
 		}
 	}
 }
@@ -209,12 +241,16 @@ type flowNet struct {
 }
 
 func newFlowNet(n int) *flowNet {
-	return &flowNet{
+	fn := &flowNet{
 		graph: make([][]flowEdge, n),
 		level: make([]int, n),
 		iter:  make([]int, n),
 		q:     make([]int, 0, n),
 	}
+	for i := range fn.level {
+		fn.level[i] = -1
+	}
+	return fn
 }
 
 func (fn *flowNet) addEdge(u, v, cap int) {
@@ -223,8 +259,9 @@ func (fn *flowNet) addEdge(u, v, cap int) {
 }
 
 func (fn *flowNet) bfs(s int) {
-	for i := range fn.level {
-		fn.level[i] = -1
+	for _, v := range fn.q {
+		fn.level[v] = -1
+		fn.iter[v] = 0
 	}
 
 	fn.q = fn.q[:0]
@@ -267,9 +304,7 @@ func (fn *flowNet) maxflow(s, t int) int {
 		if fn.level[t] < 0 {
 			return flow
 		}
-		for i := range fn.iter {
-			fn.iter[i] = 0
-		}
+
 		for {
 			f := fn.dfs(s, t, math.MaxInt32)
 			if f == 0 {
