@@ -9,6 +9,7 @@ import (
 
 	"nav-system/internal/graph/builder"
 	"nav-system/internal/routing"
+	"nav-system/internal/session"
 	"nav-system/internal/traffic"
 )
 
@@ -24,6 +25,17 @@ type CarSnapshot struct {
 	Lon float64 `json:"lon"`
 }
 
+type EdgeTravel struct {
+	EdgeID      uint32
+	ObservedSec float32
+}
+
+type SessionBridge struct {
+	Create     func(route routing.Route, stepIdx int, lat, lon float64) *session.Session
+	ProcessPing func(sess *session.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel)
+	Destroy    func(sess *session.Session)
+}
+
 type car struct {
 	id         string
 	route      routing.Route
@@ -35,6 +47,9 @@ type car struct {
 	lon        float64
 	paceBias   float32
 	edgeActive bool
+	lastSpeedKmh float32
+	pendingEdgeEvents []EdgeTravel
+	session    *session.Session
 }
 
 type Manager struct {
@@ -46,6 +61,7 @@ type Manager struct {
 	cars        map[string]*car
 	subscribers map[int]chan []CarSnapshot
 	nextSubID   int
+	sessionBridge SessionBridge
 }
 
 func NewManager(g *builder.Graph, store *traffic.Store) *Manager {
@@ -56,6 +72,12 @@ func NewManager(g *builder.Graph, store *traffic.Store) *Manager {
 		cars:        make(map[string]*car),
 		subscribers: make(map[int]chan []CarSnapshot),
 	}
+}
+
+func (m *Manager) SetSessionBridge(bridge SessionBridge) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sessionBridge = bridge
 }
 
 func (m *Manager) Run(ctx context.Context) {
@@ -101,7 +123,10 @@ func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) in
 			paceBias: 0.85 + m.rng.Float32()*0.30,
 		}
 
-		if route.Steps[startIndex+1].EdgeID != nil {
+		if m.sessionBridge.Create != nil && m.sessionBridge.ProcessPing != nil && m.sessionBridge.Destroy != nil {
+			c.session = m.sessionBridge.Create(route, c.stepIdx, c.lat, c.lon)
+			c.edgeActive = c.session != nil && route.Steps[startIndex+1].EdgeID != nil
+		} else if route.Steps[startIndex+1].EdgeID != nil {
 			m.store.EnterEdge(builder.EdgeID(*route.Steps[startIndex+1].EdgeID))
 			c.edgeActive = true
 		}
@@ -116,6 +141,10 @@ func (m *Manager) Clear() {
 	defer m.mu.Unlock()
 
 	for _, c := range m.cars {
+		if c.session != nil && m.sessionBridge.Destroy != nil {
+			m.sessionBridge.Destroy(c.session)
+			continue
+		}
 		if c.edgeActive && c.stepIdx < len(c.route.Steps) && c.route.Steps[c.stepIdx].EdgeID != nil {
 			m.store.LeaveEdge(builder.EdgeID(*c.route.Steps[c.stepIdx].EdgeID))
 		}
@@ -157,8 +186,15 @@ func (m *Manager) tick(dtSec float32) {
 	defer m.mu.Unlock()
 
 	for id, c := range m.cars {
-		if !advanceCar(c, m.g, m.store, dtSec) {
+		if !advanceCar(c, m.g, m.store, dtSec, m.sessionBridge.ProcessPing) {
+			if c.session != nil && m.sessionBridge.Destroy != nil {
+				m.sessionBridge.Destroy(c.session)
+			}
 			delete(m.cars, id)
+			continue
+		}
+		if c.session != nil {
+			syncCarWithSession(c)
 		}
 	}
 	m.broadcastLocked()
@@ -189,7 +225,7 @@ func (m *Manager) broadcastLocked() {
 	}
 }
 
-func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) bool {
+func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32, processPing func(sess *session.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel)) bool {
 	remainingSec := dtSec
 
 	for remainingSec > 0 {
@@ -199,8 +235,13 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) b
 
 		speedMps := currentSpeedMps(c, g, store)
 		if speedMps <= 0 {
+			if c.session != nil && processPing != nil {
+				processPing(c.session, c.lat, c.lon, c.lastSpeedKmh, c.stepIdx, c.pendingEdgeEvents)
+				c.pendingEdgeEvents = c.pendingEdgeEvents[:0]
+			}
 			return true
 		}
+		c.lastSpeedKmh = speedMps * 3.6
 
 		prev := c.route.Steps[c.stepIdx-1]
 		cur := c.route.Steps[c.stepIdx]
@@ -213,14 +254,18 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) b
 		if leftOnLeg > maxDistanceThisTick {
 			c.progressM += maxDistanceThisTick
 			c.edgeTimeS += remainingSec
-			recordSimSpeedSample(c, cur, speedMps, g, store)
+			recordSimSpeedSample(c, cur, speedMps, g, store, c.session == nil)
 			updateInterpolatedPosition(c, prev, cur, legDist)
+			if c.session != nil && processPing != nil {
+				processPing(c.session, c.lat, c.lon, c.lastSpeedKmh, c.stepIdx, c.pendingEdgeEvents)
+				c.pendingEdgeEvents = c.pendingEdgeEvents[:0]
+			}
 			return true
 		}
 
 		timeOnLeg := leftOnLeg / speedMps
 		c.edgeTimeS += timeOnLeg
-		recordSimSpeedSample(c, cur, speedMps, g, store)
+		recordSimSpeedSample(c, cur, speedMps, g, store, c.session == nil)
 		remainingSec -= timeOnLeg
 		c.progressM = 0
 		c.lat = cur.Lat
@@ -228,10 +273,12 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) b
 
 		if c.edgeActive && cur.EdgeID != nil {
 			eid := builder.EdgeID(*cur.EdgeID)
-			if int(eid) < len(g.Edges) && g.Edges[eid].Weight > 0 && c.edgeTimeS > 0 {
+			if c.session != nil {
+				c.pendingEdgeEvents = append(c.pendingEdgeEvents, EdgeTravel{EdgeID: uint32(eid), ObservedSec: c.edgeTimeS})
+			} else if int(eid) < len(g.Edges) && g.Edges[eid].Weight > 0 && c.edgeTimeS > 0 {
 				store.RecordObservation(eid, c.edgeTimeS, g.Edges[eid].Weight)
+				store.LeaveEdge(eid)
 			}
-			store.LeaveEdge(eid)
 			c.edgeActive = false
 			c.edgeTimeS = 0
 			c.lastObservationSampleS = 0
@@ -239,16 +286,28 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32) b
 
 		c.stepIdx++
 		if c.stepIdx >= len(c.route.Steps) {
+			if c.session != nil && processPing != nil {
+				processPing(c.session, c.lat, c.lon, c.lastSpeedKmh, len(c.route.Steps)-1, c.pendingEdgeEvents)
+				c.pendingEdgeEvents = c.pendingEdgeEvents[:0]
+			}
 			return false
 		}
-		if nextEdge := c.route.Steps[c.stepIdx].EdgeID; nextEdge != nil {
+		if nextEdge := c.route.Steps[c.stepIdx].EdgeID; nextEdge != nil && c.session == nil {
 			store.EnterEdge(builder.EdgeID(*nextEdge))
+			c.edgeActive = true
+			c.edgeTimeS = 0
+			c.lastObservationSampleS = 0
+		} else if nextEdge != nil {
 			c.edgeActive = true
 			c.edgeTimeS = 0
 			c.lastObservationSampleS = 0
 		}
 	}
 
+	if c.session != nil && processPing != nil {
+		processPing(c.session, c.lat, c.lon, c.lastSpeedKmh, c.stepIdx, c.pendingEdgeEvents)
+		c.pendingEdgeEvents = c.pendingEdgeEvents[:0]
+	}
 	return true
 }
 
@@ -294,7 +353,10 @@ func routeLegWeight(route routing.Route, startIndex int) float32 {
 	return legDist
 }
 
-func recordSimSpeedSample(c *car, step routing.Step, speedMps float32, g *builder.Graph, store *traffic.Store) {
+func recordSimSpeedSample(c *car, step routing.Step, speedMps float32, g *builder.Graph, store *traffic.Store, enabled bool) {
+	if !enabled {
+		return
+	}
 	if !c.edgeActive || step.EdgeID == nil || speedMps <= 0 {
 		return
 	}
@@ -373,4 +435,29 @@ func updateInterpolatedPosition(c *car, prev, cur routing.Step, legDist float32)
 
 func carID(n int64) string {
 	return "sim-car-" + strconv.FormatInt(n, 10)
+}
+
+func syncCarWithSession(c *car) {
+	if c.session == nil {
+		return
+	}
+
+	c.session.Mu.RLock()
+	sessionRoute := c.session.Route
+	sessionStepIdx := c.session.StepIdx
+	sessionLat := c.session.LastLat
+	sessionLon := c.session.LastLon
+	c.session.Mu.RUnlock()
+
+	if sessionRoute.ID != "" && sessionRoute.ID != c.route.ID {
+		c.route = sessionRoute
+		c.stepIdx = sessionStepIdx
+		c.progressM = 0
+		c.edgeTimeS = 0
+		c.lastObservationSampleS = 0
+		c.edgeActive = session.CurrentEdgeForStep(sessionRoute, sessionStepIdx) != nil
+	}
+
+	c.lat = sessionLat
+	c.lon = sessionLon
 }

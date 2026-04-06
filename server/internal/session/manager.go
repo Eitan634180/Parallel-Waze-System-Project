@@ -26,24 +26,14 @@ func NewManager() *Manager {
 
 // Create registers a new session for the given route and returns it.
 func (m *Manager) Create(route routing.Route) *Session {
-	id := uuid.NewString()
-	stepIdx := InitialStepIndex(route)
-	session := &Session{
-		ID:            id,
-		Route:         route,
-		StepIdx:       stepIdx,
-		CurrentEdgeID: CurrentEdgeForStep(route, stepIdx),
-		LastPing:      now(),
-		LastReroute:   now(),
-		SendChan:      make(chan OutMsg, 256),
-	}
+	return m.create(route, InitialStepIndex(route), make(chan OutMsg, 256))
+}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.sessions[id] = session
-	m.subscribeEdges(id, route.Steps[stepIdx:])
-	return session
+// CreateHeadless registers a session without an attached outbound message queue.
+// It is intended for server-driven synthetic cars that should exercise the same
+// routing/session logic without requiring a websocket client.
+func (m *Manager) CreateHeadless(route routing.Route, stepIdx int) *Session {
+	return m.create(route, stepIdx, nil)
 }
 
 // Get retrieves a session by ID.
@@ -170,4 +160,36 @@ func (m *Manager) unsubscribeEdge(sessionID string, edgeID builder.EdgeID) {
 	if len(subscribers) == 0 {
 		delete(m.edgeSubscribers, edgeID)
 	}
+}
+
+func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan OutMsg) *Session {
+	id := uuid.NewString()
+	if stepIdx < 0 {
+		stepIdx = 0
+	}
+	if stepIdx >= len(route.Steps) {
+		stepIdx = len(route.Steps) - 1
+	}
+	if len(route.Steps) == 0 {
+		stepIdx = 0
+	}
+
+	session := &Session{
+		ID:            id,
+		Route:         route,
+		StepIdx:       stepIdx,
+		CurrentEdgeID: CurrentEdgeForStep(route, stepIdx),
+		LastPing:      now(),
+		LastReroute:   now(),
+		SendChan:      sendChan,
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.sessions[id] = session
+	if stepIdx >= 0 && stepIdx < len(route.Steps) {
+		m.subscribeEdges(id, route.Steps[stepIdx:])
+	}
+	return session
 }

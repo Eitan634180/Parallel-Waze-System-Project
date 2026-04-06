@@ -52,6 +52,43 @@ func NewServer(
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 		mux:        http.NewServeMux(),
 	}
+	sim.SetSessionBridge(simulation.SessionBridge{
+		Create: func(route routing.Route, stepIdx int, lat, lon float64) *session.Session {
+			sess := mgr.CreateHeadless(route, stepIdx)
+			sess.Mu.Lock()
+			sess.LastLat = lat
+			sess.LastLon = lon
+			sess.Mu.Unlock()
+			s.initializeSessionEdge(sess)
+			return sess
+		},
+		ProcessPing: func(sess *session.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []simulation.EdgeTravel) {
+			msg := pingMsg{
+				Type:      wsMessageTypePing,
+				Lat:       lat,
+				Lon:       lon,
+				SpeedKmh:  speedKmh,
+				StepIndex: stepIdx,
+			}
+			if len(edgeEvents) > 0 {
+				msg.EdgeEvents = make([]edgeTravel, len(edgeEvents))
+				for i, event := range edgeEvents {
+					msg.EdgeEvents[i] = edgeTravel{EdgeID: event.EdgeID, ObservedSec: event.ObservedSec}
+				}
+			}
+			s.processPing(sess, msg)
+		},
+		Destroy: func(sess *session.Session) {
+			sess.Mu.Lock()
+			currentEdgeID := sess.CurrentEdgeID
+			sess.CurrentEdgeID = nil
+			sess.Mu.Unlock()
+			if currentEdgeID != nil {
+				s.store.LeaveEdge(builder.EdgeID(*currentEdgeID))
+			}
+			s.mgr.Delete(sess.ID)
+		},
+	})
 	// Set Nominatim ViewBox from the graph's bounding box (if not overridden by env).
 	if s.search.ViewBox == "" && g.BBox.MaxLat != 0 {
 		s.search.ViewBox = g.BBox.NominatimViewBox()
