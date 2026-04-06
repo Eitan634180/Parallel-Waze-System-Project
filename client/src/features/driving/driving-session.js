@@ -1,6 +1,10 @@
 import { createSession, deleteSession } from '../../services/rest/navigation-api.js';
 import { connectToSession, disconnectSession } from '../../services/ws/socket-client.js';
 
+const SESSION_LOG_MESSAGES = {
+    deleteFailed: 'Navigation session cleanup failed',
+};
+
 export async function openDrivingSession(routeId, callbacks) {
     const sessionId = await createSession(routeId);
     try {
@@ -23,6 +27,6 @@ async function safeDeleteSession(sessionId) {
     try {
         await deleteSession(sessionId);
     } catch (error) {
-        console.error('Failed to delete navigation session:', error);
+        console.error(SESSION_LOG_MESSAGES.deleteFailed, error);
     }
 }

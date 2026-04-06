@@ -6,15 +6,20 @@ let pingElapsedMs = 0;
 let lastTickAt = 0;
 
 const NEXT_STEP_OFFSET = 1;
+const WORKER_MESSAGE_TYPES = {
+    start: 'start',
+    stop: 'stop',
+    tick: 'tick',
+};
 
 export function startDrivingRuntime(onTick, onError) {
     const worker = ensureDrivingWorker(onTick, onError);
-    worker.postMessage({ type: 'start', tickMs: tick });
+    worker.postMessage({ type: WORKER_MESSAGE_TYPES.start, tickMs: tick });
 }
 
 export function stopDrivingRuntime() {
     if (drivingWorker) {
-        drivingWorker.postMessage({ type: 'stop' });
+        drivingWorker.postMessage({ type: WORKER_MESSAGE_TYPES.stop });
     }
     resetDrivingRuntime();
 }
@@ -53,7 +58,7 @@ function ensureDrivingWorker(onTick, onError) {
     const workerUrl = new URL('./simulation-ticker.worker.js', import.meta.url);
     drivingWorker = new Worker(workerUrl);
     drivingWorker.onmessage = (event) => {
-        if (event.data?.type !== 'tick') {
+        if (event.data?.type !== WORKER_MESSAGE_TYPES.tick) {
             return;
         }
 

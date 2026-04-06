@@ -1,4 +1,6 @@
 /.cache/
-/server/data/map/*.bin
-/server/data/map/*.pbf
-/server/.gocache/
+/.tmp/
+/server/*.exe
+/server/data/.last-region
+/server/data/geofabrik-index.json
+/server/data/map/**

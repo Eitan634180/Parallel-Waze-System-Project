@@ -1,3 +1,5 @@
+import { MAP_COLORS, MAP_LAYER_STYLE } from '../map-config.js';
+
 export function refreshRouteInspector(manager) {
     clearInspectorLayer(manager);
     manager.routeInspector.edgeLines = [];
@@ -17,15 +19,15 @@ export function refreshRouteInspector(manager) {
             [leg.from_node[1], leg.from_node[0]],
             [leg.to_node[1], leg.to_node[0]],
         ], {
-            color: '#007aff',
-            weight: 5,
-            opacity: 0.95,
+            color: MAP_COLORS.routeInspector,
+            weight: MAP_LAYER_STYLE.debugRouteWeight,
+            opacity: MAP_LAYER_STYLE.debugRouteOpacity,
             lineCap: 'round',
         });
 
         line.on('click', () => {
-            edgeLines.forEach((edgeLine) => edgeLine.setStyle({ color: '#007aff', weight: 5 }));
-            line.setStyle({ color: '#ff3d00', weight: 7 });
+            edgeLines.forEach((edgeLine) => edgeLine.setStyle({ color: MAP_COLORS.routeInspector, weight: MAP_LAYER_STYLE.debugRouteWeight }));
+            line.setStyle({ color: MAP_COLORS.routeInspectorSelected, weight: MAP_LAYER_STYLE.debugRouteWeightSelected });
             manager.routeInspector.onEdgeClick?.({
                 index,
                 edgeId: leg.edge_id,
@@ -47,10 +49,10 @@ export function refreshRouteInspector(manager) {
 
     routeObj.steps.forEach((step, index) => {
         layers.push(L.circleMarker([step.lat, step.lon], {
-            radius: index === 0 || index === routeObj.steps.length - 1 ? 5 : 3,
-            fillColor: index === 0 ? '#33ccff' : index === routeObj.steps.length - 1 ? '#ff3d00' : '#ffffff',
+            radius: index === 0 || index === routeObj.steps.length - 1 ? MAP_LAYER_STYLE.inspectorTerminalNodeRadius : MAP_LAYER_STYLE.inspectorNodeRadius,
+            fillColor: index === 0 ? MAP_COLORS.primaryRoute : index === routeObj.steps.length - 1 ? MAP_COLORS.destination : MAP_COLORS.waypoint,
             fillOpacity: 1,
-            color: '#0f172a',
+            color: MAP_COLORS.endpointText,
             weight: 1.5,
         }));
     });

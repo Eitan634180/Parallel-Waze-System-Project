@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	defaultSearchLimit        = 5
-	defaultSearchLanguage     = "he"
-	defaultSearchCountryCodes = "il,ps"
-	defaultSearchViewBox      = "34.15,33.45,35.90,29.45"
+	defaultSearchLimit    = 5
+	defaultSearchLanguage = ""
 )
 
 type searchConfig struct {
@@ -26,10 +24,8 @@ var allowedOriginOverrides = loadAllowedOriginOverrides()
 
 func loadSearchConfig() searchConfig {
 	cfg := searchConfig{
-		Limit:        defaultSearchLimit,
-		Language:     defaultSearchLanguage,
-		CountryCodes: defaultSearchCountryCodes,
-		ViewBox:      defaultSearchViewBox,
+		Limit:    defaultSearchLimit,
+		Language: defaultSearchLanguage,
 	}
 
 	if v := strings.TrimSpace(os.Getenv("NAV_SEARCH_LIMIT")); v != "" {

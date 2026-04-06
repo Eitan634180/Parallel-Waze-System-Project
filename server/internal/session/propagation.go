@@ -9,26 +9,58 @@ import (
 	"nav-system/internal/traffic"
 )
 
+const propagationJobQueueFactor = 4
+
+type propagationJob struct {
+	session       *Session
+	improvedEdges []traffic.ChangedEdge
+}
+
 // RunPropagation broadcasts speed updates for edges whose live traffic changed.
 func (m *Manager) RunPropagation(ctx context.Context, store *traffic.Store, g *builder.Graph) {
+	workerCount := optimizationWorkerLimit
+	jobs := make(chan propagationJob, workerCount*propagationJobQueueFactor)
+
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				flagBetterRouteIfHelpful(job.session, job.improvedEdges, store, g)
+			}
+		}()
+	}
+
 	ticker := newTicker(propagationInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
 			return
 		case <-ticker.C:
-			m.propagate(store, g)
+			m.propagate(ctx, jobs, store, g)
 		}
 	}
 }
 
-func (m *Manager) propagate(store *traffic.Store, g *builder.Graph) {
+func (m *Manager) propagate(ctx context.Context, jobs chan<- propagationJob, store *traffic.Store, g *builder.Graph) {
 	changedEdges := store.DirtySnapshot()
 	improvedEdges := significantlyImprovedEdges(changedEdges)
 	if len(improvedEdges) > 0 {
-		go evaluateHeuristics(m.activeSessions(), improvedEdges, store, g)
+		active := m.activeSessions()
+		for _, session := range active {
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- propagationJob{session: session, improvedEdges: improvedEdges}:
+			default:
+				// Drop job if queue is full (we'll try again on next tick)
+			}
+		}
 	}
 
 	for _, changed := range changedEdges {
@@ -85,36 +117,6 @@ func sessionHasConnection(s *Session) bool {
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 	return s.Conn != nil
-}
-
-func evaluateHeuristics(sessions []*Session, improvedEdges []traffic.ChangedEdge, store *traffic.Store, g *builder.Graph) {
-	workerCount := len(sessions)
-	if workerCount == 0 {
-		return
-	}
-	if workerCount > optimizationWorkerLimit {
-		workerCount = optimizationWorkerLimit
-	}
-
-	chunkSize := (len(sessions) + workerCount - 1) / workerCount
-	var wg sync.WaitGroup
-
-	for start := 0; start < len(sessions); start += chunkSize {
-		end := start + chunkSize
-		if end > len(sessions) {
-			end = len(sessions)
-		}
-
-		wg.Add(1)
-		go func(batch []*Session) {
-			defer wg.Done()
-			for _, session := range batch {
-				flagBetterRouteIfHelpful(session, improvedEdges, store, g)
-			}
-		}(sessions[start:end])
-	}
-
-	wg.Wait()
 }
 
 func flagBetterRouteIfHelpful(s *Session, improvedEdges []traffic.ChangedEdge, store *traffic.Store, g *builder.Graph) {
@@ -180,5 +182,3 @@ func heuristicSnapshot(s *Session, g *builder.Graph) (heuristicSessionSnapshot, 
 		eta:         s.ETA,
 	}, true
 }
-
-

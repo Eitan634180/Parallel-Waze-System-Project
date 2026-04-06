@@ -1,9 +1,13 @@
+import { MAP_LAYER_STYLE } from '../map-config.js';
+
+const VEHICLE_ICON_HTML = `<div class="car-body"><img src="assets/car.svg" width="${MAP_LAYER_STYLE.vehicleIconSize[0]}" height="${MAP_LAYER_STYLE.vehicleIconSize[1]}"></div>`;
+
 export function initCarMarker(manager, startPos) {
     const carIcon = L.divIcon({
         className: 'car-icon-container',
-        html: '<div class="car-body"><img src="assets/car.svg" width="30" height="45"></div>',
-        iconSize: [30, 45],
-        iconAnchor: [15, 22],
+        html: VEHICLE_ICON_HTML,
+        iconSize: MAP_LAYER_STYLE.vehicleIconSize,
+        iconAnchor: MAP_LAYER_STYLE.vehicleIconAnchor,
     });
 
     removeCarMarker(manager);

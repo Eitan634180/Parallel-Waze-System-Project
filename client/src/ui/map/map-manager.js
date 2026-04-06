@@ -2,6 +2,19 @@ import { clearMapLayers, clearRouteLayers, drawAlternatives, drawEndpointMarkers
 import { clearDebugCars, removeDebugCar, setDebugCarsVisible, syncDebugCars, upsertDebugCar } from './layers/debug-cars-layer.js';
 import { refreshRouteInspector } from './layers/route-inspector.js';
 import { initCarMarker, removeCarMarker, updateCarPositionAndRotation } from './layers/vehicle-layer.js';
+import { MAP_DEFAULTS, MAP_TILES } from './map-config.js';
+
+function hasValidBoundingBox(systemInfo) {
+    if (!systemInfo?.bbox) return false;
+
+    const { min_lat, max_lat, min_lon, max_lon } = systemInfo.bbox;
+    return Number.isFinite(min_lat)
+        && Number.isFinite(max_lat)
+        && Number.isFinite(min_lon)
+        && Number.isFinite(max_lon)
+        && max_lat > min_lat
+        && max_lon > min_lon;
+}
 
 class MapManager {
     constructor() {
@@ -25,18 +38,28 @@ class MapManager {
         this.debugCarsVisible = true;
     }
 
-    initMap(containerId = 'map') {
+    initMap(containerId = 'map', systemInfo = null) {
         this.map = L.map(containerId, {
-            center: [32.0853, 34.7818],
-            zoom: 12,
+            center: MAP_DEFAULTS.center,
+            zoom: MAP_DEFAULTS.zoom,
             zoomControl: true,
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-            subdomains: 'abcd',
-            maxZoom: 19,
+        L.tileLayer(MAP_TILES.url, {
+            attribution: MAP_TILES.attribution,
+            subdomains: MAP_TILES.subdomains,
+            maxZoom: MAP_DEFAULTS.maxZoom,
         }).addTo(this.map);
+
+        if (hasValidBoundingBox(systemInfo)) {
+            const { min_lat, max_lat, min_lon, max_lon } = systemInfo.bbox;
+            this.map.fitBounds(
+                [[min_lat, min_lon], [max_lat, max_lon]],
+                { padding: MAP_DEFAULTS.fitBoundsPadding },
+            );
+        } else if (Number.isFinite(systemInfo?.center_lat) && Number.isFinite(systemInfo?.center_lon)) {
+            this.map.setView([systemInfo.center_lat, systemInfo.center_lon], MAP_DEFAULTS.zoom);
+        }
     }
 
     drawRoute(coordinates, source, dest) {

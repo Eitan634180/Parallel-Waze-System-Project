@@ -34,12 +34,12 @@ func attemptCongestionReroute(
 		return
 	}
 
-	reason := "traffic"
+	reason := rerouteReasonTraffic
 	if isLocalPatch {
-		reason = "local_patch"
+		reason = rerouteReasonLocalPatch
 	}
 
-	applyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA)
+	applyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA, nil)
 }
 
 func captureCongestionContext(s *Session, g *builder.Graph, store *traffic.Store) (congestionContext, bool) {

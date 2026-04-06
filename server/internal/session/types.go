@@ -52,7 +52,7 @@ type NavigationDebug struct {
 	LastRerouteAtUnixMs int64   `json:"last_reroute_at_unix_ms,omitempty"`
 }
 
-// Session holds the full state of an active driving session.
+// Session stores the mutable state for one active navigation session.
 type Session struct {
 	Mu    sync.RWMutex
 	ID    string
@@ -82,20 +82,17 @@ type Session struct {
 	PumpCancel context.CancelFunc
 }
 
-// Send queues a message to be written to the client's WebSocket connection.
-// It does not block. If the client buffer is full, the message is dropped.
+// Send queues a websocket message without blocking.
 func (s *Session) Send(msg OutMsg) error {
 	select {
 	case s.SendChan <- msg:
 		return nil
 	default:
-		// Client is too slow, dropping message to prevent server blockage
 		return errors.New("client message buffer full")
 	}
 }
 
-// WritePump pushes queued messages to the websocket connection.
-// It enforces a 2-second write deadline to prevent hanging the goroutine.
+// WritePump flushes queued messages to the websocket until the context ends.
 func (s *Session) WritePump(ctx context.Context, conn *websocket.Conn) {
 	for {
 		select {

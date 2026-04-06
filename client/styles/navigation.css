@@ -117,7 +117,7 @@ button {
   color: var(--accent);
 }
 
-/* Input group */
+/* Search input */
 .input-group {
   display: flex;
   flex-direction: column;
@@ -233,7 +233,7 @@ button {
   padding-left: 20px;
 }
 
-/* Navigate button */
+/* Primary actions */
 #navigate-btn {
   display: flex;
   align-items: center;
@@ -268,7 +268,7 @@ button {
   cursor: not-allowed;
 }
 
-/* Scrollbar styling */
+/* Scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
 }
@@ -282,7 +282,7 @@ button {
   border-radius: 3px;
 }
 
-/* Loading spinner on button */
+/* Loading state */
 .loading #navigate-btn::after {
   content: '';
   width: 16px;
@@ -315,7 +315,7 @@ button {
   gap: 12px;
 }
 
-/* Route Options */
+/* Route options */
 .route-options {
   display: flex;
   flex-direction: column;
@@ -448,7 +448,7 @@ button {
   color: var(--danger);
 }
 
-/* Start drive */
+/* Driving controls */
 #start-drive-btn {
   display: flex;
   align-items: center;
@@ -823,7 +823,7 @@ button {
   display: none !important;
 }
 
-/* Car Icon Styles */
+/* Vehicle markers */
 .car-icon-container {
   display: flex;
   align-items: center;

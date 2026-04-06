@@ -14,10 +14,22 @@ import {
     clearDebugCars,
     setDebugCarCallback,
 } from './debug-cars-service.js';
+import { DOM_IDS, PANEL_TEXT } from '../../ui/ui-constants.js';
+
+const DEFAULT_DEBUG_CAR_COUNT = 1;
+const ZERO_OFFSET = Object.freeze([0, 0]);
+const DEBUG_LOG_MESSAGES = {
+    addCarsFailed: 'Adding debug cars failed',
+    randomTrafficFailed: 'Spawning random traffic failed',
+};
+
+function createZeroOffset() {
+    return [...ZERO_OFFSET];
+}
 
 export function setupDebugTools() {
     let isOpen = false;
-    const toggleDebugCarsButton = document.getElementById('toggle-debug-cars-btn');
+    const toggleDebugCarsButton = document.getElementById(DOM_IDS.toggleDebugCarsButton);
 
     const syncInspector = () => {
         setRouteInspectorButtonState(state.debug.inspectorEnabled);
@@ -34,22 +46,22 @@ export function setupDebugTools() {
     };
 
     const syncDebugCarsVisibility = () => {
-        toggleDebugCarsButton.textContent = state.debug.carsVisible ? 'Hide Test Cars' : 'Show Test Cars';
+        toggleDebugCarsButton.textContent = state.debug.carsVisible ? PANEL_TEXT.hideTestCars : PANEL_TEXT.showTestCars;
         toggleDebugCarsButton.classList.toggle('active', !state.debug.carsVisible);
         mapInstance.setDebugCarsVisible(state.debug.carsVisible);
     };
 
-    document.getElementById('debug-toggle-btn').addEventListener('click', () => {
+    document.getElementById(DOM_IDS.debugToggleButton).addEventListener('click', () => {
         isOpen = !isOpen;
         toggleDebugPanel(isOpen);
     });
 
-    document.getElementById('close-debug').addEventListener('click', () => {
+    document.getElementById(DOM_IDS.closeDebug).addEventListener('click', () => {
         isOpen = false;
         toggleDebugPanel(false);
     });
 
-    document.getElementById('toggle-route-inspector-btn').addEventListener('click', () => {
+    document.getElementById(DOM_IDS.toggleRouteInspectorButton).addEventListener('click', () => {
         state.debug.inspectorEnabled = !state.debug.inspectorEnabled;
         syncInspector();
     });
@@ -62,36 +74,35 @@ export function setupDebugTools() {
     setDebugCarCallback(renderDebugCarStatus);
     renderMainCarDebug(null);
 
-    document.getElementById('debug-add-car-btn').addEventListener('click', async () => {
+    document.getElementById(DOM_IDS.debugAddCarButton).addEventListener('click', async () => {
         try {
-            const count = Math.max(1, Number(document.getElementById('debug-car-count').value) || 1);
+            const count = Math.max(DEFAULT_DEBUG_CAR_COUNT, Number(document.getElementById(DOM_IDS.debugCarCount).value) || DEFAULT_DEBUG_CAR_COUNT);
             await spawnDebugCars(state.routing.activeObj, count, state.drive.currentRoadIndex || 0);
         } catch (err) {
-            console.error('Failed to add debug cars:', err);
-            showAlert('Debug cars failed', err.message);
+            console.error(DEBUG_LOG_MESSAGES.addCarsFailed, err);
+            showAlert(PANEL_TEXT.debugCarsFailed, err.message);
         }
     });
 
-    document.getElementById('debug-random-traffic-btn').addEventListener('click', async () => {
+    document.getElementById(DOM_IDS.debugRandomTrafficButton).addEventListener('click', async () => {
         try {
-            const count = Math.max(1, Number(document.getElementById('debug-car-count').value) || 1);
+            const count = Math.max(DEFAULT_DEBUG_CAR_COUNT, Number(document.getElementById(DOM_IDS.debugCarCount).value) || DEFAULT_DEBUG_CAR_COUNT);
             await spawnRandomDebugCars(count);
         } catch (err) {
-            console.error('Failed to spawn random traffic:', err);
-            showAlert('Random traffic failed', err.message);
+            console.error(DEBUG_LOG_MESSAGES.randomTrafficFailed, err);
+            showAlert(PANEL_TEXT.randomTrafficFailed, err.message);
         }
     });
 
-    document.getElementById('debug-clear-cars-btn').addEventListener('click', () => {
+    document.getElementById(DOM_IDS.debugClearCarsButton).addEventListener('click', () => {
         void clearDebugCars();
     });
 
-    document.getElementById('debug-drift-btn').addEventListener('click', () => {
+    document.getElementById(DOM_IDS.debugDriftButton).addEventListener('click', () => {
         state.drive.isDrifting = !state.drive.isDrifting;
         if (!state.drive.isDrifting) {
-            state.drive.offRouteOffset = [0, 0]; 
+            state.drive.offRouteOffset = createZeroOffset();
         }
-        console.log("Spoof Drifting is now:", state.drive.isDrifting ? "ACTIVE" : "OFF");
     });
 
     syncInspector();

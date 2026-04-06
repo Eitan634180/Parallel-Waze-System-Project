@@ -11,9 +11,18 @@ import { computeTrafficStatus, getRouteTrafficStatus } from './traffic-evaluator
 import { handleDrivingReroute } from './driving-reroute.js';
 import { closeDrivingSession, openDrivingSession } from './driving-session.js';
 import { accumulatePingElapsed, flushLocationPing, resetDrivingRuntime, startDrivingRuntime, stopDrivingRuntime } from './driving-runtime.js';
+import { CSS_CLASSES, DOM_IDS, PANEL_TEXT, TRAFFIC_LEVELS } from '../../ui/ui-constants.js';
 
 const KMH_PER_MPS = 3.6;
 const MS_PER_SECOND = 1000;
+const ADDRESS_PARTS_LIMIT = 2;
+const ADDRESS_SEPARATOR = ',';
+const SPEED_UNIT_LABEL = ' km / h';
+const DRIVING_LOG_MESSAGES = {
+    navigationStartFailed: 'Starting navigation session failed',
+    simulationFeedUnavailable: 'Simulation feed unavailable',
+    runtimeFailed: 'Driving runtime failed',
+};
 
 function hasEdgeId(edgeId) {
     return edgeId !== null && edgeId !== undefined;
@@ -27,11 +36,11 @@ function refreshTrafficStatus() {
 function setupDrivingUI() {
     toggleDrivingHUD(true);
     const formatAddress = (addr) => {
-        const parts = addr.split(',');
-        return parts.length > 2 ? `${parts[0]}, ${parts[1]}` : parts[0];
+        const parts = addr.split(ADDRESS_SEPARATOR);
+        return parts.length > ADDRESS_PARTS_LIMIT ? `${parts[0]}, ${parts[1]}` : parts[0];
     };
-    document.getElementById('hud-src-name').textContent = formatAddress(state.routing.source.name);
-    document.getElementById('hud-dst-name').textContent = formatAddress(state.routing.dest.name);
+    document.getElementById(DOM_IDS.hudSrcName).textContent = formatAddress(state.routing.source.name);
+    document.getElementById(DOM_IDS.hudDstName).textContent = formatAddress(state.routing.dest.name);
 }
 
 function getCurrentSpeedKmh() {
@@ -75,14 +84,14 @@ export async function startDriving() {
             },
             onClose: () => {
                 if (!state.drive.isActive) return;
-                showAlert('Navigation disconnected', 'Live server connection was lost.');
+                showAlert(PANEL_TEXT.navigationDisconnectedTitle, PANEL_TEXT.navigationDisconnectedDescription);
                 void stopDriving();
             },
         });
     } catch (err) {
         state.drive.sessionId = null;
-        console.error('Failed to start navigation session:', err);
-        showAlert('Navigation failed', err.message);
+        console.error(DRIVING_LOG_MESSAGES.navigationStartFailed, err);
+        showAlert(PANEL_TEXT.navigationFailedTitle, err.message);
         return;
     }
 
@@ -104,7 +113,7 @@ export async function startDriving() {
     resetDrivingRuntime();
 
     void ensureSimulationFeed().catch((err) => {
-        console.error('Optional simulation feed unavailable:', err);
+        console.error(DRIVING_LOG_MESSAGES.simulationFeedUnavailable, err);
     });
 
     const firstCoord = state.routing.activeLegs[0].from_node;
@@ -114,7 +123,7 @@ export async function startDriving() {
     startDrivingRuntime(
         (elapsedMs) => updateSimulation(elapsedMs),
         (error) => {
-            console.error(error);
+            console.error(DRIVING_LOG_MESSAGES.runtimeFailed, error);
             void stopDriving();
         },
     );
@@ -172,8 +181,8 @@ function updateSimulation(elapsedMs) {
         state.sim.pendingEdgeEvents,
     );
 
-    updateDistance(state.drive.distanceLeft, 'hud-distance-left');
-    document.getElementById('hud-speed').textContent = `${speedKmh} km / h`;
+    updateDistance(state.drive.distanceLeft, DOM_IDS.hudDistanceLeft);
+    document.getElementById(DOM_IDS.hudSpeed).textContent = `${speedKmh}${SPEED_UNIT_LABEL}`;
 }
 
 export async function stopDriving() {
@@ -184,9 +193,9 @@ export async function stopDriving() {
     mapInstance.removeCarMarker();
 
     if (state.routing.activeObj) {
-        document.getElementById('route-panel').classList.remove('hidden');
+        document.getElementById(DOM_IDS.routePanel).classList.remove(CSS_CLASSES.hidden);
     }
-    document.getElementById('search-panel').classList.remove('hidden');
+    document.getElementById(DOM_IDS.searchPanel).classList.remove(CSS_CLASSES.hidden);
 
     const sessionId = state.drive.sessionId;
     resetDrivingSession();
@@ -195,7 +204,7 @@ export async function stopDriving() {
         const traffic = getRouteTrafficStatus(state.routing.activeObj);
         updateTrafficStatus(traffic.level, traffic.detail);
     } else {
-        updateTrafficStatus('normal');
+        updateTrafficStatus(TRAFFIC_LEVELS.normal);
     }
 
     await closeDrivingSession(sessionId);

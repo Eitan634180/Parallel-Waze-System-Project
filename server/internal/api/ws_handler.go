@@ -15,10 +15,11 @@ import (
 )
 
 const partialObservationMinEdgeAge = 2 * time.Second
+const sessionWSLogPrefix = "api: session websocket"
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return isAllowedBrowserOrigin(r.Header.Get("Origin"))
+		return isAllowedBrowserOrigin(r.Header.Get(headerOrigin))
 	},
 }
 
@@ -45,7 +46,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, sessionID stri
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("websocket upgrade: %v", err)
+		log.Printf("%s upgrade failed: %v", sessionWSLogPrefix, err)
 		return
 	}
 
@@ -85,13 +86,13 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, sessionID stri
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				log.Printf("ws read [%s]: %v", sessionID, err)
+				log.Printf("%s read failed for session %s: %v", sessionWSLogPrefix, sessionID, err)
 			}
 			return
 		}
 
 		var msg pingMsg
-		if err := json.Unmarshal(data, &msg); err != nil || msg.Type != "ping" {
+		if err := json.Unmarshal(data, &msg); err != nil || msg.Type != wsMessageTypePing {
 			continue
 		}
 
@@ -289,7 +290,7 @@ func (s *Server) sendInitialSpeedUpdates(sess *session.Session) {
 		edgeIDVal := uint32(eid)
 		recSpeedVal := recSpeed
 		_ = sess.Send(session.OutMsg{
-			Type:                "speed_update",
+			Type:                wsMessageTypeSpeedUpdate,
 			EdgeID:              &edgeIDVal,
 			RecommendedSpeedKmh: &recSpeedVal,
 		})

@@ -37,7 +37,7 @@ func (m *Manager) RunOptimizationSweep(
 				select {
 				case jobs <- session:
 				default:
-					log.Printf("[session] optimization job channel full, dropping session %s", session.ID)
+					log.Printf("session: optimization queue full, dropping session %s", session.ID)
 				}
 			}
 		}
@@ -68,8 +68,8 @@ func (m *Manager) optimizationWorker(
 				continue
 			}
 
-			reason := "traffic_cleared"
-			applyRouteUpdate(session, candidate, g, store, m, prepareRoute, now(), reason, &oldETA, &newETA)
+			reason := rerouteReasonTrafficCleared
+			applyRouteUpdate(session, candidate, g, store, m, prepareRoute, now(), reason, &oldETA, &newETA, nil)
 		}
 	}
 }
@@ -124,7 +124,7 @@ func optimizationCandidate(
 	routes := router.Compute(snapLat, snapLon, destination.Lat, destination.Lon, 1, wf)
 	elapsed := time.Since(start)
 	if elapsed >= slowComputeLogThreshold {
-		log.Printf("[session] slow optimization compute session=%s routes=%d in %s", s.ID, len(routes), elapsed.Round(time.Millisecond))
+		log.Printf("session: optimization compute slow (session=%s routes=%d duration=%s)", s.ID, len(routes), elapsed.Round(time.Millisecond))
 	}
 	if len(routes) == 0 {
 		return 0, routing.Route{}, version, false

@@ -1,3 +1,7 @@
+import { MAP_DEFAULTS, MAP_LAYER_STYLE } from '../map-config.js';
+
+const DEBUG_CAR_ICON_HTML = '<div class="debug-car-body"></div>';
+
 export function upsertDebugCar(manager, id, pos) {
     if (!pos) {
         return;
@@ -7,11 +11,11 @@ export function upsertDebugCar(manager, id, pos) {
     if (!marker) {
         const debugCarIcon = L.divIcon({
             className: 'debug-car-icon-container',
-            html: '<div class="debug-car-body"></div>',
-            iconSize: [14, 14],
-            iconAnchor: [7, 7],
+            html: DEBUG_CAR_ICON_HTML,
+            iconSize: MAP_LAYER_STYLE.debugCarIconSize,
+            iconAnchor: MAP_LAYER_STYLE.debugCarIconAnchor,
         });
-        marker = L.marker(pos, { icon: debugCarIcon, interactive: false, zIndexOffset: 600 });
+        marker = L.marker(pos, { icon: debugCarIcon, interactive: false, zIndexOffset: MAP_DEFAULTS.debugCarZIndexOffset });
         if (manager.debugCarsVisible) {
             marker.addTo(manager.map);
         }

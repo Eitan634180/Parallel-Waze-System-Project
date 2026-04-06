@@ -52,7 +52,7 @@ func Check(
 	}
 
 	if assessment.shouldRerouteNow {
-		doReroute(s, snapLat, snapLon, g, store, mgr, router, wf, prepareRoute, now, "off_route", nil, nil)
+		doReroute(s, snapLat, snapLon, g, store, mgr, router, wf, prepareRoute, now, rerouteReasonOffRoute, nil, nil)
 		return
 	}
 
