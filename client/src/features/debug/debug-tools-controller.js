@@ -13,6 +13,7 @@ import {
     spawnRandomDebugCars,
     clearDebugCars,
     setDebugCarCallback,
+    syncStoredDebugCars,
 } from './debug-cars-service.js';
 import { DOM_IDS, PANEL_TEXT } from '../../ui/ui-constants.js';
 
@@ -48,6 +49,9 @@ export function setupDebugTools() {
     const syncDebugCarsVisibility = () => {
         toggleDebugCarsButton.textContent = state.debug.carsVisible ? PANEL_TEXT.hideTestCars : PANEL_TEXT.showTestCars;
         toggleDebugCarsButton.classList.toggle('active', !state.debug.carsVisible);
+        if (state.debug.carsVisible) {
+            syncStoredDebugCars();
+        }
         mapInstance.setDebugCarsVisible(state.debug.carsVisible);
     };
 

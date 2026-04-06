@@ -18,6 +18,7 @@ const (
 	minSimulationWorkers     = 1
 	randomRouteAttemptFactor = 6
 	minRandomRouteDistanceSq = 0.0004
+	maxCommuteDegrees        = 0.25
 	simulationWSLogPrefix    = "api: simulation websocket"
 	simulationBBoxMissingLog = "api: random simulation skipped because graph bounding box is unavailable"
 )
@@ -205,7 +206,7 @@ func (s *Server) computeRandomSimulationCandidates(bbox geoBox, limit int) []rou
 				}
 
 				srcLat, srcLon := bbox.randomPoint(rng)
-				dstLat, dstLon := bbox.randomPoint(rng)
+				dstLat, dstLon := bbox.randomNearbyPoint(rng, srcLat, srcLon)
 
 				if distanceSquared(srcLat, srcLon, dstLat, dstLon) < minRandomRouteDistanceSq {
 					continue
@@ -261,8 +262,34 @@ func (b geoBox) randomPoint(rng *rand.Rand) (float64, float64) {
 	return lat, lon
 }
 
+func (b geoBox) randomNearbyPoint(rng *rand.Rand, centerLat, centerLon float64) (float64, float64) {
+	minLat := maxFloat64(b.minLat, centerLat-maxCommuteDegrees)
+	maxLat := minFloat64(b.maxLat, centerLat+maxCommuteDegrees)
+	minLon := maxFloat64(b.minLon, centerLon-maxCommuteDegrees)
+	maxLon := minFloat64(b.maxLon, centerLon+maxCommuteDegrees)
+
+	lat := minLat + rng.Float64()*(maxLat-minLat)
+	lon := minLon + rng.Float64()*(maxLon-minLon)
+
+	return lat, lon
+}
+
 func distanceSquared(lat1, lon1, lat2, lon2 float64) float64 {
 	dLat := lat1 - lat2
 	dLon := lon1 - lon2
 	return dLat*dLat + dLon*dLon
+}
+
+func minFloat64(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxFloat64(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }

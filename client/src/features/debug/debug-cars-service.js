@@ -10,8 +10,32 @@ let activeCount = 0;
 let simulationReadyPromise = null;
 let cars = [];
 let onUpdateCallback = null;
+let pendingSnapshotFrame = 0;
+
+function flushSimulationSnapshot() {
+    pendingSnapshotFrame = 0;
+    if (mapInstance.debugCarsVisible) {
+        mapInstance.syncDebugCars(cars);
+    }
+}
+
+function scheduleSimulationSnapshotFlush() {
+    if (pendingSnapshotFrame) {
+        return;
+    }
+    pendingSnapshotFrame = requestAnimationFrame(flushSimulationSnapshot);
+}
+
+function cancelPendingSnapshotFlush() {
+    if (!pendingSnapshotFrame) {
+        return;
+    }
+    cancelAnimationFrame(pendingSnapshotFrame);
+    pendingSnapshotFrame = 0;
+}
 
 function clearSimulationSnapshots() {
+    cancelPendingSnapshotFlush();
     cars = [];
     activeCount = 0;
     mapInstance.clearDebugCars();
@@ -35,8 +59,8 @@ export async function ensureSimulationFeed() {
         onSnapshot: (snapshotCars) => {
             cars = snapshotCars || [];
             activeCount = cars.length;
-            mapInstance.syncDebugCars(snapshotCars);
             if (onUpdateCallback) onUpdateCallback({ active: activeCount });
+            scheduleSimulationSnapshotFlush();
         },
         onClose: () => {
             resetSimulationFeedState();
@@ -71,7 +95,12 @@ export async function clearDebugCars() {
 }
 
 export function getLatestSimulationCars() {
-    return cars.slice();
+    return cars;
+}
+
+export function syncStoredDebugCars() {
+    cancelPendingSnapshotFlush();
+    mapInstance.syncDebugCars(cars);
 }
 
 export function disconnectDebugCars() {
