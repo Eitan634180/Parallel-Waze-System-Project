@@ -14,7 +14,8 @@ func (r *Router) LocalRepairOverlay(
 	wf WeightFunc,
 ) ([]Step, bool) {
 	g := r.g
-	if _, ok := g.BoundaryNodeIdx[srcNodeID]; !ok {
+	srcIdx, ok := g.NodeIdx[srcNodeID]
+	if !ok {
 		return nil, false
 	}
 
@@ -25,17 +26,14 @@ func (r *Router) LocalRepairOverlay(
 
 	costs := make(map[builder.NodeID]float32)
 	pred := make(map[builder.NodeID]overlayPredEntry)
-	heuristic := func(nodeID builder.NodeID) float32 {
-		node := g.NodeByID(nodeID)
-		if node == nil {
-			return 0
-		}
+	heuristic := func(idx uint32) float32 {
+		node := &g.Nodes[idx]
 		return geo.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
 	costs[srcNodeID] = 0
 	pq := utilities.NewHeap(func(a, b localAstarItem) bool { return a.f < b.f })
-	pq.Push(localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
+	pq.Push(localAstarItem{id: srcNodeID, idx: srcIdx, f: heuristic(srcIdx), g: 0, hops: 0})
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
@@ -85,7 +83,7 @@ func (r *Router) LocalRepairOverlay(
 				pq.Push(localAstarItem{
 					id:   overlayEdge.ToNodeID,
 					g:    nextCost,
-					f:    nextCost + heuristic(overlayEdge.ToNodeID),
+					f:    nextCost + heuristic(overlayEdge.ToNodeIdx),
 					hops: current.hops + 1,
 				})
 			}
@@ -104,7 +102,8 @@ func (r *Router) LocalRepairOriginal(
 	wf WeightFunc,
 ) ([]Step, bool) {
 	g := r.g
-	if _, ok := g.NodeIdx[srcNodeID]; !ok {
+	srcIdx, ok := g.NodeIdx[srcNodeID]
+	if !ok {
 		return nil, false
 	}
 
@@ -115,17 +114,14 @@ func (r *Router) LocalRepairOriginal(
 
 	costs := make(map[builder.NodeID]float32)
 	pred := make(map[builder.NodeID]predEntry)
-	heuristic := func(nodeID builder.NodeID) float32 {
-		node := g.NodeByID(nodeID)
-		if node == nil {
-			return 0
-		}
+	heuristic := func(idx uint32) float32 {
+		node := &g.Nodes[idx]
 		return geo.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
 	costs[srcNodeID] = 0
 	pq := utilities.NewHeap(func(a, b localAstarItem) bool { return a.f < b.f })
-	pq.Push(localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
+	pq.Push(localAstarItem{id: srcNodeID, idx: srcIdx, f: heuristic(srcIdx), g: 0, hops: 0})
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
@@ -148,11 +144,7 @@ func (r *Router) LocalRepairOriginal(
 			continue
 		}
 
-		currentIdx, ok := g.NodeIdx[current.id]
-		if !ok {
-			continue
-		}
-
+		currentIdx := current.idx
 		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
 			edge := &g.Edges[edgeID]
 			if current.id == srcNodeID && edge.ToNodeID == dstNodeID {
@@ -172,8 +164,9 @@ func (r *Router) LocalRepairOriginal(
 				}
 				pq.Push(localAstarItem{
 					id:   edge.ToNodeID,
+					idx:  edge.ToNodeIdx,
 					g:    nextCost,
-					f:    nextCost + heuristic(edge.ToNodeID),
+					f:    nextCost + heuristic(edge.ToNodeIdx),
 					hops: current.hops + 1,
 				})
 			}

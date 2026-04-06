@@ -41,11 +41,8 @@ func (r *Router) twoLevelSearch(
 		dstBoundarySet[nodeID] = struct{}{}
 	}
 
-	heuristic := func(nodeID builder.NodeID) float32 {
-		node := g.NodeByID(nodeID)
-		if node == nil {
-			return 0
-		}
+	heuristic := func(idx uint32) float32 {
+		node := &g.Nodes[idx]
 		return geo.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
@@ -91,7 +88,7 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 	}
 
 	pq := utilities.NewHeap(func(a, b astarItem) bool { return a.f < b.f })
-	pq.Push(astarItem{id: srcID, f: heuristic(srcIdx), g: 0})
+	pq.Push(astarItem{id: srcID, idx: srcIdx, f: heuristic(srcIdx), g: 0})
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
@@ -106,26 +103,20 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
 
-		currentIdx, ok := g.NodeIdx[current.id]
-		if !ok {
-			continue
-		}
-
+		currentIdx := current.idx
 		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
 			edge := &g.Edges[edgeID]
-			nextIdx, ok := g.NodeIdx[edge.ToNodeID]
-			if !ok {
-				continue
-			}
+			nextIdx := edge.ToNodeIdx
 
 			nextCost := current.g + wf(edge)
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
 				pq.Push(astarItem{
-					id: edge.ToNodeID,
-					g:  nextCost,
-					f:  nextCost + heuristic(nextIdx),
+					id:  edge.ToNodeID,
+					idx: nextIdx,
+					g:   nextCost,
+					f:   nextCost + heuristic(nextIdx),
 				})
 			}
 		}
@@ -137,7 +128,7 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 func (r *Router) overlayAStar(
 	injectionCosts map[builder.NodeID]float32,
 	dstSet map[builder.NodeID]struct{},
-	heuristic func(builder.NodeID) float32,
+	heuristic func(uint32) float32,
 	penalties map[uint32]float32,
 ) (costs map[builder.NodeID]float32, pred map[builder.NodeID]overlayPredEntry) {
 	g := r.g
@@ -147,7 +138,8 @@ func (r *Router) overlayAStar(
 	pq := utilities.NewHeap(func(a, b astarItem) bool { return a.f < b.f })
 	for nodeID, cost := range injectionCosts {
 		costs[nodeID] = cost
-		pq.Push(astarItem{id: nodeID, f: cost + heuristic(nodeID), g: cost})
+		nodeIdx := g.NodeIdx[nodeID]
+		pq.Push(astarItem{id: nodeID, idx: nodeIdx, f: cost + heuristic(nodeIdx), g: cost})
 	}
 
 	settledDestinations := 0
@@ -192,9 +184,10 @@ func (r *Router) overlayAStar(
 					edgeIdx:    edgeIdx,
 				}
 				pq.Push(astarItem{
-					id: overlayEdge.ToNodeID,
-					g:  nextCost,
-					f:  nextCost + heuristic(overlayEdge.ToNodeID),
+					id:  overlayEdge.ToNodeID,
+					idx: overlayEdge.ToNodeIdx,
+					g:   nextCost,
+					f:   nextCost + heuristic(overlayEdge.ToNodeIdx),
 				})
 			}
 		}

@@ -68,6 +68,7 @@ type Edge struct {
 	ID         EdgeID
 	FromNodeID NodeID
 	ToNodeID   NodeID
+	ToNodeIdx  uint32
 	Weight     float32 // Travel time in seconds.
 	DistanceM  float32 // Physical length in meters.
 	SpeedKmh   float32 // Speed used to compute Weight.
@@ -83,6 +84,7 @@ func (e *Edge) IsOneWay() bool { return e.Flags&FlagOneWay != 0 }
 type OverlayEdge struct {
 	FromNodeID  NodeID
 	ToNodeID    NodeID
+	ToNodeIdx   uint32
 	Weight      float32 // Travel time in seconds.
 	DistanceM   float32 // Shortest-path distance in meters.
 	IsCrossCell bool

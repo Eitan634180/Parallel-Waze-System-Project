@@ -308,10 +308,7 @@ func DetectBoundaryNodes(g *Graph) {
 		fromCellID := g.Nodes[i].CellID
 		for _, eid := range g.BaseAdj.Neighbours(uint32(i)) {
 			e := &g.Edges[eid]
-			toIdx, ok := g.NodeIdx[e.ToNodeID]
-			if !ok {
-				continue
-			}
+			toIdx := e.ToNodeIdx
 			if g.Nodes[toIdx].CellID != fromCellID {
 				isBoundary[i] = true
 				isBoundary[toIdx] = true
@@ -435,10 +432,8 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 
 		for _, eid := range g.BaseAdj.Neighbours(fromIdx) {
 			e := &g.Edges[eid]
-			toIdx, ok := g.NodeIdx[e.ToNodeID]
-			if !ok {
-				continue
-			}
+			toIdx := e.ToNodeIdx
+
 			if g.Nodes[toIdx].CellID == cell.ID {
 				continue
 			}
@@ -448,6 +443,7 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 			result = append(result, OverlayEdge{
 				FromNodeID:  nid,
 				ToNodeID:    e.ToNodeID,
+				ToNodeIdx:   toIdx,
 				Weight:      e.Weight,
 				DistanceM:   e.DistanceM,
 				IsCrossCell: true,
@@ -474,9 +470,14 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 			if !reachable || d.weight >= math.MaxFloat32 {
 				continue
 			}
+			dstIdx, ok := g.NodeIdx[dstID]
+			if !ok {
+				continue
+			}
 			result = append(result, OverlayEdge{
 				FromNodeID:  srcID,
 				ToNodeID:    dstID,
+				ToNodeIdx:   dstIdx,
 				Weight:      d.weight,
 				DistanceM:   d.distM,
 				IsCrossCell: false,

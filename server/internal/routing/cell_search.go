@@ -40,7 +40,7 @@ func cellDijkstra(
 	costs[sourceID] = 0
 
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
-	pq.Push(ijItem{id: sourceID, cost: 0})
+	pq.Push(ijItem{id: sourceID, idx: srcInternalIdx, cost: 0})
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
@@ -59,15 +59,11 @@ func cellDijkstra(
 			}
 		}
 
-		currentIdx, ok := g.NodeIdx[current.id]
-		if !ok {
-			continue
-		}
-
+		currentIdx := current.idx
 		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
 			edge := &g.Edges[edgeID]
-			nextIdx, ok := g.NodeIdx[edge.ToNodeID]
-			if !ok || g.Nodes[nextIdx].CellID != cellID {
+			nextIdx := edge.ToNodeIdx
+			if g.Nodes[nextIdx].CellID != cellID {
 				continue
 			}
 
@@ -75,7 +71,7 @@ func cellDijkstra(
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
-				pq.Push(ijItem{id: edge.ToNodeID, cost: nextCost})
+				pq.Push(ijItem{id: edge.ToNodeID, idx: nextIdx, cost: nextCost})
 			}
 		}
 	}
@@ -110,7 +106,7 @@ func multiSourceCellDijkstra(
 	for _, seed := range seeds {
 		nodeID := g.Nodes[seed.nodeIdx].ID
 		costs[nodeID] = seed.cost
-		pq.Push(ijItem{id: nodeID, cost: seed.cost})
+		pq.Push(ijItem{id: nodeID, idx: seed.nodeIdx, cost: seed.cost})
 	}
 
 	for pq.Len() > 0 {
@@ -121,20 +117,16 @@ func multiSourceCellDijkstra(
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
-		
+
 		if current.id == dstID {
 			break
 		}
 
-		currentIdx, ok := g.NodeIdx[current.id]
-		if !ok {
-			continue
-		}
-
+		currentIdx := current.idx
 		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
 			edge := &g.Edges[edgeID]
-			nextIdx, ok := g.NodeIdx[edge.ToNodeID]
-			if !ok || g.Nodes[nextIdx].CellID != cellID {
+			nextIdx := edge.ToNodeIdx
+			if g.Nodes[nextIdx].CellID != cellID {
 				continue
 			}
 
@@ -142,7 +134,7 @@ func multiSourceCellDijkstra(
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
-				pq.Push(ijItem{id: edge.ToNodeID, cost: nextCost})
+				pq.Push(ijItem{id: edge.ToNodeID, idx: nextIdx, cost: nextCost})
 			}
 		}
 	}

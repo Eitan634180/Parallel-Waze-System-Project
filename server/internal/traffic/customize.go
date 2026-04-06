@@ -228,10 +228,7 @@ func cellHasDirtyIntraEdge(g *builder.Graph, cell builder.Cell, dirtyEdges map[b
 				continue
 			}
 
-			toIdx, ok := g.NodeIdx[g.Edges[edgeID].ToNodeID]
-			if !ok {
-				continue
-			}
+			toIdx := g.Edges[edgeID].ToNodeIdx
 			if g.Nodes[toIdx].CellID == cell.ID {
 				return true
 			}

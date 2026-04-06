@@ -176,6 +176,7 @@ type edgeBin struct {
 	ID         uint32
 	FromNodeID uint64
 	ToNodeID   uint64
+	ToNodeIdx  uint32
 	Weight     float32
 	DistanceM  float32
 	SpeedKmh   float32
@@ -201,6 +202,7 @@ func saveEdges(g *Graph, path string) error {
 			ID:         e.ID,
 			FromNodeID: e.FromNodeID,
 			ToNodeID:   e.ToNodeID,
+			ToNodeIdx:  e.ToNodeIdx,
 			Weight:     e.Weight,
 			DistanceM:  e.DistanceM,
 			SpeedKmh:   e.SpeedKmh,
@@ -231,6 +233,7 @@ func loadEdges(path string) ([]Edge, error) {
 			ID:         b.ID,
 			FromNodeID: b.FromNodeID,
 			ToNodeID:   b.ToNodeID,
+			ToNodeIdx:  b.ToNodeIdx,
 			Weight:     b.Weight,
 			DistanceM:  b.DistanceM,
 			SpeedKmh:   b.SpeedKmh,
@@ -420,6 +423,7 @@ func loadBoundary(path string) ([]NodeID, error) {
 type overlayEdgeBin struct {
 	FromNodeID  uint64
 	ToNodeID    uint64
+	ToNodeIdx   uint32
 	Weight      float32
 	DistanceM   float32
 	IsCrossCell uint8
@@ -450,7 +454,7 @@ func saveOverlayAdj(g *Graph, path string) error {
 		if e.IsCrossCell {
 			cc = crossCellTrue
 		}
-		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeID, e.ToNodeID, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
+		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeID, e.ToNodeID, e.ToNodeIdx, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
 			return err
 		}
 	}
@@ -487,6 +491,7 @@ func loadOverlayAdj(path string) (OverlayAdjList, error) {
 		edges[i] = OverlayEdge{
 			FromNodeID:  b.FromNodeID,
 			ToNodeID:    b.ToNodeID,
+			ToNodeIdx:   b.ToNodeIdx,
 			Weight:      b.Weight,
 			DistanceM:   b.DistanceM,
 			IsCrossCell: b.IsCrossCell != 0,
