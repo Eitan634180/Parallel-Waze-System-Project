@@ -655,8 +655,8 @@ button {
   top: 64px;
   right: 24px;
   z-index: 1001;
-  width: 360px;
-  max-height: calc(100vh - 96px);
+  width: 380px;
+  max-height: calc(100vh - 386px);
   overflow-y: auto;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(18px);
@@ -874,7 +874,7 @@ button {
   border-radius: 16px;
   text-align: center;
   width: 420px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
   animation: slideUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 

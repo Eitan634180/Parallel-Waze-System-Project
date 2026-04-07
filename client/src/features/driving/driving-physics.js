@@ -32,7 +32,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
             const observedMs = Math.max(0, state.sim.currentEdgeTimeMs - spilloverMs);
             remainingMeters -= distanceLeftOnStep;
             remainingElapsedMs = spilloverMs;
-            
+
             if (step.edge_id !== null && step.edge_id !== undefined && observedMs > 0) {
                 state.sim.pendingEdgeEvents.push({ edge_id: step.edge_id, observed_sec: observedMs / MS_PER_SECOND });
             }
@@ -42,13 +42,13 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
             if (state.drive.currentRoadIndex < state.routing.activeLegs.length) {
                 const prevStep = step;
                 const nextStep = state.routing.activeLegs[state.drive.currentRoadIndex];
-                
+
                 const prevBearing = Math.atan2(prevStep.to_node[1] - prevStep.from_node[1], prevStep.to_node[0] - prevStep.from_node[0]) * DEGREES_PER_RADIAN;
                 const nextBearing = Math.atan2(nextStep.to_node[1] - nextStep.from_node[1], nextStep.to_node[0] - nextStep.from_node[0]) * DEGREES_PER_RADIAN;
-                
+
                 let diff = Math.abs(nextBearing - prevBearing);
                 if (diff > HALF_TURN_DEG) diff = FULL_TURN_DEG - diff;
-                
+
                 if (diff > SHARP_TURN_THRESHOLD_DEG && state.sim.motionState) {
                     state.sim.motionState.speedKmh = Math.min(state.sim.motionState.speedKmh, TURN_SPEED_CAP_KMH);
                 }

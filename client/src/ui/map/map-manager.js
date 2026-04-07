@@ -16,6 +16,28 @@ function hasValidBoundingBox(systemInfo) {
         && max_lon > min_lon;
 }
 
+function insetBoundingBox(bbox, fraction) {
+    const safeFraction = Math.max(0, Math.min(0.49, fraction));
+    const latInset = (bbox.max_lat - bbox.min_lat) * safeFraction;
+    const lonInset = (bbox.max_lon - bbox.min_lon) * safeFraction;
+
+    const minLat = bbox.min_lat + latInset;
+    const maxLat = bbox.max_lat - latInset;
+    const minLon = bbox.min_lon + lonInset;
+    const maxLon = bbox.max_lon - lonInset;
+
+    if (minLat >= maxLat || minLon >= maxLon) {
+        return bbox;
+    }
+
+    return {
+        min_lat: minLat,
+        max_lat: maxLat,
+        min_lon: minLon,
+        max_lon: maxLon,
+    };
+}
+
 class MapManager {
     constructor() {
         this.map = null;
@@ -52,7 +74,8 @@ class MapManager {
         }).addTo(this.map);
 
         if (hasValidBoundingBox(systemInfo)) {
-            const { min_lat, max_lat, min_lon, max_lon } = systemInfo.bbox;
+            const viewBox = insetBoundingBox(systemInfo.bbox, MAP_DEFAULTS.initialBBoxInsetFraction || 0);
+            const { min_lat, max_lat, min_lon, max_lon } = viewBox;
             this.map.fitBounds(
                 [[min_lat, min_lon], [max_lat, max_lon]],
                 { padding: MAP_DEFAULTS.fitBoundsPadding },

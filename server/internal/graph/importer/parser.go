@@ -1,6 +1,3 @@
-//go:build !cgo
-// +build !cgo
-
 package importer
 
 import (
@@ -12,6 +9,7 @@ import (
 
 	"nav-system/internal/graph/builder"
 
+	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/paulmach/osm"
 	"github.com/paulmach/osm/osmpbf"
 )
@@ -52,10 +50,10 @@ func ParsePBF(path string) (*builder.ParseResult, error) {
 
 	log.Printf("%s pass 1: scanning ways", importerLogPrefix)
 
-	needed := make(map[uint64]struct{})
+	needed := roaring64.New()
 	var ways []*builder.RawWay
 
-	if err := scanPBF(path, procs, func(obj osm.Object) {
+	if err := scanPBF(path, procs, true, false, true, func(obj osm.Object) {
 		w, ok := obj.(*osm.Way)
 		if !ok {
 			return
@@ -77,7 +75,7 @@ func ParsePBF(path string) (*builder.ParseResult, error) {
 		}
 		for i, wn := range w.Nodes {
 			raw.NodeRefs[i] = uint64(wn.ID)
-			needed[uint64(wn.ID)] = struct{}{}
+			needed.Add(uint64(wn.ID))
 		}
 
 		if ms := w.Tags.Find("maxspeed"); ms != "" {
@@ -92,17 +90,17 @@ func ParsePBF(path string) (*builder.ParseResult, error) {
 		return nil, fmt.Errorf("pass 1: %w", err)
 	}
 
-	log.Printf("%s pass 1 complete (%d routable ways, %d unique node refs)", importerLogPrefix, len(ways), len(needed))
+	log.Printf("%s pass 1 complete (%d routable ways, %d unique node refs)", importerLogPrefix, len(ways), needed.GetCardinality())
 	log.Printf("%s pass 2: scanning nodes", importerLogPrefix)
 
-	nodes := make(map[uint64]*builder.RawNode, len(needed))
-	if err := scanPBF(path, procs, func(obj osm.Object) {
+	nodes := make(map[uint64]*builder.RawNode, int(needed.GetCardinality()))
+	if err := scanPBF(path, procs, false, true, true, func(obj osm.Object) {
 		n, ok := obj.(*osm.Node)
 		if !ok {
 			return
 		}
 		nid := uint64(n.ID)
-		if _, want := needed[nid]; !want {
+		if !needed.Contains(nid) {
 			return
 		}
 		nodes[nid] = &builder.RawNode{ID: nid, Lat: n.Lat, Lon: n.Lon}
@@ -114,7 +112,7 @@ func ParsePBF(path string) (*builder.ParseResult, error) {
 	return &builder.ParseResult{Nodes: nodes, Ways: ways}, nil
 }
 
-func scanPBF(path string, procs int, fn func(osm.Object)) error {
+func scanPBF(path string, procs int, skipNodes, skipWays, skipRelations bool, fn func(osm.Object)) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -123,6 +121,10 @@ func scanPBF(path string, procs int, fn func(osm.Object)) error {
 
 	scanner := osmpbf.New(context.Background(), f, procs)
 	defer scanner.Close()
+
+	scanner.SkipNodes = skipNodes
+	scanner.SkipWays = skipWays
+	scanner.SkipRelations = skipRelations
 
 	for scanner.Scan() {
 		fn(scanner.Object())

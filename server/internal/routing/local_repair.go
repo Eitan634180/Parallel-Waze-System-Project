@@ -1,10 +1,9 @@
 package routing
 
 import (
-	"container/heap"
-
 	"nav-system/internal/geo"
 	"nav-system/internal/graph/builder"
+	"nav-system/internal/utilities"
 )
 
 // LocalRepairOverlay searches for a short overlay detour around a congested cross-cell edge.
@@ -15,7 +14,8 @@ func (r *Router) LocalRepairOverlay(
 	wf WeightFunc,
 ) ([]Step, bool) {
 	g := r.g
-	if _, ok := g.BoundaryNodeIdx[srcNodeID]; !ok {
+	srcIdx, ok := g.NodeIdx[srcNodeID]
+	if !ok {
 		return nil, false
 	}
 
@@ -26,20 +26,17 @@ func (r *Router) LocalRepairOverlay(
 
 	costs := make(map[builder.NodeID]float32)
 	pred := make(map[builder.NodeID]overlayPredEntry)
-	heuristic := func(nodeID builder.NodeID) float32 {
-		node := g.NodeByID(nodeID)
-		if node == nil {
-			return 0
-		}
+	heuristic := func(idx uint32) float32 {
+		node := &g.Nodes[idx]
 		return geo.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
 	costs[srcNodeID] = 0
-	pq := &localAstarPQ{}
-	heap.Push(pq, localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
+	pq := utilities.NewHeap(func(a, b localAstarItem) bool { return a.f < b.f })
+	pq.Push(localAstarItem{id: srcNodeID, idx: srcIdx, f: heuristic(srcIdx), g: 0, hops: 0})
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(localAstarItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
@@ -83,10 +80,10 @@ func (r *Router) LocalRepairOverlay(
 					prevNodeID: current.id,
 					edgeIdx:    edgeIdx,
 				}
-				heap.Push(pq, localAstarItem{
+				pq.Push(localAstarItem{
 					id:   overlayEdge.ToNodeID,
 					g:    nextCost,
-					f:    nextCost + heuristic(overlayEdge.ToNodeID),
+					f:    nextCost + heuristic(overlayEdge.ToNodeIdx),
 					hops: current.hops + 1,
 				})
 			}
@@ -105,7 +102,8 @@ func (r *Router) LocalRepairOriginal(
 	wf WeightFunc,
 ) ([]Step, bool) {
 	g := r.g
-	if _, ok := g.NodeIdx[srcNodeID]; !ok {
+	srcIdx, ok := g.NodeIdx[srcNodeID]
+	if !ok {
 		return nil, false
 	}
 
@@ -116,20 +114,17 @@ func (r *Router) LocalRepairOriginal(
 
 	costs := make(map[builder.NodeID]float32)
 	pred := make(map[builder.NodeID]predEntry)
-	heuristic := func(nodeID builder.NodeID) float32 {
-		node := g.NodeByID(nodeID)
-		if node == nil {
-			return 0
-		}
+	heuristic := func(idx uint32) float32 {
+		node := &g.Nodes[idx]
 		return geo.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
 	costs[srcNodeID] = 0
-	pq := &localAstarPQ{}
-	heap.Push(pq, localAstarItem{id: srcNodeID, f: heuristic(srcNodeID), g: 0, hops: 0})
+	pq := utilities.NewHeap(func(a, b localAstarItem) bool { return a.f < b.f })
+	pq.Push(localAstarItem{id: srcNodeID, idx: srcIdx, f: heuristic(srcIdx), g: 0, hops: 0})
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(localAstarItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
@@ -149,11 +144,7 @@ func (r *Router) LocalRepairOriginal(
 			continue
 		}
 
-		currentIdx, ok := g.NodeIdx[current.id]
-		if !ok {
-			continue
-		}
-
+		currentIdx := current.idx
 		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
 			edge := &g.Edges[edgeID]
 			if current.id == srcNodeID && edge.ToNodeID == dstNodeID {
@@ -171,10 +162,11 @@ func (r *Router) LocalRepairOriginal(
 					prevNodeID: current.id,
 					edgeID:     edgeID,
 				}
-				heap.Push(pq, localAstarItem{
+				pq.Push(localAstarItem{
 					id:   edge.ToNodeID,
+					idx:  edge.ToNodeIdx,
 					g:    nextCost,
-					f:    nextCost + heuristic(edge.ToNodeID),
+					f:    nextCost + heuristic(edge.ToNodeIdx),
 					hops: current.hops + 1,
 				})
 			}

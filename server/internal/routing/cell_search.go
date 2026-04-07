@@ -1,9 +1,8 @@
 package routing
 
 import (
-	"container/heap"
-
 	"nav-system/internal/graph/builder"
+	"nav-system/internal/utilities"
 )
 
 type predEntry struct {
@@ -40,11 +39,11 @@ func cellDijkstra(
 	sourceID := g.Nodes[srcInternalIdx].ID
 	costs[sourceID] = 0
 
-	pq := &ijPQ{}
-	heap.Push(pq, ijItem{id: sourceID, cost: 0})
+	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
+	pq.Push(ijItem{id: sourceID, idx: srcInternalIdx, cost: 0})
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(ijItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
@@ -60,15 +59,11 @@ func cellDijkstra(
 			}
 		}
 
-		currentIdx, ok := g.NodeIdx[current.id]
-		if !ok {
-			continue
-		}
-
+		currentIdx := current.idx
 		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
 			edge := &g.Edges[edgeID]
-			nextIdx, ok := g.NodeIdx[edge.ToNodeID]
-			if !ok || g.Nodes[nextIdx].CellID != cellID {
+			nextIdx := edge.ToNodeIdx
+			if g.Nodes[nextIdx].CellID != cellID {
 				continue
 			}
 
@@ -76,7 +71,7 @@ func cellDijkstra(
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
-				heap.Push(pq, ijItem{id: edge.ToNodeID, cost: nextCost})
+				pq.Push(ijItem{id: edge.ToNodeID, idx: nextIdx, cost: nextCost})
 			}
 		}
 	}
@@ -107,35 +102,31 @@ func multiSourceCellDijkstra(
 	pred = make(map[builder.NodeID]predEntry, len(seeds)+16)
 	dstID := g.Nodes[dstInternalIdx].ID
 
-	pq := &ijPQ{}
+	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
 	for _, seed := range seeds {
 		nodeID := g.Nodes[seed.nodeIdx].ID
 		costs[nodeID] = seed.cost
-		heap.Push(pq, ijItem{id: nodeID, cost: seed.cost})
+		pq.Push(ijItem{id: nodeID, idx: seed.nodeIdx, cost: seed.cost})
 	}
 
 	for pq.Len() > 0 {
-		current := heap.Pop(pq).(ijItem)
+		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
-		
+
 		if current.id == dstID {
 			break
 		}
 
-		currentIdx, ok := g.NodeIdx[current.id]
-		if !ok {
-			continue
-		}
-
+		currentIdx := current.idx
 		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
 			edge := &g.Edges[edgeID]
-			nextIdx, ok := g.NodeIdx[edge.ToNodeID]
-			if !ok || g.Nodes[nextIdx].CellID != cellID {
+			nextIdx := edge.ToNodeIdx
+			if g.Nodes[nextIdx].CellID != cellID {
 				continue
 			}
 
@@ -143,7 +134,7 @@ func multiSourceCellDijkstra(
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
-				heap.Push(pq, ijItem{id: edge.ToNodeID, cost: nextCost})
+				pq.Push(ijItem{id: edge.ToNodeID, idx: nextIdx, cost: nextCost})
 			}
 		}
 	}

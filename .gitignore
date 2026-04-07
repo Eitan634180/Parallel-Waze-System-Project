@@ -4,3 +4,4 @@
 /server/data/.last-region
 /server/data/geofabrik-index.json
 /server/data/map/**
+tests/loadbot/node_modules

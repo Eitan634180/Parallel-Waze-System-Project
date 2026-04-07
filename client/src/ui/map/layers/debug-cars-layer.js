@@ -47,9 +47,14 @@ export function clearDebugCars(manager) {
 }
 
 export function syncDebugCars(manager, cars) {
+    const bounds = manager.map?.getBounds?.() || null;
     const liveIds = new Set();
     cars.forEach((car) => {
         if (!car?.id) {
+            return;
+        }
+
+        if (bounds && !bounds.contains([car.lat, car.lon])) {
             return;
         }
 

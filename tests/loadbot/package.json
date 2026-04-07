@@ -1,0 +1,11 @@
+{
+  "name": "loadbot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.54.2"
+  }
+}

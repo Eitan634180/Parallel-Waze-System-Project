@@ -129,6 +129,7 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 						e: Edge{
 							FromNodeID: n1id,
 							ToNodeID:   n2id,
+							ToNodeIdx:  n2idx,
 							Weight:     weightSec,
 							DistanceM:  distM,
 							SpeedKmh:   speedKmh,
@@ -143,6 +144,7 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 							e: Edge{
 								FromNodeID: n2id,
 								ToNodeID:   n1id,
+								ToNodeIdx:  n1idx,
 								Weight:     weightSec,
 								DistanceM:  distM,
 								SpeedKmh:   speedKmh,

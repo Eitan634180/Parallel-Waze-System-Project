@@ -1,7 +1,6 @@
 package traffic
 
 import (
-	"container/heap"
 	"context"
 	"log"
 	"math"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"nav-system/internal/graph/builder"
+	"nav-system/internal/utilities"
 )
 
 const customizationInterval = 5 * time.Second
@@ -23,20 +23,6 @@ type overlayWeightUpdate struct {
 type livePQItem struct {
 	id   builder.NodeID
 	cost float32
-}
-
-type livePQ []livePQItem
-
-func (pq livePQ) Len() int            { return len(pq) }
-func (pq livePQ) Less(i, j int) bool  { return pq[i].cost < pq[j].cost }
-func (pq livePQ) Swap(i, j int)       { pq[i], pq[j] = pq[j], pq[i] }
-func (pq *livePQ) Push(x interface{}) { *pq = append(*pq, x.(livePQItem)) }
-func (pq *livePQ) Pop() interface{} {
-	old := *pq
-	n := len(old)
-	x := old[n-1]
-	*pq = old[:n-1]
-	return x
 }
 
 // RunCustomization periodically reweights overlay edges using live traffic.
@@ -242,10 +228,7 @@ func cellHasDirtyIntraEdge(g *builder.Graph, cell builder.Cell, dirtyEdges map[b
 				continue
 			}
 
-			toIdx, ok := g.NodeIdx[g.Edges[edgeID].ToNodeID]
-			if !ok {
-				continue
-			}
+			toIdx := g.Edges[edgeID].ToNodeIdx
 			if g.Nodes[toIdx].CellID == cell.ID {
 				return true
 			}
@@ -273,11 +256,11 @@ func liveCellDijkstra(
 	}
 	remaining := len(targetSet)
 
-	pq := &livePQ{}
-	heap.Push(pq, livePQItem{id: srcID, cost: 0})
+	pq := utilities.NewHeap(func(a, b livePQItem) bool { return a.cost < b.cost })
+	pq.Push(livePQItem{id: srcID, cost: 0})
 
 	for pq.Len() > 0 {
-		cur := heap.Pop(pq).(livePQItem)
+		cur := pq.Pop()
 
 		// Skip stale queue entries after a better path has already been recorded.
 		best, hasBest := dist[cur.id]
@@ -308,7 +291,7 @@ func liveCellDijkstra(
 			newCost := best + store.LiveWeight(eid, e.Weight)
 			if existing, has := dist[toID]; !has || newCost < existing {
 				dist[toID] = newCost
-				heap.Push(pq, livePQItem{id: toID, cost: newCost})
+				pq.Push(livePQItem{id: toID, cost: newCost})
 			}
 		}
 	}

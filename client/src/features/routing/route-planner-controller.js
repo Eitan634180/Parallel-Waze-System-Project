@@ -75,30 +75,14 @@ function clearCurrentRoute() {
 async function handleCalculateRoute() {
     if (!state.routing.source || !state.routing.dest) return;
 
-    toggleLoadingState(true);
-    try {
-        const rawRoutes = await fetchRoute(
-            state.routing.source.lat,
-            state.routing.source.lng,
-            state.routing.dest.lat,
-            state.routing.dest.lng,
-        );
-
-        state.routing.allRoutes = rawRoutes.map((route) => processRawRoute(route));
-        document.getElementById(DOM_IDS.routePanel).classList.remove(CSS_CLASSES.hidden);
-        renderRouteOptions(state.routing.allRoutes, handleRouteSelection);
-        handleRouteSelection(FIRST_ROUTE_INDEX);
-        mapInstance.drawEndpointMarkers(state.routing.source, state.routing.dest);
-    } catch (err) {
-        console.error(ROUTE_LOG_MESSAGES.calculateFailed, err);
-        showAlert(PANEL_TEXT.routeCalculationFailed, err.message);
-    } finally {
-        toggleLoadingState(false);
-    }
+    await loadRoutePlan(state.routing.source, state.routing.dest);
 }
 
-function handleRouteSelection(index) {
+export function selectRoute(index) {
     const route = state.routing.allRoutes[index];
+    if (!route) {
+        return null;
+    }
     state.routing.activeObj = route;
     state.routing.activeLegs = route.legs;
     state.routing.currentIndex = index;
@@ -118,6 +102,39 @@ function handleRouteSelection(index) {
 
     mapInstance.drawRoute(route.pathCoords, state.routing.source, state.routing.dest);
     mapInstance.drawAlternatives(state.routing.allRoutes.filter((_, routeIndex) => routeIndex !== index));
+    return route;
+}
+
+export async function loadRoutePlan(source, dest) {
+    if (!source || !dest) {
+        return null;
+    }
+
+    state.routing.source = source;
+    state.routing.dest = dest;
+
+    toggleLoadingState(true);
+    try {
+        const rawRoutes = await fetchRoute(
+            source.lat,
+            source.lng,
+            dest.lat,
+            dest.lng,
+        );
+
+        state.routing.allRoutes = rawRoutes.map((route) => processRawRoute(route));
+        document.getElementById(DOM_IDS.routePanel).classList.remove(CSS_CLASSES.hidden);
+        renderRouteOptions(state.routing.allRoutes, selectRoute);
+        const selectedRoute = selectRoute(FIRST_ROUTE_INDEX);
+        mapInstance.drawEndpointMarkers(source, dest);
+        return selectedRoute;
+    } catch (err) {
+        console.error(ROUTE_LOG_MESSAGES.calculateFailed, err);
+        showAlert(PANEL_TEXT.routeCalculationFailed, err.message);
+        throw err;
+    } finally {
+        toggleLoadingState(false);
+    }
 }
 
 function closeRoutePanel() {
