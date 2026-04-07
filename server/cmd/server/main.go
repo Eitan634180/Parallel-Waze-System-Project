@@ -12,13 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"nav-system/internal/api"
-	"nav-system/internal/graph/builder"
-	"nav-system/internal/mapstore"
-	"nav-system/internal/routing"
-	"nav-system/internal/session"
-	"nav-system/internal/simulation"
-	"nav-system/internal/traffic"
+	"nav-system/src/api"
+	"nav-system/src/graph/builder"
+	"nav-system/src/mapstore"
+	"nav-system/src/routing"
+	"nav-system/src/session"
+	"nav-system/src/simulation"
+	"nav-system/src/traffic"
 )
 
 const serverLogPrefix = "server:"

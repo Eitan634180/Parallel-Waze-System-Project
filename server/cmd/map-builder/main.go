@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"time"
 
-	"nav-system/internal/graph/builder"
-	"nav-system/internal/graph/importer"
+	"nav-system/src/graph/builder"
+	"nav-system/src/graph/importer"
 )
 
 const builderLogPrefix = "builder:"
