@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -55,7 +54,7 @@ func main() {
 	concurrency := flag.Int("concurrency", 32, "Concurrent request workers")
 	requests := flag.Int("requests", 256, "Measured request count")
 	warmup := flag.Int("warmup", 64, "Warmup request count")
-	outPrefix := flag.String("out", "", "Output file prefix (writes <prefix>.json and <prefix>.csv)")
+	outPrefix := flag.String("out", "", "Output file prefix (writes <prefix>.json)")
 	routingMode := flag.String("routing-mode", "hierarchical", "Routing mode label for metadata")
 	trafficProfile := flag.String("traffic-profile", "static", "Traffic profile label for metadata")
 	flag.Parse()
@@ -203,7 +202,6 @@ func writeOutputs(prefix string, report summary) error {
 	}
 
 	jsonPath := prefix + ".json"
-	csvPath := prefix + ".csv"
 
 	encoded, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
@@ -212,45 +210,7 @@ func writeOutputs(prefix string, report summary) error {
 	if err := os.WriteFile(jsonPath, encoded, 0o644); err != nil {
 		return err
 	}
-
-	file, err := os.Create(csvPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	header := []string{"server", "routing_mode", "traffic_profile", "corpus", "region", "query_count", "concurrency", "requests", "warmup", "gomaxprocs", "go_version", "commit_hash", "total_sec", "throughput_rps", "p50_ms", "p95_ms", "p99_ms", "error_count"}
-	row := []string{
-		report.Server,
-		report.RoutingMode,
-		report.TrafficProfile,
-		report.Corpus,
-		report.Region,
-		fmt.Sprintf("%d", report.QueryCount),
-		fmt.Sprintf("%d", report.Concurrency),
-		fmt.Sprintf("%d", report.Requests),
-		fmt.Sprintf("%d", report.Warmup),
-		fmt.Sprintf("%d", report.GOMAXPROCS),
-		report.GoVersion,
-		report.CommitHash,
-		fmt.Sprintf("%.6f", report.TotalSec),
-		fmt.Sprintf("%.6f", report.ThroughputRPS),
-		fmt.Sprintf("%.3f", report.P50Ms),
-		fmt.Sprintf("%.3f", report.P95Ms),
-		fmt.Sprintf("%.3f", report.P99Ms),
-		fmt.Sprintf("%d", report.ErrorCount),
-	}
-
-	if err := writer.Write(header); err != nil {
-		return err
-	}
-	if err := writer.Write(row); err != nil {
-		return err
-	}
-	return writer.Error()
+	return nil
 }
 
 func readCommitHash() string {

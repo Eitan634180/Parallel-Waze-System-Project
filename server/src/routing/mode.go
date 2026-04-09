@@ -28,32 +28,11 @@ func ParseRoutingMode(raw string) (RoutingMode, error) {
 }
 
 type SearchStats struct {
-	SettledBaseNodes    int64
-	SettledOverlayNodes int64
-	RelaxedBaseEdges    int64
-	RelaxedOverlayEdges int64
+	VisitedNodes int64
 }
 
-func (s *SearchStats) recordSettledBaseNode() {
+func (s *SearchStats) recordVisitedNode() {
 	if s != nil {
-		s.SettledBaseNodes++
-	}
-}
-
-func (s *SearchStats) recordSettledOverlayNode() {
-	if s != nil {
-		s.SettledOverlayNodes++
-	}
-}
-
-func (s *SearchStats) recordRelaxedBaseEdge() {
-	if s != nil {
-		s.RelaxedBaseEdges++
-	}
-}
-
-func (s *SearchStats) recordRelaxedOverlayEdge() {
-	if s != nil {
-		s.RelaxedOverlayEdges++
+		s.VisitedNodes++
 	}
 }

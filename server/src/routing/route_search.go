@@ -98,7 +98,7 @@ func (r *Router) fullGraphAStar(srcIdx, dstIdx uint32, wf WeightFunc, stats *Sea
 		if best, ok := costs[current.id]; ok && current.g > best {
 			continue
 		}
-		stats.recordSettledBaseNode()
+		stats.recordVisitedNode()
 
 		if current.id == dstID {
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
@@ -110,7 +110,6 @@ func (r *Router) fullGraphAStar(srcIdx, dstIdx uint32, wf WeightFunc, stats *Sea
 			nextIdx := edge.ToNodeIdx
 
 			nextCost := current.g + wf(edge)
-			stats.recordRelaxedBaseEdge()
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
@@ -144,7 +143,7 @@ func (r *Router) fullGraphDijkstra(srcIdx, dstIdx uint32, wf WeightFunc, stats *
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
-		stats.recordSettledBaseNode()
+		stats.recordVisitedNode()
 
 		if current.id == dstID {
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
@@ -153,7 +152,6 @@ func (r *Router) fullGraphDijkstra(srcIdx, dstIdx uint32, wf WeightFunc, stats *
 		for _, edgeID := range g.BaseAdj.Neighbours(current.idx) {
 			edge := &g.Edges[edgeID]
 			nextCost := current.cost + wf(edge)
-			stats.recordRelaxedBaseEdge()
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
@@ -194,7 +192,7 @@ func (r *Router) overlayAStar(
 		if best, ok := costs[current.id]; ok && current.g > best {
 			continue
 		}
-		stats.recordSettledOverlayNode()
+		stats.recordVisitedNode()
 
 		if _, isDestination := dstSet[current.id]; isDestination {
 			settledDestinations++
@@ -219,7 +217,6 @@ func (r *Router) overlayAStar(
 			}
 
 			nextCost := current.g + weight
-			stats.recordRelaxedOverlayEdge()
 			if best, seen := costs[overlayEdge.ToNodeID]; !seen || nextCost < best {
 				costs[overlayEdge.ToNodeID] = nextCost
 				pred[overlayEdge.ToNodeID] = overlayPredEntry{

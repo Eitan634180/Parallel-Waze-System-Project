@@ -50,10 +50,9 @@ type buildSummary struct {
 }
 
 type compareRow struct {
-	Mode    string
-	NsPerOp float64
-	Relaxed float64
-	Settled float64
+	Mode         string
+	NsPerOp      float64
+	VisitedNodes float64
 }
 
 func main() {
@@ -76,12 +75,6 @@ func main() {
 	if writeGoBenchmarkSection(&builder, "Single-Query Static Comparison", filepath.Join(reportDir, "compare-static.txt"), "BenchmarkRouterCompareStatic"); err != nil {
 		builder.WriteString(fmt.Sprintf("_Static comparison unavailable: %v_\n\n", err))
 	}
-	if writeGoBenchmarkSection(&builder, "Single-Query Live Comparison", filepath.Join(reportDir, "compare-live.txt"), "BenchmarkRouterCompareLive"); err != nil {
-		builder.WriteString(fmt.Sprintf("_Live comparison unavailable: %v_\n\n", err))
-	}
-	if writeCustomizationSection(&builder, filepath.Join(reportDir, "customize.txt")); err != nil {
-		builder.WriteString(fmt.Sprintf("_Customization benchmarks unavailable: %v_\n\n", err))
-	}
 	if writeServerScaleSection(&builder, filepath.Join(reportDir, "server-scale")); err != nil {
 		builder.WriteString(fmt.Sprintf("_Server-scale results unavailable: %v_\n\n", err))
 	}
@@ -94,10 +87,6 @@ func main() {
 		failf("write summary: %v", err)
 	}
 
-	indexPath := filepath.Join(reportDir, "index.md")
-	if err := os.WriteFile(indexPath, []byte(builder.String()), 0o644); err != nil {
-		failf("write index: %v", err)
-	}
 }
 
 func writeGoBenchmarkSection(builder *strings.Builder, title, path, prefix string) error {
@@ -119,10 +108,9 @@ func writeGoBenchmarkSection(builder *strings.Builder, title, path, prefix strin
 		mode := strings.TrimPrefix(name, prefix+"/")
 		mode = trimGOMAXPROCSSuffix(mode)
 		rows = append(rows, compareRow{
-			Mode:    mode,
-			NsPerOp: metrics["ns/op"],
-			Relaxed: metrics["relaxed_base/op"] + metrics["relaxed_overlay/op"],
-			Settled: metrics["settled_base/op"] + metrics["settled_overlay/op"],
+			Mode:         mode,
+			NsPerOp:      metrics["ns/op"],
+			VisitedNodes: metrics["visited_nodes/op"],
 		})
 	}
 	if len(rows) == 0 {
@@ -134,44 +122,17 @@ func writeGoBenchmarkSection(builder *strings.Builder, title, path, prefix strin
 	astarNs := metricForMode(rows, "base-astar")
 	dijkstraNs := metricForMode(rows, "base-dijkstra")
 
-	builder.WriteString("| Mode | ms/op | Settled Nodes/op | Relaxed Edges/op | vs A* | vs Dijkstra |\n")
-	builder.WriteString("| --- | ---: | ---: | ---: | ---: | ---: |\n")
+	builder.WriteString("| Mode | ms/op | Visited Nodes/op | vs A* | vs Dijkstra |\n")
+	builder.WriteString("| --- | ---: | ---: | ---: | ---: |\n")
 	for _, row := range rows {
 		builder.WriteString(fmt.Sprintf(
-			"| `%s` | %.3f | %.0f | %.0f | %s | %s |\n",
+			"| `%s` | %.3f | %.0f | %s | %s |\n",
 			row.Mode,
 			row.NsPerOp/1_000_000.0,
-			row.Settled,
-			row.Relaxed,
+			row.VisitedNodes,
 			speedupString(astarNs, row.NsPerOp),
 			speedupString(dijkstraNs, row.NsPerOp),
 		))
-	}
-	builder.WriteString("\n")
-	return nil
-}
-
-func writeCustomizationSection(builder *strings.Builder, path string) error {
-	report, err := parseGoBenchmarkFile(path)
-	if err != nil {
-		return err
-	}
-
-	builder.WriteString("## Customization And Amortization\n\n")
-	overlay, overlayOK := firstBenchmarkWithPrefix(report.Benchmarks, "BenchmarkOverlayCustomizationLive")
-	amortized, amortizedOK := firstBenchmarkWithPrefix(report.Benchmarks, "BenchmarkCustomizationAmortizedLive")
-	if !overlayOK && !amortizedOK {
-		return fmt.Errorf("no customization benchmarks found")
-	}
-
-	if overlayOK {
-		builder.WriteString(fmt.Sprintf("- Overlay customization: `%.3f ms/op`\n", overlay["ns/op"]/1_000_000.0))
-	}
-	if amortizedOK {
-		builder.WriteString(fmt.Sprintf("- Amortized cost after 1 query: `%.3f ms`\n", amortized["amortized_1_ms"]))
-		builder.WriteString(fmt.Sprintf("- Amortized cost after 10 queries: `%.3f ms`\n", amortized["amortized_10_ms"]))
-		builder.WriteString(fmt.Sprintf("- Amortized cost after 100 queries: `%.3f ms`\n", amortized["amortized_100_ms"]))
-		builder.WriteString(fmt.Sprintf("- Amortized cost after 1000 queries: `%.3f ms`\n", amortized["amortized_1000_ms"]))
 	}
 	builder.WriteString("\n")
 	return nil
@@ -386,15 +347,6 @@ func metricForMode(rows []compareRow, mode string) float64 {
 		}
 	}
 	return 0
-}
-
-func firstBenchmarkWithPrefix(values map[string]map[string]float64, prefix string) (map[string]float64, bool) {
-	for name, metrics := range values {
-		if strings.HasPrefix(name, prefix) {
-			return metrics, true
-		}
-	}
-	return nil, false
 }
 
 func ratioString(numerator, denominator float64) string {

@@ -51,7 +51,7 @@ func cellDijkstra(
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
-		stats.recordSettledBaseNode()
+		stats.recordVisitedNode()
 
 		if _, isTarget := targetSet[current.id]; isTarget {
 			remaining--
@@ -70,7 +70,6 @@ func cellDijkstra(
 			}
 
 			nextCost := current.cost + wf(edge)
-			stats.recordRelaxedBaseEdge()
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
@@ -121,7 +120,7 @@ func multiSourceCellDijkstra(
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
-		stats.recordSettledBaseNode()
+		stats.recordVisitedNode()
 
 		if current.id == dstID {
 			break
@@ -136,7 +135,6 @@ func multiSourceCellDijkstra(
 			}
 
 			nextCost := current.cost + wf(edge)
-			stats.recordRelaxedBaseEdge()
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}

@@ -23,23 +23,6 @@ func BenchmarkRouterCompareStatic(b *testing.B) {
 	}
 }
 
-func BenchmarkRouterCompareLive(b *testing.B) {
-	fixture := mustLoadFixture(b, benchmarkTrafficName())
-	liveWeight := weightFuncForFixture(fixture.Store)
-	modes := []routing.RoutingMode{
-		routing.RoutingModeHierarchical,
-		routing.RoutingModeBaseAStar,
-		routing.RoutingModeBaseDijkstra,
-	}
-
-	for _, mode := range modes {
-		b.Run(string(mode), func(b *testing.B) {
-			router := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
-			benchmarkCorpusQueries(b, fixture, router, liveWeight)
-		})
-	}
-}
-
 func benchmarkCorpusQueries(b *testing.B, fixture *benchutil.Fixture, router *routing.Router, wf routing.WeightFunc) {
 	cases := fixture.Corpus
 	var total routing.SearchStats
@@ -52,15 +35,9 @@ func benchmarkCorpusQueries(b *testing.B, fixture *benchutil.Fixture, router *ro
 			b.Fatalf("%s: expected one route, got %d", query.Name, len(routes))
 		}
 
-		total.SettledBaseNodes += stats.SettledBaseNodes
-		total.SettledOverlayNodes += stats.SettledOverlayNodes
-		total.RelaxedBaseEdges += stats.RelaxedBaseEdges
-		total.RelaxedOverlayEdges += stats.RelaxedOverlayEdges
+		total.VisitedNodes += stats.VisitedNodes
 	}
 	b.StopTimer()
 
-	b.ReportMetric(float64(total.SettledBaseNodes)/float64(b.N), "settled_base/op")
-	b.ReportMetric(float64(total.SettledOverlayNodes)/float64(b.N), "settled_overlay/op")
-	b.ReportMetric(float64(total.RelaxedBaseEdges)/float64(b.N), "relaxed_base/op")
-	b.ReportMetric(float64(total.RelaxedOverlayEdges)/float64(b.N), "relaxed_overlay/op")
+	b.ReportMetric(float64(total.VisitedNodes)/float64(b.N), "visited_nodes/op")
 }
