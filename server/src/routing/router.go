@@ -10,13 +10,26 @@ func BaseWeight(e *builder.Edge) float32 { return e.Weight }
 
 // Router holds graph reference and provides route computation.
 type Router struct {
-	g  *builder.Graph
-	si *SnapIndex
+	g    *builder.Graph
+	si   *SnapIndex
+	mode RoutingMode
 }
 
 // NewRouter constructs a Router.
 func NewRouter(g *builder.Graph, si *SnapIndex) *Router {
-	return &Router{g: g, si: si}
+	return NewRouterWithMode(g, si, RoutingModeHierarchical)
+}
+
+// NewRouterWithMode constructs a Router with the provided query strategy.
+func NewRouterWithMode(g *builder.Graph, si *SnapIndex, mode RoutingMode) *Router {
+	if mode == "" {
+		mode = RoutingModeHierarchical
+	}
+	return &Router{g: g, si: si, mode: mode}
+}
+
+func (r *Router) Mode() RoutingMode {
+	return r.mode
 }
 
 // Compute returns up to k routes from (srcLat, srcLon) to (dstLat, dstLon).
@@ -27,6 +40,25 @@ func (r *Router) Compute(srcLat, srcLon, dstLat, dstLon float64, k int, wf Weigh
 
 	srcIdx := r.si.Snap(srcLat, srcLon)
 	dstIdx := r.si.Snap(dstLat, dstLon)
+	return r.computeFromIndices(srcIdx, dstIdx, k, wf, nil)
+}
+
+func (r *Router) ComputeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc) []Route {
+	if wf == nil {
+		wf = BaseWeight
+	}
+	return r.computeFromIndices(srcIdx, dstIdx, k, wf, nil)
+}
+
+func (r *Router) ComputeFromIndicesWithStats(srcIdx, dstIdx uint32, k int, wf WeightFunc) ([]Route, SearchStats) {
+	if wf == nil {
+		wf = BaseWeight
+	}
+	var stats SearchStats
+	return r.computeFromIndices(srcIdx, dstIdx, k, wf, &stats), stats
+}
+
+func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc, stats *SearchStats) []Route {
 	if srcIdx == dstIdx {
 		return nil
 	}
@@ -43,7 +75,20 @@ func (r *Router) Compute(srcLat, srcLon, dstLat, dstLon float64, k int, wf Weigh
 
 	routes := make([]Route, 0, k)
 	for i := 0; i < k; i++ {
-		steps, usedOverlayEdges, ok := r.twoLevelSearch(srcIdx, dstIdx, penalizedWeight, overlayPenalties)
+		var (
+			steps            []Step
+			usedOverlayEdges []uint32
+			ok               bool
+		)
+
+		switch r.mode {
+		case RoutingModeBaseAStar:
+			steps, ok = r.fullGraphAStar(srcIdx, dstIdx, penalizedWeight, stats)
+		case RoutingModeBaseDijkstra:
+			steps, ok = r.fullGraphDijkstra(srcIdx, dstIdx, penalizedWeight, stats)
+		default:
+			steps, usedOverlayEdges, ok = r.twoLevelSearch(srcIdx, dstIdx, penalizedWeight, overlayPenalties, stats)
+		}
 		if !ok {
 			break
 		}

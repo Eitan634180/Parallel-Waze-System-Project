@@ -26,6 +26,7 @@ func cellDijkstra(
 	targetNodeIDs []builder.NodeID,
 	cellID builder.CellID,
 	wf WeightFunc,
+	stats *SearchStats,
 ) (costs map[builder.NodeID]float32, pred map[builder.NodeID]predEntry) {
 	costs = make(map[builder.NodeID]float32, len(targetNodeIDs)+1)
 	pred = make(map[builder.NodeID]predEntry, len(targetNodeIDs))
@@ -50,6 +51,7 @@ func cellDijkstra(
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
+		stats.recordSettledBaseNode()
 
 		if _, isTarget := targetSet[current.id]; isTarget {
 			remaining--
@@ -68,6 +70,7 @@ func cellDijkstra(
 			}
 
 			nextCost := current.cost + wf(edge)
+			stats.recordRelaxedBaseEdge()
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
@@ -79,11 +82,11 @@ func cellDijkstra(
 	return costs, pred
 }
 
-func intraSearch(g *builder.Graph, srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, bool) {
+func intraSearch(g *builder.Graph, srcIdx, dstIdx uint32, wf WeightFunc, stats *SearchStats) ([]Step, bool) {
 	cellID := g.Nodes[srcIdx].CellID
 	dstID := g.Nodes[dstIdx].ID
 
-	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf)
+	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf, stats)
 	if _, reached := costs[dstID]; !reached {
 		return nil, false
 	}
@@ -97,6 +100,7 @@ func multiSourceCellDijkstra(
 	dstInternalIdx uint32,
 	cellID builder.CellID,
 	wf WeightFunc,
+	stats *SearchStats,
 ) (costs map[builder.NodeID]float32, pred map[builder.NodeID]predEntry) {
 	costs = make(map[builder.NodeID]float32, len(seeds)+16)
 	pred = make(map[builder.NodeID]predEntry, len(seeds)+16)
@@ -117,6 +121,7 @@ func multiSourceCellDijkstra(
 		if best, ok := costs[current.id]; ok && current.cost > best {
 			continue
 		}
+		stats.recordSettledBaseNode()
 
 		if current.id == dstID {
 			break
@@ -131,6 +136,7 @@ func multiSourceCellDijkstra(
 			}
 
 			nextCost := current.cost + wf(edge)
+			stats.recordRelaxedBaseEdge()
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
@@ -150,7 +156,7 @@ func expandCellShortcut(g *builder.Graph, srcID, dstID builder.NodeID, wf Weight
 	}
 
 	cellID := g.Nodes[srcIdx].CellID
-	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf)
+	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf, nil)
 	if _, reached := costs[dstID]; !reached {
 		return nil
 	}

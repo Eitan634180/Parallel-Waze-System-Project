@@ -1,0 +1,7 @@
+{
+  "region": "israel-and-palestine",
+  "seed": 20260409,
+  "count": 8,
+  "min_node_index_gap": 250,
+  "max_attempts": 10000
+}

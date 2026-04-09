@@ -9,6 +9,7 @@ func (r *Router) twoLevelSearch(
 	srcIdx, dstIdx uint32,
 	wf WeightFunc,
 	overlayPenalties map[uint32]float32,
+	stats *SearchStats,
 ) ([]Step, []uint32, bool) {
 	g := r.g
 	srcNode := &g.Nodes[srcIdx]
@@ -17,13 +18,13 @@ func (r *Router) twoLevelSearch(
 	srcCellID := srcNode.CellID
 	dstCellID := dstNode.CellID
 	if srcCellID == dstCellID {
-		steps, ok := intraSearch(g, srcIdx, dstIdx, wf)
+		steps, ok := intraSearch(g, srcIdx, dstIdx, wf, stats)
 		return steps, nil, ok
 	}
 
 	// Dijkstra to source cell boundary nodes
 	srcBoundary := g.Cells[srcCellID].BoundaryNodeIDs
-	injectionCosts, injectionPred := cellDijkstra(g, srcIdx, srcBoundary, srcCellID, wf)
+	injectionCosts, injectionPred := cellDijkstra(g, srcIdx, srcBoundary, srcCellID, wf, stats)
 	overlaySeeds := make(map[builder.NodeID]float32, len(srcBoundary))
 	for _, nodeID := range srcBoundary {
 		if cost, ok := injectionCosts[nodeID]; ok {
@@ -46,7 +47,7 @@ func (r *Router) twoLevelSearch(
 	}
 
 	// A* on overlay graph
-	overlayCosts, overlayPred := r.overlayAStar(overlaySeeds, dstBoundarySet, heuristic, overlayPenalties)
+	overlayCosts, overlayPred := r.overlayAStar(overlaySeeds, dstBoundarySet, heuristic, overlayPenalties, stats)
 
 	// Dijkstra from dest cell boundary nodes
 	seeds := make([]seedE, 0, len(dstBoundary))
@@ -66,12 +67,12 @@ func (r *Router) twoLevelSearch(
 		return nil, nil, false
 	}
 
-	_, egressPred := multiSourceCellDijkstra(g, seeds, dstIdx, dstCellID, wf)
+	_, egressPred := multiSourceCellDijkstra(g, seeds, dstIdx, dstCellID, wf, stats)
 	return r.reconstruct(srcIdx, dstIdx, srcCellID, dstCellID, injectionPred, overlayPred, egressPred, wf)
 }
 
-// fullGraphSearch runs a global A* on the base graph when the overlay search fails.
-func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, bool) {
+// fullGraphAStar runs a global A* on the base graph.
+func (r *Router) fullGraphAStar(srcIdx, dstIdx uint32, wf WeightFunc, stats *SearchStats) ([]Step, bool) {
 	g := r.g
 	srcID := g.Nodes[srcIdx].ID
 	dstID := g.Nodes[dstIdx].ID
@@ -97,6 +98,7 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 		if best, ok := costs[current.id]; ok && current.g > best {
 			continue
 		}
+		stats.recordSettledBaseNode()
 
 		if current.id == dstID {
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
@@ -108,6 +110,7 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 			nextIdx := edge.ToNodeIdx
 
 			nextCost := current.g + wf(edge)
+			stats.recordRelaxedBaseEdge()
 			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
 				costs[edge.ToNodeID] = nextCost
 				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
@@ -124,11 +127,50 @@ func (r *Router) fullGraphSearch(srcIdx, dstIdx uint32, wf WeightFunc) ([]Step, 
 	return nil, false
 }
 
+func (r *Router) fullGraphDijkstra(srcIdx, dstIdx uint32, wf WeightFunc, stats *SearchStats) ([]Step, bool) {
+	g := r.g
+	srcID := g.Nodes[srcIdx].ID
+	dstID := g.Nodes[dstIdx].ID
+
+	costs := make(map[builder.NodeID]float32, 256)
+	pred := make(map[builder.NodeID]predEntry, 256)
+	costs[srcID] = 0
+
+	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
+	pq.Push(ijItem{id: srcID, idx: srcIdx, cost: 0})
+
+	for pq.Len() > 0 {
+		current := pq.Pop()
+		if best, ok := costs[current.id]; ok && current.cost > best {
+			continue
+		}
+		stats.recordSettledBaseNode()
+
+		if current.id == dstID {
+			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
+		}
+
+		for _, edgeID := range g.BaseAdj.Neighbours(current.idx) {
+			edge := &g.Edges[edgeID]
+			nextCost := current.cost + wf(edge)
+			stats.recordRelaxedBaseEdge()
+			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
+				costs[edge.ToNodeID] = nextCost
+				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
+				pq.Push(ijItem{id: edge.ToNodeID, idx: edge.ToNodeIdx, cost: nextCost})
+			}
+		}
+	}
+
+	return nil, false
+}
+
 func (r *Router) overlayAStar(
 	injectionCosts map[builder.NodeID]float32,
 	dstSet map[builder.NodeID]struct{},
 	heuristic func(uint32) float32,
 	penalties map[uint32]float32,
+	stats *SearchStats,
 ) (costs map[builder.NodeID]float32, pred map[builder.NodeID]overlayPredEntry) {
 	g := r.g
 	costs = make(map[builder.NodeID]float32, len(injectionCosts)+len(dstSet))
@@ -152,6 +194,7 @@ func (r *Router) overlayAStar(
 		if best, ok := costs[current.id]; ok && current.g > best {
 			continue
 		}
+		stats.recordSettledOverlayNode()
 
 		if _, isDestination := dstSet[current.id]; isDestination {
 			settledDestinations++
@@ -176,6 +219,7 @@ func (r *Router) overlayAStar(
 			}
 
 			nextCost := current.g + weight
+			stats.recordRelaxedOverlayEdge()
 			if best, seen := costs[overlayEdge.ToNodeID]; !seen || nextCost < best {
 				costs[overlayEdge.ToNodeID] = nextCost
 				pred[overlayEdge.ToNodeID] = overlayPredEntry{

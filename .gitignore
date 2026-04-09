@@ -8,3 +8,4 @@
 /test/node_modules/
 /test/playwright-report/
 /test/test-results/
+/.benchmarks/

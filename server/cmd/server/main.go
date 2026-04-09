@@ -26,7 +26,13 @@ const serverLogPrefix = "server:"
 func main() {
 	dataDir := flag.String("data", "", "Directory containing binary graph files (auto-detected if empty)")
 	addr := flag.String("addr", ":8080", "HTTP listen address")
+	routingModeFlag := flag.String("routing-mode", string(routing.RoutingModeHierarchical), "Routing mode: hierarchical|base-astar|base-dijkstra")
 	flag.Parse()
+
+	routingMode, err := routing.ParseRoutingMode(*routingModeFlag)
+	if err != nil {
+		log.Fatalf("ParseRoutingMode: %v", err)
+	}
 
 	// If --data is not specified, find the region automatically.
 	if *dataDir == "" {
@@ -70,7 +76,8 @@ func main() {
 	store := traffic.NewStore()
 	mgr := session.NewManager()
 	sim := simulation.NewManager(g, store)
-	router := routing.NewRouter(g, si)
+	router := routing.NewRouterWithMode(g, si, routingMode)
+	log.Printf("%s routing mode: %s", serverLogPrefix, routingMode)
 	traffic.CustomizeOverlayWeights(g, store)
 	srv := api.NewServer(g, store, mgr, router, sim)
 
