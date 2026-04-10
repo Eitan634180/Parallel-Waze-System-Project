@@ -113,3 +113,9 @@ func drainWebSocketMessages(conn *websocket.Conn, duration time.Duration) []map[
 	_ = conn.SetReadDeadline(time.Time{})
 	return out
 }
+
+func wsDialerWithTimeout(d time.Duration) *websocket.Dialer {
+	return &websocket.Dialer{
+		HandshakeTimeout: d,
+	}
+}
