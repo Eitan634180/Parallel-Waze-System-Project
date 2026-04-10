@@ -5,11 +5,10 @@ import (
 	"testing"
 
 	"nav-system/src/routing"
-	"nav-system/test/benchutil"
 )
 
 func BenchmarkRouterParallelStatic(b *testing.B) {
-	fixture := mustLoadFixture(b, "")
+	fixture := mustLoadFixture(b)
 	modes := []routing.RoutingMode{
 		routing.RoutingModeHierarchical,
 		routing.RoutingModeBaseAStar,
@@ -23,7 +22,7 @@ func BenchmarkRouterParallelStatic(b *testing.B) {
 	}
 }
 
-func benchmarkParallelQueries(b *testing.B, fixture *benchutil.Fixture, router *routing.Router, wf routing.WeightFunc) {
+func benchmarkParallelQueries(b *testing.B, fixture *Fixture, router *routing.Router, wf routing.WeightFunc) {
 	var next atomic.Uint64
 	var visited atomic.Uint64
 

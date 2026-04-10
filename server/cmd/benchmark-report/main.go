@@ -25,7 +25,6 @@ type goBenchmarkReport struct {
 type loadbenchSummary struct {
 	Server         string  `json:"server"`
 	RoutingMode    string  `json:"routing_mode"`
-	TrafficProfile string  `json:"traffic_profile"`
 	Corpus         string  `json:"corpus"`
 	Region         string  `json:"region"`
 	QueryCount     int     `json:"query_count"`

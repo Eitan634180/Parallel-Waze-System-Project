@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	benchmark_test "nav-system/test/benchmark"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,8 +16,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"nav-system/test/benchutil"
 )
 
 type routeRequest struct {
@@ -30,7 +29,6 @@ type routeRequest struct {
 type summary struct {
 	Server         string  `json:"server"`
 	RoutingMode    string  `json:"routing_mode"`
-	TrafficProfile string  `json:"traffic_profile"`
 	Corpus         string  `json:"corpus"`
 	Region         string  `json:"region"`
 	QueryCount     int     `json:"query_count"`
@@ -56,7 +54,6 @@ func main() {
 	warmup := flag.Int("warmup", 64, "Warmup request count")
 	outPrefix := flag.String("out", "", "Output file prefix (writes <prefix>.json)")
 	routingMode := flag.String("routing-mode", "hierarchical", "Routing mode label for metadata")
-	trafficProfile := flag.String("traffic-profile", "static", "Traffic profile label for metadata")
 	flag.Parse()
 
 	if *concurrency <= 0 {
@@ -69,7 +66,7 @@ func main() {
 		fail("warmup must be non-negative")
 	}
 
-	fixture, err := benchutil.LoadFixture(*casesName, "")
+	fixture, err := benchmark_test.LoadFixture(*casesName)
 	if err != nil {
 		failf("LoadFixture: %v", err)
 	}
@@ -91,7 +88,6 @@ func main() {
 	report := summary{
 		Server:         *serverURL,
 		RoutingMode:    *routingMode,
-		TrafficProfile: *trafficProfile,
 		Corpus:         *casesName,
 		Region:         fixture.Region,
 		QueryCount:     len(fixture.Corpus),
@@ -122,7 +118,7 @@ func main() {
 	fmt.Println(string(encoded))
 }
 
-func runWarmup(client *http.Client, serverURL string, corpus []benchutil.CorpusCase, warmup int) error {
+func runWarmup(client *http.Client, serverURL string, corpus []benchmark_test.CorpusCase, warmup int) error {
 	for i := 0; i < warmup; i++ {
 		if err := postRoute(client, serverURL, corpus[i%len(corpus)]); err != nil {
 			return err
@@ -131,7 +127,7 @@ func runWarmup(client *http.Client, serverURL string, corpus []benchutil.CorpusC
 	return nil
 }
 
-func runMeasured(client *http.Client, serverURL string, corpus []benchutil.CorpusCase, requests, concurrency int) ([]float64, int64, error) {
+func runMeasured(client *http.Client, serverURL string, corpus []benchmark_test.CorpusCase, requests, concurrency int) ([]float64, int64, error) {
 	latencies := make([]float64, requests)
 	jobs := make(chan int, requests)
 	var errorCount atomic.Int64
@@ -159,7 +155,7 @@ func runMeasured(client *http.Client, serverURL string, corpus []benchutil.Corpu
 	return latencies, errorCount.Load(), nil
 }
 
-func postRoute(client *http.Client, serverURL string, query benchutil.CorpusCase) error {
+func postRoute(client *http.Client, serverURL string, query benchmark_test.CorpusCase) error {
 	body, err := json.Marshal(routeRequest{
 		SrcLat:       query.SrcLat,
 		SrcLon:       query.SrcLon,

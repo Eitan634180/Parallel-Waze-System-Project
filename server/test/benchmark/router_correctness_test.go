@@ -7,7 +7,7 @@ import (
 )
 
 func TestBenchmarkCorpusMatchesBaseAStarStatic(t *testing.T) {
-	fixture := mustLoadFixture(t, "")
+	fixture := mustLoadFixture(t)
 	hierarchical := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, routing.RoutingModeHierarchical)
 	baseAStar := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, routing.RoutingModeBaseAStar)
 

@@ -98,7 +98,7 @@ for %%P in (1 2 4 8) do (
     "$env:GOMAXPROCS='%%P'; $env:GOCACHE='%GOCACHE_DIR%'; $env:CGO_ENABLED='0';" ^
     "$proc = Start-Process -FilePath '%SERVER_EXE%' -ArgumentList @('--addr','%SERVER_ADDR%','--data','%SERVER_DATA%','--routing-mode','hierarchical') -WorkingDirectory '%SERVER_DIR%' -PassThru;" ^
     "Start-Sleep -Seconds 5;" ^
-    "try { & '%LOADBENCH_EXE%' '--server' 'http://127.0.0.1:8090' '--cases' '%BENCH_CORPUS%' '--concurrency' '32' '--requests' '256' '--warmup' '64' '--routing-mode' 'hierarchical' '--traffic-profile' 'static' '--out' '%OUT_DIR%\server-scale\hierarchical-p%%P' } finally { Stop-Process -Id $proc.Id -Force }"
+    "try { & '%LOADBENCH_EXE%' '--server' 'http://127.0.0.1:8090' '--cases' '%BENCH_CORPUS%' '--concurrency' '32' '--requests' '256' '--warmup' '64' '--routing-mode' 'hierarchical' '--out' '%OUT_DIR%\server-scale\hierarchical-p%%P' } finally { Stop-Process -Id $proc.Id -Force }"
   if errorlevel 1 exit /b %ERRORLEVEL%
 )
 call :write_report

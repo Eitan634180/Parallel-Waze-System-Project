@@ -4,11 +4,10 @@ import (
 	"testing"
 
 	"nav-system/src/routing"
-	"nav-system/test/benchutil"
 )
 
 func BenchmarkRouterCompareStatic(b *testing.B) {
-	fixture := mustLoadFixture(b, "")
+	fixture := mustLoadFixture(b)
 	modes := []routing.RoutingMode{
 		routing.RoutingModeHierarchical,
 		routing.RoutingModeBaseAStar,
@@ -23,7 +22,7 @@ func BenchmarkRouterCompareStatic(b *testing.B) {
 	}
 }
 
-func benchmarkCorpusQueries(b *testing.B, fixture *benchutil.Fixture, router *routing.Router, wf routing.WeightFunc) {
+func benchmarkCorpusQueries(b *testing.B, fixture *Fixture, router *routing.Router, wf routing.WeightFunc) {
 	cases := fixture.Corpus
 	var total routing.SearchStats
 
