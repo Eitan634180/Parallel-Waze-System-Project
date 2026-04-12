@@ -152,7 +152,6 @@ type Graph struct {
 	BaseAdj AdjacencyList
 
 	Cells           []Cell
-	CellIdx         map[NodeID]CellID
 	BoundaryNodeIdx map[NodeID]uint32
 	BoundaryNodes   []NodeID
 

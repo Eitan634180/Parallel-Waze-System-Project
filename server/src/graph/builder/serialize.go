@@ -81,10 +81,8 @@ func LoadGraph(dir string) (*Graph, error) {
 		return nil, fmt.Errorf("nodes: %w", err)
 	}
 	g.NodeIdx = make(map[NodeID]uint32, len(g.Nodes))
-	g.CellIdx = make(map[NodeID]CellID, len(g.Nodes))
 	for i, n := range g.Nodes {
 		g.NodeIdx[n.ID] = uint32(i)
-		g.CellIdx[n.ID] = n.CellID
 	}
 
 	if g.Edges, err = loadEdges(filepath.Join(dir, edgesFileName)); err != nil {

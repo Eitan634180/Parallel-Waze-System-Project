@@ -23,7 +23,6 @@ const (
 func BuildGraph(pr *ParseResult) (*Graph, error) {
 	g := &Graph{
 		NodeIdx:         make(map[NodeID]uint32, len(pr.Nodes)),
-		CellIdx:         make(map[NodeID]CellID),
 		BoundaryNodeIdx: make(map[NodeID]uint32),
 	}
 
