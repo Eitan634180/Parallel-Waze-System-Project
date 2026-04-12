@@ -12,6 +12,7 @@ set "BIN_DIR=%CACHE_DIR%\bin"
 set "OUT_DIR=%ROOT%.benchmarks"
 set "BUILD_WORK_DIR=%CACHE_DIR%\bench-build"
 set "BENCH_CASES_DIR=%SERVER_DIR%\test\testdata\benchmark-cases"
+set "MAP_ROOT=%SERVER_DIR%\data\map"
 set "TARGET=%~1"
 set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
 set "LOADBENCH_EXE=%BIN_DIR%\route-loadbench.exe"
@@ -51,12 +52,32 @@ if not exist "%CHECK_DIR%\boundary.bin" exit /b 1
 if not exist "%CHECK_DIR%\overlay_adj.bin" exit /b 1
 exit /b 0
 
+:resolve_map_path
+if "%~1"=="" exit /b 1
+set "REL_PATH=%~1"
+if not "%REL_PATH::=%"=="%REL_PATH%" (
+  echo %~2 in project.env.test must be relative to server\data\map.
+  exit /b 1
+)
+if "%REL_PATH:~0,1%"=="\" (
+  echo %~2 in project.env.test must be relative to server\data\map.
+  exit /b 1
+)
+if "%REL_PATH:~0,1%"=="/" (
+  echo %~2 in project.env.test must be relative to server\data\map.
+  exit /b 1
+)
+set "%~3=%MAP_ROOT%\%REL_PATH%"
+set "REL_PATH="
+exit /b 0
+
 :rdir
 if not defined TEST_REGION_DIR (
   echo TEST_REGION_DIR was not set in project.env.test.
   exit /b 1
 )
-set "SERVER_DATA=%TEST_REGION_DIR%"
+call :resolve_map_path "%TEST_REGION_DIR%" TEST_REGION_DIR SERVER_DATA
+if errorlevel 1 exit /b %ERRORLEVEL%
 call :ready "%SERVER_DATA%"
 if errorlevel 1 (
   echo Benchmark region files not found under: %SERVER_DATA%
@@ -82,7 +103,8 @@ if not defined TEST_BENCH_PBF_PATH (
   echo TEST_BENCH_PBF_PATH was not set in project.env.test.
   exit /b 1
 )
-set "REGION_PBF=%TEST_BENCH_PBF_PATH%"
+call :resolve_map_path "%TEST_BENCH_PBF_PATH%" TEST_BENCH_PBF_PATH REGION_PBF
+if errorlevel 1 exit /b %ERRORLEVEL%
 if not defined REGION_PBF (
   echo TEST_BENCH_PBF_PATH was not set in project.env.test.
   exit /b 1

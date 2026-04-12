@@ -47,6 +47,21 @@ function readString(name, fallback = '') {
   return trimmed === '' ? fallback : trimmed;
 }
 
+function isAbsolutePath(value) {
+  return path.isAbsolute(value) || /^[A-Za-z]:/.test(value);
+}
+
+function resolveMapRelativePath(name, fallback = '') {
+  const raw = readString(name, fallback);
+  if (raw === '') {
+    return fallback;
+  }
+  if (isAbsolutePath(raw)) {
+    throw new Error(`${name} in ${envFilePath} must be relative to server/data/map.`);
+  }
+  return path.join(rootDir, 'server', 'data', 'map', raw);
+}
+
 function requireString(name) {
   const value = readString(name, '');
   if (value === '') {
@@ -118,13 +133,15 @@ const serverPort = requireInteger('TEST_SERVER_PORT', 1);
 const clientPort = requireInteger('TEST_CLIENT_PORT', 1);
 const benchmarkServerPort = requireInteger('TEST_BENCH_SERVER_PORT', 1);
 const loadbotClientPort = requireInteger('TEST_LOADBOT_CLIENT_PORT', 1);
+const mapRootDir = path.join(rootDir, 'server', 'data', 'map');
 
 export const testConfig = {
   rootDir,
   testDir,
   envFilePath,
+  mapRootDir,
   host,
-  regionDir: readString('TEST_REGION_DIR', ''),
+  regionDir: resolveMapRelativePath('TEST_REGION_DIR', ''),
   server: {
     host,
     port: serverPort,
@@ -154,7 +171,7 @@ export const testConfig = {
   },
   benchmark: {
     corpus: readString('TEST_BENCH_CORPUS', ''),
-    pbfPath: readString('TEST_BENCH_PBF_PATH', ''),
+    pbfPath: resolveMapRelativePath('TEST_BENCH_PBF_PATH', ''),
     serverPort: benchmarkServerPort,
     serverAddr: `${host}:${benchmarkServerPort}`,
     serverURL: buildHttpUrl(host, benchmarkServerPort),

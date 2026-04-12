@@ -1,8 +1,0 @@
-{
-  "region": "israel-and-palestine",
-  "seed": 20260410,
-  "edge_count": 24,
-  "min_multiplier": 1.6,
-  "max_multiplier": 3.5,
-  "min_edge_distance_m": 50
-}

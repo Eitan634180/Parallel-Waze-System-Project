@@ -1,7 +1,0 @@
-{
-  "region": "great-britain",
-  "seed": 20260409,
-  "count": 64,
-  "min_node_index_gap": 1000,
-  "max_attempts": 50000
-}
