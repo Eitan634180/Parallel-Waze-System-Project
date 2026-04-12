@@ -64,11 +64,10 @@ graph TD
     classDef preproc fill:#fff3cd,stroke:#ffc107,stroke-width:2px;
     classDef db fill:#f8d7da,stroke:#dc3545,stroke-width:2px;
 
-    subgraph "Frontend Client (Vanilla JS/HTML/CSS)"
+    subgraph "Client side"
         UI["Dashboard UI"]
         WS_Service["WebSocket Service"]
         HTTP_Service["HTTP Rest Client"]
-        MapRender["Map Rendering Engine"]
     end
 
     subgraph "Navigation Server (Go)"
@@ -82,17 +81,17 @@ graph TD
     subgraph "Map Data Pre-processing (CLI)"
         OSM[("OSM Data / PBF")]
         Builder["Map Builder"]
-        GraphDB[("Compiled Overlay Graph (.bin)")]
+        GraphDB[("Graph data (.bin)")]
     end
 
     UI --> WS_Service
     UI --> HTTP_Service
-    UI --> MapRender
     WS_Service <-->|Real-time Updates| API
-    HTTP_Service -->|Search & Config REST| API
+    HTTP_Service -->|Search & Routing REST| API
 
     API --> SessionMgr
     API --> Sim
+    API --> Traffic
     SessionMgr <--> Routing
     SessionMgr <--> Traffic
     Sim --> Traffic
@@ -103,7 +102,7 @@ graph TD
     Builder -->|Inertial Flow Partitioning| GraphDB
     GraphDB -->|Load on Startup| Routing
 
-    class UI,WS_Service,HTTP_Service,MapRender client;
+    class UI,WS_Service,HTTP_Service, client;
     class API,SessionMgr,Routing,Traffic,Sim server;
     class OSM,Builder preproc;
     class GraphDB db;
