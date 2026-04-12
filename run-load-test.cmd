@@ -31,7 +31,7 @@ set /p CLIENTS=How many browser clients should run? [default: %DEFAULT_CLIENTS%]
 if "%CLIENTS%"=="" set "CLIENTS=%DEFAULT_CLIENTS%"
 
 echo.
-echo Starting browser load test with %CLIENTS% clients against http://127.0.0.1:8080
+echo Starting browser load test with %CLIENTS% clients
 echo.
 
 pushd "%TESTS_DIR%"

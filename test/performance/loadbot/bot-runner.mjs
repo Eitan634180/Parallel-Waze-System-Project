@@ -1,19 +1,12 @@
-const tripEndPollMs = 1000;
-const blockedAssetPatterns = [
-  'tile.openstreetmap.org',
-  'googleapis.com',
-  'gstatic.com',
-];
-
-export async function runBot({ browser, clientURL, id, nextTrip, shouldStop, onTripEvent }) {
+export async function runBot({ browser, clientURL, config, id, nextTrip, shouldStop, onTripEvent }) {
   const context = await browser.newContext({
-    viewport: { width: 360, height: 240 },
+    viewport: { width: config.viewportWidth, height: config.viewportHeight },
     reducedMotion: 'reduce',
   });
 
   try {
     const page = await context.newPage();
-    await blockNonEssentialAssets(page);
+    await blockNonEssentialAssets(page, config.blockedAssetPatterns);
     page.on('pageerror', (error) => {
       console.error(`bot ${id}: page error`, error);
     });
@@ -24,7 +17,7 @@ export async function runBot({ browser, clientURL, id, nextTrip, shouldStop, onT
       try {
         onTripEvent('start');
         await page.evaluate((payload) => window.__loadbot.driveTrip(payload), nextTrip());
-        await waitUntilTripEnds(page, shouldStop);
+        await waitUntilTripEnds(page, shouldStop, config.tripEndPollMs);
         onTripEvent('complete');
       } catch (error) {
         onTripEvent('failure');
@@ -47,7 +40,7 @@ export async function runBot({ browser, clientURL, id, nextTrip, shouldStop, onT
   }
 }
 
-async function blockNonEssentialAssets(page) {
+async function blockNonEssentialAssets(page, blockedAssetPatterns) {
   await page.route('**/*', (route) => {
     const url = route.request().url();
     const type = route.request().resourceType();
@@ -66,7 +59,7 @@ async function loadBotPage(page, clientURL) {
   await page.waitForFunction(() => Boolean(window.__loadbot));
 }
 
-async function waitUntilTripEnds(page, shouldStop) {
+async function waitUntilTripEnds(page, shouldStop, tripEndPollMs) {
   while (!shouldStop()) {
     const state = await page.evaluate(() => window.__loadbot.state());
     if (!state.isDriving) {

@@ -1,50 +1,24 @@
 import { expect, test } from 'playwright/test';
 
-import { createTripGenerator, fetchBBox } from '../performance/loadbot/trip-generator.mjs';
+import { testConfig } from '../config/test-config.mjs';
+import { findDrivableTrip, openLoadbotPage } from './test-helpers';
 
-const SERVER_URL = process.env.END2END_SERVER_URL || 'http://127.0.0.1:8080';
-const candidateAttempts = 30;
-
-async function findDrivableTrip(request: import('playwright/test').APIRequestContext) {
-  const bbox = await fetchBBox(SERVER_URL);
-  const nextTrip = createTripGenerator(bbox, 0.18, 0.08);
-
-  for (let attempt = 0; attempt < candidateAttempts; attempt += 1) {
-    const trip = nextTrip();
-    const response = await request.post(`${SERVER_URL}/route`, {
-      data: {
-        src_lat: trip.source.lat,
-        src_lon: trip.source.lng,
-        dst_lat: trip.dest.lat,
-        dst_lon: trip.dest.lng,
-        alternatives: 2,
-      },
-    });
-
-    if (!response.ok()) {
-      continue;
-    }
-
-    const payload = await response.json();
-    if (Array.isArray(payload?.routes) && payload.routes.length > 0) {
-      return trip;
-    }
-  }
-
-  throw new Error(`Could not find a drivable trip after ${candidateAttempts} attempts`);
-}
-
-async function openLoadbotPage(page: import('playwright/test').Page) {
-  await page.goto('/navigation.html?loadbot=1');
-  await page.waitForFunction(() => Boolean((window as Window & { __loadbot?: unknown }).__loadbot));
-}
+type LoadbotDriveBridge = {
+  driveTrip?: (trip: unknown) => Promise<unknown>;
+  stopDriving?: () => Promise<void>;
+  state?: () => { debug?: { last_reroute_reason?: string | null } | null };
+};
 
 test('off-route reroute and debug-car updates surface in the UI', async ({ page, request }) => {
   const trip = await findDrivableTrip(request);
 
   await openLoadbotPage(page);
   await page.evaluate(async (currentTrip) => {
-    return (window as Window & { __loadbot: { driveTrip: (trip: unknown) => Promise<unknown> } }).__loadbot.driveTrip({
+    const bridge = (window as unknown as { __loadbot?: LoadbotDriveBridge }).__loadbot;
+    if (!bridge?.driveTrip) {
+      throw new Error('loadbot driveTrip bridge was not available');
+    }
+    return bridge.driveTrip({
       source: currentTrip.source,
       dest: currentTrip.dest,
     });
@@ -57,18 +31,18 @@ test('off-route reroute and debug-car updates surface in the UI', async ({ page,
   await expect(page.locator('#debug-main-status')).toContainText('Main car session');
   await page.fill('#debug-car-count', '1');
   await page.click('#debug-add-car-btn');
-  await expect(page.locator('#debug-car-status')).toContainText('Active test cars:', { timeout: 30_000 });
-  await expect(page.locator('#debug-car-status')).toContainText(/Active test cars:\s*([1-9]\d*)/, { timeout: 30_000 });
+  await expect(page.locator('#debug-car-status')).toContainText('Active test cars:', { timeout: testConfig.e2e.actionTimeoutMs });
+  await expect(page.locator('#debug-car-status')).toContainText(/Active test cars:\s*([1-9]\d*)/, { timeout: testConfig.e2e.actionTimeoutMs });
 
   await page.click('#debug-drift-btn');
-  await expect(page.locator('#alert-title')).toHaveText('Off-route reroute', { timeout: 30_000 });
+  await expect(page.locator('#alert-title')).toHaveText('Off-route reroute', { timeout: testConfig.e2e.actionTimeoutMs });
   await page.waitForFunction(() => {
-    const bridge = (window as Window & { __loadbot?: { state: () => { debug?: { last_reroute_reason?: string | null } | null } } }).__loadbot;
-    return Boolean(bridge?.state().debug?.last_reroute_reason);
-  }, null, { timeout: 30_000 });
+    const bridge = (window as unknown as { __loadbot?: LoadbotDriveBridge }).__loadbot;
+    return Boolean(bridge?.state?.().debug?.last_reroute_reason);
+  }, null, { timeout: testConfig.e2e.actionTimeoutMs });
 
   await page.evaluate(async () => {
-    const bridge = (window as Window & { __loadbot?: { stopDriving: () => Promise<void> } }).__loadbot;
-    await bridge?.stopDriving();
+    const bridge = (window as unknown as { __loadbot?: LoadbotDriveBridge }).__loadbot;
+    await bridge?.stopDriving?.();
   });
 });

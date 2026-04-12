@@ -12,7 +12,7 @@ const mimeTypes = {
   '.svg': 'image/svg+xml',
 };
 
-export async function startStaticServer(rootDir, port) {
+export async function startStaticServer(rootDir, host, port) {
   await access(rootDir);
 
   const server = http.createServer(async (req, res) => {
@@ -35,7 +35,7 @@ export async function startStaticServer(rootDir, port) {
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', resolve);
+    server.listen(port, host, resolve);
   });
 
   return server;

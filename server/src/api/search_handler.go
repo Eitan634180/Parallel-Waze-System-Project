@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -15,8 +17,9 @@ import (
 const (
 	nominatimSearchURL = "https://nominatim.openstreetmap.org/search"
 	searchUserAgent    = "navigation-prototype/1.0"
-	searchWarmupQuery  = "Tel Aviv"
 )
+
+var errSearchWarmupDisabled = errors.New("search warmup query not configured")
 
 type nominatimSearchResult struct {
 	DisplayName string `json:"display_name"`
@@ -92,7 +95,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) WarmSearch(ctx context.Context) error {
-	req, err := s.newSearchRequest(ctx, searchWarmupQuery, 1)
+	query := strings.TrimSpace(os.Getenv("NAV_SEARCH_WARMUP_QUERY"))
+	if query == "" {
+		return errSearchWarmupDisabled
+	}
+
+	req, err := s.newSearchRequest(ctx, query, 1)
 	if err != nil {
 		return err
 	}

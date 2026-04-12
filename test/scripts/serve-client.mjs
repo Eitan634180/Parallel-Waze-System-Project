@@ -3,15 +3,15 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { startStaticServer } from '../performance/loadbot/static-server.mjs';
+import { testConfig } from '../config/test-config.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '..', '..');
 const clientDir = path.join(root, 'client');
-const clientPort = Number(process.env.END2END_CLIENT_PORT || '3000');
 
-const server = await startStaticServer(clientDir, clientPort);
-console.log(`client: serving ${clientDir} on http://127.0.0.1:${clientPort}`);
+const server = await startStaticServer(clientDir, testConfig.client.host, testConfig.client.port);
+console.log(`client: serving ${clientDir} on ${testConfig.client.url}`);
 
 let closing = false;
 

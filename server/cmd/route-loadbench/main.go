@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,15 +48,18 @@ type summary struct {
 }
 
 func main() {
-	serverURL := flag.String("server", "http://127.0.0.1:8080", "Base server URL")
-	casesName := flag.String("cases", "israel-and-palestine-bench.json", "Benchmark corpus file name under server/test/testdata/benchmark-cases")
-	concurrency := flag.Int("concurrency", 32, "Concurrent request workers")
-	requests := flag.Int("requests", 256, "Measured request count")
-	warmup := flag.Int("warmup", 64, "Warmup request count")
+	serverURL := flag.String("server", "", "Base server URL")
+	casesName := flag.String("cases", "", "Benchmark corpus file name under server/test/testdata/benchmark-cases")
+	concurrency := flag.Int("concurrency", 0, "Concurrent request workers")
+	requests := flag.Int("requests", 0, "Measured request count")
+	warmup := flag.Int("warmup", -1, "Warmup request count")
 	outPrefix := flag.String("out", "", "Output file prefix (writes <prefix>.json)")
-	routingMode := flag.String("routing-mode", "hierarchical", "Routing mode label for metadata")
+	routingMode := flag.String("routing-mode", "", "Routing mode label for metadata")
 	flag.Parse()
 
+	if strings.TrimSpace(*serverURL) == "" {
+		fail("server must be provided")
+	}
 	if *concurrency <= 0 {
 		fail("concurrency must be positive")
 	}
@@ -64,6 +68,12 @@ func main() {
 	}
 	if *warmup < 0 {
 		fail("warmup must be non-negative")
+	}
+	if strings.TrimSpace(*casesName) == "" {
+		fail("cases must be provided")
+	}
+	if strings.TrimSpace(*routingMode) == "" {
+		fail("routing-mode must be provided")
 	}
 
 	fixture, err := benchmark_test.LoadFixture(*casesName)

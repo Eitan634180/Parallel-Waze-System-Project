@@ -22,8 +22,8 @@ let completedTrips = 0;
 let failedTrips = 0;
 
 const bbox = await fetchBBox(config.server);
-const nextTrip = createTripGenerator(bbox, config.insetFraction, config.commuteDegrees);
-const staticServer = await startStaticServer(clientRoot, config.clientPort);
+const nextTrip = createTripGenerator(bbox, config.insetFraction, config.commuteDegrees, config.tripGeneration);
+const staticServer = await startStaticServer(clientRoot, config.clientHost, config.clientPort);
 const browser = await chromium.launch({
   headless: config.headless,
   args: [
@@ -39,7 +39,7 @@ const browser = await chromium.launch({
     '--no-first-run',
   ],
 });
-const clientURL = `http://127.0.0.1:${config.clientPort}/navigation.html?loadbot=1`;
+const clientURL = `http://${config.clientHost}:${config.clientPort}/navigation.html?loadbot=1`;
 
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
@@ -63,6 +63,7 @@ async function launchBot(id) {
     clientURL,
     id,
     nextTrip,
+    config,
     shouldStop: () => stopping,
     onTripEvent: handleTripEvent,
   });

@@ -1,7 +1,10 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 
 set "ROOT=%~dp0"
+call "%ROOT%load-env.cmd" "%ROOT%project.env.test"
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 set "SERVER_DIR=%ROOT%server"
 set "CLIENT_DIR=%ROOT%client"
 set "TESTS_DIR=%ROOT%test"
@@ -12,9 +15,9 @@ if "%TARGET%"=="" set "TARGET=all"
 
 if /I "%TARGET%"=="help" goto :help
 if /I "%TARGET%"=="server" goto :server
-if /I "%TARGET%"=="server-race" goto :server_race
+if /I "%TARGET%"=="server-race" goto :serverrace
 if /I "%TARGET%"=="client" goto :client
-if /I "%TARGET%"=="end2end" goto :end2end
+if /I "%TARGET%"=="end2end" goto :endtoend
 if /I "%TARGET%"=="all" goto :all
 
 echo Unknown target: %TARGET%
@@ -31,7 +34,7 @@ set "EXIT_CODE=%ERRORLEVEL%"
 popd
 exit /b %EXIT_CODE%
 
-:server_race
+:serverrace
 if not exist "%SERVER_CACHE_DIR%" mkdir "%SERVER_CACHE_DIR%"
 pushd "%SERVER_DIR%"
 set "GOCACHE=%SERVER_CACHE_DIR%"
@@ -47,7 +50,7 @@ set "EXIT_CODE=%ERRORLEVEL%"
 popd
 exit /b %EXIT_CODE%
 
-:ensure_end2end_deps
+:eedeps
 if exist "%TESTS_DIR%\node_modules\playwright\cli.js" exit /b 0
 pushd "%TESTS_DIR%"
 echo Installing end-to-end test dependencies...
@@ -56,8 +59,12 @@ set "EXIT_CODE=%ERRORLEVEL%"
 popd
 exit /b %EXIT_CODE%
 
-:end2end
-call :ensure_end2end_deps
+:endtoend
+if not defined TEST_REGION_DIR (
+  echo TEST_REGION_DIR was not set in project.env.test.
+  exit /b 1
+)
+call :eedeps
 if errorlevel 1 exit /b %ERRORLEVEL%
 pushd "%TESTS_DIR%"
 call npm.cmd run test:end2end
@@ -75,6 +82,9 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 call "%~f0" client
 if errorlevel 1 exit /b %ERRORLEVEL%
 
+call "%~f0" end2end
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 exit /b 0
 
 :help
@@ -82,7 +92,7 @@ echo Usage:
 echo   run-tests.cmd [target]
 echo.
 echo Targets:
-echo   all          Run server, server-race, and client suites
+echo   all          Run server, server-race, client and end2end suites
 echo   server       Run all Go server tests under server\test
 echo   server-race  Run all Go server tests under server\test with -race
 echo   client       Run all client tests under client\test

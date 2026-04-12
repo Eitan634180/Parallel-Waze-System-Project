@@ -8,17 +8,15 @@ import (
 
 const routeEpsilon = 0.001
 
-func benchmarkCorpusName() string {
-	if name := os.Getenv("BENCH_CORPUS"); name != "" {
-		return name
-	}
-	return "israel-and-palestine-bench.json"
-}
-
 func mustLoadFixture(tb testing.TB) *Fixture {
 	tb.Helper()
 
-	fixture, err := LoadFixture(benchmarkCorpusName())
+	corpusName := os.Getenv("TEST_BENCH_CORPUS")
+	if corpusName == "" {
+		tb.Skip("TEST_BENCH_CORPUS is not set")
+	}
+
+	fixture, err := LoadFixture(corpusName)
 	if err != nil {
 		tb.Fatalf("LoadFixture: %v", err)
 	}

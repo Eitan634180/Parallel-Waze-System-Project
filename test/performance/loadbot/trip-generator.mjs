@@ -1,6 +1,3 @@
-const minTripDistanceSq = 0.0004;
-const maxTripAttempts = 10;
-
 export async function fetchBBox(serverURL) {
   const response = await fetch(`${serverURL}/system/info`);
   if (!response.ok) {
@@ -14,17 +11,21 @@ export async function fetchBBox(serverURL) {
   return payload.bbox;
 }
 
-export function createTripGenerator(bbox, insetFraction, commuteDegrees) {
+export function createTripGenerator(bbox, insetFraction, commuteDegrees, options = {}) {
+  if (typeof options.minDistanceSq !== 'number' || typeof options.maxAttempts !== 'number') {
+    throw new Error('Trip generation options must include minDistanceSq and maxAttempts.');
+  }
+
   const tripBBox = insetBBox(bbox, insetFraction);
-  return () => randomTrip(tripBBox, commuteDegrees);
+  return () => randomTrip(tripBBox, commuteDegrees, options);
 }
 
-function randomTrip(currentBBox, commuteDegrees) {
+function randomTrip(currentBBox, commuteDegrees, options) {
   const source = randomPoint(currentBBox, 'Loadbot Source');
   let dest = randomNearbyPoint(currentBBox, source, commuteDegrees, 'Loadbot Destination');
 
-  for (let attempt = 0; attempt < maxTripAttempts; attempt += 1) {
-    if (distanceSquared(source.lat, source.lng, dest.lat, dest.lng) >= minTripDistanceSq) {
+  for (let attempt = 0; attempt < options.maxAttempts; attempt += 1) {
+    if (distanceSquared(source.lat, source.lng, dest.lat, dest.lng) >= options.minDistanceSq) {
       return { source, dest };
     }
     dest = randomNearbyPoint(currentBBox, source, commuteDegrees, 'Loadbot Destination');
