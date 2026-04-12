@@ -85,7 +85,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request, sessionID stri
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			if !websocket.IsCloseError(
+				err,
+				websocket.CloseNormalClosure,
+				websocket.CloseGoingAway,
+				websocket.CloseNoStatusReceived,
+			) {
 				log.Printf("%s read failed for session %s: %v", sessionWSLogPrefix, sessionID, err)
 			}
 			return

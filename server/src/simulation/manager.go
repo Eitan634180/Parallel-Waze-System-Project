@@ -17,6 +17,13 @@ const (
 	tickInterval                  = 250 * time.Millisecond
 	simObservationWarmupS         = float32(1.0)
 	simObservationSampleIntervalS = float32(1.0)
+	simRandomSeed                 = int64(42)
+	simPaceBiasBase               = float32(0.85)
+	simPaceBiasRange              = float32(0.30)
+	minLegDistanceFallbackM       = float32(0.1)
+	defaultLegSpeedKmh            = float32(50)
+	minSimSpeedKmh                = float32(8)
+	maxSimSpeedMultiplier         = float32(1.1)
 )
 
 type CarSnapshot struct {
@@ -68,7 +75,7 @@ func NewManager(g *builder.Graph, store *traffic.Store) *Manager {
 	return &Manager{
 		g:           g,
 		store:       store,
-		rng:         rand.New(rand.NewSource(42)),
+		rng:         rand.New(rand.NewSource(simRandomSeed)),
 		cars:        make(map[string]*car),
 		subscribers: make(map[int]chan []CarSnapshot),
 	}
@@ -120,7 +127,7 @@ func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) in
 			stepIdx:  startIndex + 1,
 			lat:      route.Steps[startIndex].Lat,
 			lon:      route.Steps[startIndex].Lon,
-			paceBias: 0.85 + m.rng.Float32()*0.30,
+			paceBias: simPaceBiasBase + m.rng.Float32()*simPaceBiasRange,
 		}
 
 		if m.sessionBridge.Create != nil && m.sessionBridge.ProcessPing != nil && m.sessionBridge.Destroy != nil {
@@ -247,7 +254,7 @@ func advanceCar(c *car, g *builder.Graph, store *traffic.Store, dtSec float32, p
 		cur := c.route.Steps[c.stepIdx]
 		legDist := cur.DistanceM - prev.DistanceM
 		if legDist <= 0 {
-			legDist = 0.1
+			legDist = minLegDistanceFallbackM
 		}
 		leftOnLeg := legDist - c.progressM
 		maxDistanceThisTick := speedMps * remainingSec
@@ -348,7 +355,7 @@ func routeLegWeight(route routing.Route, startIndex int) float32 {
 	}
 	legDist := route.Steps[startIndex+1].DistanceM - route.Steps[startIndex].DistanceM
 	if legDist <= 0 {
-		return 0.1
+		return minLegDistanceFallbackM
 	}
 	return legDist
 }
@@ -394,7 +401,7 @@ func currentSpeedMps(c *car, g *builder.Graph, store *traffic.Store) float32 {
 	legDist := cur.DistanceM - prev.DistanceM
 	legTime := cur.BaseTimeSec - prev.BaseTimeSec
 
-	baseKmh := float32(50)
+	baseKmh := defaultLegSpeedKmh
 	if legDist > 0 && legTime > 0 {
 		baseKmh = (legDist / legTime) * 3.6
 	}
@@ -412,11 +419,11 @@ func currentSpeedMps(c *car, g *builder.Graph, store *traffic.Store) float32 {
 	}
 
 	speedKmh := baseKmh * c.paceBias
-	if speedKmh < 8 {
-		speedKmh = 8
+	if speedKmh < minSimSpeedKmh {
+		speedKmh = minSimSpeedKmh
 	}
-	if speedKmh > baseKmh*1.1 {
-		speedKmh = baseKmh * 1.1
+	if speedKmh > baseKmh*maxSimSpeedMultiplier {
+		speedKmh = baseKmh * maxSimSpeedMultiplier
 	}
 	return speedKmh / 3.6
 }

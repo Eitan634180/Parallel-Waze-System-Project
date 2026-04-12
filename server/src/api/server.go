@@ -15,6 +15,7 @@ import (
 
 const (
 	routeCacheGCInterval = 5 * time.Minute
+	apiHTTPClientTimeout = 5 * time.Second
 )
 
 // Server wires together all dependencies and exposes the HTTP mux.
@@ -49,7 +50,7 @@ func NewServer(
 		sim:        sim,
 		search:     loadSearchConfig(),
 		routeCache: make(map[string]routeCacheEntry),
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		httpClient: &http.Client{Timeout: apiHTTPClientTimeout},
 		mux:        http.NewServeMux(),
 	}
 	sim.SetSessionBridge(simulation.SessionBridge{
@@ -90,7 +91,7 @@ func NewServer(
 		},
 	})
 	// Set Nominatim ViewBox from the graph's bounding box (if not overridden by env).
-	if s.search.ViewBox == "" && g.BBox.MaxLat != 0 {
+	if s.search.ViewBox == "" && !g.BBox.IsZero() {
 		s.search.ViewBox = g.BBox.NominatimViewBox()
 	}
 	s.registerRoutes()

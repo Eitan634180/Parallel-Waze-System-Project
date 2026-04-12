@@ -15,11 +15,16 @@ import (
 
 const builderLogPrefix = "builder:"
 
+const (
+	defaultMapBuilderCellSize = 2000
+	defaultMapBuilderWorkers  = 0
+)
+
 func main() {
 	pbfPath := flag.String("pbf", "", "Path to .osm.pbf file (required)")
 	outDir := flag.String("out", "./data/map", "Output directory")
-	cellSize := flag.Int("cell-size", 2000, "Max nodes per cell (Inertial Flow)")
-	workers := flag.Int("workers", 0, "Goroutines for overlay construction (default: NumCPU)")
+	cellSize := flag.Int("cell-size", defaultMapBuilderCellSize, "Max nodes per cell (Inertial Flow)")
+	workers := flag.Int("workers", defaultMapBuilderWorkers, "Goroutines for overlay construction (default: NumCPU)")
 	flag.Parse()
 
 	if *pbfPath == "" {

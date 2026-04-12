@@ -24,7 +24,7 @@ import (
 const serverLogPrefix = "server:"
 
 func main() {
-	dataDir := flag.String("data", "", "Directory containing binary graph files (auto-detected if empty)")
+	dataDir := flag.String("data", "", "Directory containing binary graph files")
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	routingModeFlag := flag.String("routing-mode", string(routing.RoutingModeHierarchical), "Routing mode: hierarchical|base-astar|base-dijkstra")
 	flag.Parse()
@@ -34,7 +34,6 @@ func main() {
 		log.Fatalf("ParseRoutingMode: %v", err)
 	}
 
-	// If --data is not specified, find the region automatically.
 	if *dataDir == "" {
 		mapRoot := filepath.Join(".", "data", "map")
 		regions, err := mapstore.ListReady(mapRoot)

@@ -25,26 +25,37 @@ const (
 	RoadUnclassified uint8 = 8
 )
 
+const (
+	defaultMotorwaySpeedKmh     = float32(120)
+	defaultTrunkSpeedKmh        = float32(100)
+	defaultPrimarySpeedKmh      = float32(80)
+	defaultSecondarySpeedKmh    = float32(60)
+	defaultTertiarySpeedKmh     = float32(50)
+	defaultResidentialSpeedKmh  = float32(50)
+	defaultServiceSpeedKmh      = float32(20)
+	defaultUnclassifiedSpeedKmh = float32(50)
+)
+
 // DefaultSpeedKmh returns the fallback speed for a road class when maxspeed is
 // missing from the source data.
 func DefaultSpeedKmh(class uint8) float32 {
 	switch class {
 	case RoadMotorway:
-		return 120
+		return defaultMotorwaySpeedKmh
 	case RoadTrunk:
-		return 100
+		return defaultTrunkSpeedKmh
 	case RoadPrimary:
-		return 80
+		return defaultPrimarySpeedKmh
 	case RoadSecondary:
-		return 60
+		return defaultSecondarySpeedKmh
 	case RoadTertiary:
-		return 50
+		return defaultTertiarySpeedKmh
 	case RoadResidential:
-		return 50
+		return defaultResidentialSpeedKmh
 	case RoadService:
-		return 20
+		return defaultServiceSpeedKmh
 	default:
-		return 50
+		return defaultUnclassifiedSpeedKmh
 	}
 }
 
