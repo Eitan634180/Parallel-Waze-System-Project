@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 set "ROOT=%~dp0"
 call "%ROOT%load-env.cmd" "%ROOT%project.env.development"
@@ -78,11 +78,12 @@ if defined DEV_REGION_DIR (
     exit /b 1
   )
 ) else (
+  set "DATA_DIR="
   echo.
   echo Selecting map region...
   for /f "usebackq delims=" %%D in (`""%PICKER_EXE%" --prompt --map-root "%SERVER_DIR%\data\map" --cache "%SERVER_DIR%\data\geofabrik-index.json""`) do set "DATA_DIR=%%D"
 
-  if "%DATA_DIR%"=="" (
+  if "!DATA_DIR!"=="" (
     echo.
     echo Region picker did not return a data directory.
     pause

@@ -165,7 +165,7 @@ for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
     "$benchExit = 0;" ^
     "try { & '%LOADBENCH_EXE%' '--server' '%SERVER_URL%' '--cases' '%TEST_BENCH_CORPUS%' '--concurrency' '%TEST_BENCH_CONCURRENCY%' '--requests' '%TEST_BENCH_REQUESTS%' '--warmup' '%TEST_BENCH_WARMUP%' '--routing-mode' '%TEST_BENCH_ROUTING_MODE%' '--out' '%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P'; $benchExit = $LASTEXITCODE } finally { if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force } }" ^
     "exit $benchExit"
-  if errorlevel 1 exit /b %ERRORLEVEL%
+  if errorlevel 1 exit /b !ERRORLEVEL!
 )
 call :write_report
 exit /b %ERRORLEVEL%
