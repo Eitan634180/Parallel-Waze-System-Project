@@ -64,10 +64,10 @@ graph TD
     classDef preproc fill:#fff3cd,stroke:#ffc107,stroke-width:2px;
     classDef db fill:#f8d7da,stroke:#dc3545,stroke-width:2px;
 
-    subgraph "Client side"
-        UI["Dashboard UI"]
-        WS_Service["WebSocket Service"]
-        HTTP_Service["HTTP Rest Client"]
+    subgraph "Client side (HTML\CSS\JS)"
+        UI["GUI"]
+        WS_Service["WebSocket"]
+        HTTP_Service["HTTP Rest"]
     end
 
     subgraph "Navigation Server (Go)"
@@ -87,7 +87,7 @@ graph TD
     UI --> WS_Service
     UI --> HTTP_Service
     WS_Service <-->|Real-time Updates| API
-    HTTP_Service -->|Search & Routing REST| API
+    HTTP_Service -->|Geolocation & Routing| API
 
     API --> SessionMgr
     API --> Sim
