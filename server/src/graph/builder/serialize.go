@@ -13,6 +13,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -44,26 +46,54 @@ func SaveGraph(g *Graph, dir string) error {
 	if err := os.MkdirAll(dir, graphDataDirPerm); err != nil {
 		return err
 	}
-	if err := saveNodes(g, filepath.Join(dir, nodesFileName)); err != nil {
-		return fmt.Errorf("nodes: %w", err)
-	}
-	if err := saveEdges(g, filepath.Join(dir, edgesFileName)); err != nil {
-		return fmt.Errorf("edges: %w", err)
-	}
-	if err := saveBaseAdj(g, filepath.Join(dir, baseAdjFileName)); err != nil {
-		return fmt.Errorf("base_adj: %w", err)
-	}
-	if err := saveCells(g, filepath.Join(dir, cellsFileName)); err != nil {
-		return fmt.Errorf("cells: %w", err)
-	}
-	if err := saveBoundary(g, filepath.Join(dir, boundaryFileName)); err != nil {
-		return fmt.Errorf("boundary: %w", err)
-	}
-	if err := saveOverlayAdj(g, filepath.Join(dir, overlayAdjFileName)); err != nil {
-		return fmt.Errorf("overlay_adj: %w", err)
-	}
-	if err := saveMeta(g, filepath.Join(dir, metaFileName)); err != nil {
-		return fmt.Errorf("meta: %w", err)
+
+	eg := new(errgroup.Group)
+
+	eg.Go(func() error {
+		if err := saveNodes(g, filepath.Join(dir, nodesFileName)); err != nil {
+			return fmt.Errorf("nodes: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveEdges(g, filepath.Join(dir, edgesFileName)); err != nil {
+			return fmt.Errorf("edges: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveBaseAdj(g, filepath.Join(dir, baseAdjFileName)); err != nil {
+			return fmt.Errorf("base_adj: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveCells(g, filepath.Join(dir, cellsFileName)); err != nil {
+			return fmt.Errorf("cells: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveBoundary(g, filepath.Join(dir, boundaryFileName)); err != nil {
+			return fmt.Errorf("boundary: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveOverlayAdj(g, filepath.Join(dir, overlayAdjFileName)); err != nil {
+			return fmt.Errorf("overlay_adj: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveMeta(g, filepath.Join(dir, metaFileName)); err != nil {
+			return fmt.Errorf("meta: %w", err)
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return err
 	}
 
 	log.Printf("%s graph write complete", graphStoreLogPrefix)
@@ -75,38 +105,83 @@ func LoadGraph(dir string) (*Graph, error) {
 	log.Printf("%s reading graph from %s", graphStoreLogPrefix, dir)
 
 	g := &Graph{}
+	eg := new(errgroup.Group)
 
-	var err error
-	if g.Nodes, err = loadNodes(filepath.Join(dir, nodesFileName)); err != nil {
-		return nil, fmt.Errorf("nodes: %w", err)
-	}
-	g.NodeIdx = make(map[NodeID]uint32, len(g.Nodes))
-	for i, n := range g.Nodes {
-		g.NodeIdx[n.ID] = uint32(i)
+	eg.Go(func() error {
+		nodes, err := loadNodes(filepath.Join(dir, nodesFileName))
+		if err != nil {
+			return fmt.Errorf("nodes: %w", err)
+		}
+		g.Nodes = nodes
+		g.NodeIdx = make(map[NodeID]uint32, len(nodes))
+		for i, n := range nodes {
+			g.NodeIdx[n.ID] = uint32(i)
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		edges, err := loadEdges(filepath.Join(dir, edgesFileName))
+		if err != nil {
+			return fmt.Errorf("edges: %w", err)
+		}
+		g.Edges = edges
+		return nil
+	})
+
+	eg.Go(func() error {
+		baseAdj, err := loadBaseAdj(filepath.Join(dir, baseAdjFileName))
+		if err != nil {
+			return fmt.Errorf("base_adj: %w", err)
+		}
+		g.BaseAdj = baseAdj
+		return nil
+	})
+
+	eg.Go(func() error {
+		cells, err := loadCells(filepath.Join(dir, cellsFileName))
+		if err != nil {
+			return fmt.Errorf("cells: %w", err)
+		}
+		g.Cells = cells
+		return nil
+	})
+
+	eg.Go(func() error {
+		boundaryNodes, err := loadBoundary(filepath.Join(dir, boundaryFileName))
+		if err != nil {
+			return fmt.Errorf("boundary: %w", err)
+		}
+		g.BoundaryNodes = boundaryNodes
+		g.BoundaryNodeIdx = make(map[NodeID]uint32, len(boundaryNodes))
+		for i, nid := range boundaryNodes {
+			g.BoundaryNodeIdx[nid] = uint32(i)
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		overlayAdj, err := loadOverlayAdj(filepath.Join(dir, overlayAdjFileName))
+		if err != nil {
+			return fmt.Errorf("overlay_adj: %w", err)
+		}
+		g.OverlayAdj = overlayAdj
+		return nil
+	})
+
+	eg.Go(func() error {
+		if err := loadMeta(g, filepath.Join(dir, metaFileName)); err != nil {
+			log.Printf("%s meta.json unavailable (%v), deferring bbox computation from nodes", graphStoreLogPrefix, err)
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 
-	if g.Edges, err = loadEdges(filepath.Join(dir, edgesFileName)); err != nil {
-		return nil, fmt.Errorf("edges: %w", err)
-	}
-	if g.BaseAdj, err = loadBaseAdj(filepath.Join(dir, baseAdjFileName)); err != nil {
-		return nil, fmt.Errorf("base_adj: %w", err)
-	}
-	if g.Cells, err = loadCells(filepath.Join(dir, cellsFileName)); err != nil {
-		return nil, fmt.Errorf("cells: %w", err)
-	}
-	if g.BoundaryNodes, err = loadBoundary(filepath.Join(dir, boundaryFileName)); err != nil {
-		return nil, fmt.Errorf("boundary: %w", err)
-	}
-	g.BoundaryNodeIdx = make(map[NodeID]uint32, len(g.BoundaryNodes))
-	for i, nid := range g.BoundaryNodes {
-		g.BoundaryNodeIdx[nid] = uint32(i)
-	}
-	if g.OverlayAdj, err = loadOverlayAdj(filepath.Join(dir, overlayAdjFileName)); err != nil {
-		return nil, fmt.Errorf("overlay_adj: %w", err)
-	}
-	if err := loadMeta(g, filepath.Join(dir, metaFileName)); err != nil {
-		// Older graphs may not have meta.json, so recover the bbox from nodes.
-		log.Printf("%s meta.json unavailable (%v), recomputing bounding box from nodes", graphStoreLogPrefix, err)
+	if g.BBox.IsZero() {
+		log.Printf("%s recomputing bounding box from node data", graphStoreLogPrefix)
 		g.BBox = boundingBoxFromNodes(g.Nodes)
 	}
 

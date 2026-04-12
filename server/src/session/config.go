@@ -13,7 +13,7 @@ const (
 	optimizationSweepInterval = 500 * time.Millisecond
 	slowComputeLogThreshold   = 150 * time.Millisecond
 
-	rerouteCooldown = 5 * time.Second
+	rerouteCooldown = 10 * time.Second
 	etaThrottle     = 2 * time.Second
 
 	congestionMultiplier = traffic.CongestionThreshold
