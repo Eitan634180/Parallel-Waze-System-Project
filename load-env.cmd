@@ -13,15 +13,13 @@ if not exist "%_LOAD_ENV_FILE%" (
 )
 
 for /f "usebackq eol=# tokens=1* delims==" %%A in ("%_LOAD_ENV_FILE%") do (
-  call :set_if_missing "%%~A" "%%~B"
+  call :set_value "%%~A" "%%~B"
 )
 
 set "_LOAD_ENV_FILE="
 exit /b 0
 
-:set_if_missing
+:set_value
 if "%~1"=="" exit /b 0
-call set "_LOAD_ENV_CURRENT=%%%~1%%"
-if not defined _LOAD_ENV_CURRENT set "%~1=%~2"
-set "_LOAD_ENV_CURRENT="
+set "%~1=%~2"
 exit /b 0

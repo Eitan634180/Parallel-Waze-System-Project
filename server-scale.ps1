@@ -43,6 +43,7 @@ try {
         --requests $Requests `
         --warmup $Warmup `
         --routing-mode $RoutingMode `
+        --target-gomaxprocs $GOMAXPROCS `
         --out $Out
     $benchExit = $LASTEXITCODE
 }

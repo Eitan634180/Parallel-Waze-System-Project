@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,10 @@ type routeRequest struct {
 	DstLat       float64 `json:"dst_lat"`
 	DstLon       float64 `json:"dst_lon"`
 	Alternatives int     `json:"alternatives"`
+}
+
+type simulationWarmupRequest struct {
+	Count int `json:"count"`
 }
 
 type summary struct {
@@ -55,6 +60,7 @@ func main() {
 	warmup := flag.Int("warmup", -1, "Warmup request count")
 	outPrefix := flag.String("out", "", "Output file prefix (writes <prefix>.json)")
 	routingMode := flag.String("routing-mode", "", "Routing mode label for metadata")
+	targetGOMAXPROCS := flag.Int("target-gomaxprocs", 0, "Target server GOMAXPROCS for benchmark metadata")
 	flag.Parse()
 
 	if strings.TrimSpace(*serverURL) == "" {
@@ -83,9 +89,14 @@ func main() {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	if *warmup > 0 {
-		if err := runWarmup(client, *serverURL, fixture.Corpus, *warmup); err != nil {
+		if err := runWarmup(client, *serverURL, *warmup); err != nil {
 			failf("warmup failed: %v", err)
 		}
+		defer func() {
+			if err := clearWarmup(client, *serverURL); err != nil {
+				failf("cleanup failed: %v", err)
+			}
+		}()
 	}
 
 	start := time.Now()
@@ -104,7 +115,7 @@ func main() {
 		Concurrency:   *concurrency,
 		Requests:      *requests,
 		Warmup:        *warmup,
-		GOMAXPROCS:    runtime.GOMAXPROCS(0),
+		GOMAXPROCS:    benchmarkGOMAXPROCS(*targetGOMAXPROCS),
 		GoVersion:     runtime.Version(),
 		CommitHash:    readCommitHash(),
 		TotalSec:      total.Seconds(),
@@ -128,13 +139,64 @@ func main() {
 	fmt.Println(string(encoded))
 }
 
-func runWarmup(client *http.Client, serverURL string, corpus []benchmark_test.CorpusCase, warmup int) error {
-	for i := 0; i < warmup; i++ {
-		if err := postRoute(client, serverURL, corpus[i%len(corpus)]); err != nil {
-			return err
-		}
+func benchmarkGOMAXPROCS(target int) int {
+	if target > 0 {
+		return target
+	}
+	return runtime.GOMAXPROCS(0)
+}
+
+func runWarmup(client *http.Client, serverURL string, warmup int) error {
+	body, err := json.Marshal(simulationWarmupRequest{Count: warmup})
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Post(serverURL + "/simulation/random", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	time.Sleep(warmupWaitDuration())
+	return nil
+}
+
+func clearWarmup(client *http.Client, serverURL string) error {
+	req, err := http.NewRequest(http.MethodDelete, serverURL + "/simulation", nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func warmupWaitDuration() time.Duration {
+	const defaultWaitSec = 5
+
+	raw := strings.TrimSpace(os.Getenv("TEST_BENCH_WARMUP_WAIT_SEC"))
+	if raw == "" {
+		return defaultWaitSec * time.Second
+	}
+
+	waitSec, err := strconv.Atoi(raw)
+	if err != nil || waitSec < 0 {
+		return defaultWaitSec * time.Second
+	}
+	return time.Duration(waitSec) * time.Second
 }
 
 func runMeasured(client *http.Client, serverURL string, corpus []benchmark_test.CorpusCase, requests, concurrency int) ([]float64, int64, error) {
