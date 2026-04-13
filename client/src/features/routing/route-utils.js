@@ -69,6 +69,7 @@ export function projectPositionOntoRoute(routeObj, lat, lng) {
                 roadIndex: index,
                 stepProgress: progressM,
                 distanceLeft: Math.max(0, (routeObj.distance || 0) - startDistance - progressM),
+                distanceLeftOnStep: Math.max(0, (leg.base_length || 0) - progressM),
             };
         }
     });

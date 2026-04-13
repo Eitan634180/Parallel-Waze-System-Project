@@ -16,6 +16,7 @@ function loadDrivingFixture() {
     state.routing.activeLegs = state.routing.activeObj.legs;
     state.drive.carPos = [32.0000, 34.0000];
     state.drive.distanceLeft = state.routing.activeObj.distance;
+    state.drive.distanceLeftOnStep = state.routing.activeLegs[0].base_length;
     state.sim.pendingEdgeEvents = [];
     state.sim.currentEdgeTimeMs = 1000;
 }

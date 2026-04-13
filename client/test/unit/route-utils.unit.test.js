@@ -29,5 +29,6 @@ test('projectPositionOntoRoute finds the nearest segment and remaining distance'
     assert.equal(projected.roadIndex, 0);
     assert.ok(projected.stepProgress > 0);
     assert.ok(projected.distanceLeft < route.distance);
+    assert.ok(projected.distanceLeftOnStep > 0);
     assert.ok(projected.offsetM < 5);
 });
