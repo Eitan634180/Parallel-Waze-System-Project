@@ -427,7 +427,7 @@ func BuildOverlayGraph(g *Graph, numWorkers int) {
 	}
 	offsets[len(g.BoundaryNodes)] = uint32(len(edges))
 
-	g.OverlayAdj = OverlayAdjList{Offsets: offsets, OverlayEdges: edges}
+	g.OverlayAdj = OverlayAdjList{Mu: &sync.RWMutex{}, Offsets: offsets, OverlayEdges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
 		cellBuilderLogPrefix,
 		totalEdges,
