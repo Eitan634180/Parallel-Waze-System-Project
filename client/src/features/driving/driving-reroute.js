@@ -10,6 +10,7 @@ import { DOM_IDS, PANEL_TEXT } from '../../ui/ui-constants.js';
 
 const SECONDS_PER_MINUTE = 60;
 const DEFAULT_REROUTE_REASON = 'traffic';
+const OFF_ROUTE_REASON = 'off_route';
 const STEP_INDEX_OFFSET = 1;
 const ZERO_OFFSET = Object.freeze([0, 0]);
 
@@ -71,7 +72,7 @@ function syncDebugRerouteState(reason) {
 }
 
 function showRerouteAlert(reason, oldEtaSec, newEtaSec) {
-    if (reason === 'off_route') {
+    if (reason === OFF_ROUTE_REASON) {
         const distance = state.debug.serverData?.off_route_distance_m;
         const detail = typeof distance === 'number'
             ? `${distance.toFixed(1)} m away from the expected path.`

@@ -20,6 +20,7 @@ export function updateETA(seconds) {
 export function updateDistance(meters, elementId = DOM_IDS.distanceValue) {
     const km = (meters / DISTANCE_CONVERSION.metersPerKilometer).toFixed(1);
     document.getElementById(elementId).textContent = `${km} km`;
+    if (km >= 100) document.getElementById(elementId).style.fontSize = '14px';
 }
 
 export function updateTrafficStatus(status = TRAFFIC_LEVELS.normal, detail = '') {

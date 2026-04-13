@@ -154,8 +154,3 @@ export function syncStoredDebugCars() {
     cancelPendingSnapshotFlush();
     mapInstance.syncDebugCars(cars);
 }
-
-export function disconnectDebugCars() {
-    disconnectSimulation();
-    resetSimulationFeedState();
-}

@@ -131,7 +131,6 @@ const host = requireString('TEST_HOST');
 const routingMode = requireString('TEST_ROUTING_MODE');
 const serverPort = requireInteger('TEST_SERVER_PORT', 1);
 const clientPort = requireInteger('TEST_CLIENT_PORT', 1);
-const benchmarkServerPort = requireInteger('TEST_BENCH_SERVER_PORT', 1);
 const loadbotClientPort = requireInteger('TEST_LOADBOT_CLIENT_PORT', 1);
 const mapRootDir = path.join(rootDir, 'server', 'data', 'map');
 
@@ -168,18 +167,6 @@ export const testConfig = {
   tripGeneration: {
     minDistanceSq: requireFloat('TEST_TRIP_MIN_DISTANCE_SQ', 0),
     maxAttempts: requireInteger('TEST_TRIP_MAX_ATTEMPTS', 1),
-  },
-  benchmark: {
-    corpus: readString('TEST_BENCH_CORPUS', ''),
-    pbfPath: resolveMapRelativePath('TEST_BENCH_PBF_PATH', ''),
-    serverPort: benchmarkServerPort,
-    serverAddr: `${host}:${benchmarkServerPort}`,
-    serverURL: buildHttpUrl(host, benchmarkServerPort),
-    routingMode: requireString('TEST_BENCH_ROUTING_MODE'),
-    concurrency: requireInteger('TEST_BENCH_CONCURRENCY', 1),
-    requests: requireInteger('TEST_BENCH_REQUESTS', 1),
-    warmup: requireInteger('TEST_BENCH_WARMUP', 0),
-    gomaxprocs: requireList('TEST_BENCH_GOMAXPROCS'),
   },
   loadbot: {
     clientPort: loadbotClientPort,

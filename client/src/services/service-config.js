@@ -38,9 +38,6 @@ export const WS_MESSAGE_TYPES = {
     reroute: 'reroute',
     snapshot: 'snapshot',
     speedUpdate: 'speed_update',
-    start: 'start',
-    stop: 'stop',
-    tick: 'tick',
 };
 
 export const REQUEST_DEFAULTS = {
