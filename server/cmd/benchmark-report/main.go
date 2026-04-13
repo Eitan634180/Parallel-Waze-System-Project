@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,27 +23,27 @@ type goBenchmarkReport struct {
 }
 
 type loadbenchSummary struct {
-	Server         string  `json:"server"`
-	RoutingMode    string  `json:"routing_mode"`
-	Corpus         string  `json:"corpus"`
-	Region         string  `json:"region"`
-	QueryCount     int     `json:"query_count"`
-	Concurrency    int     `json:"concurrency"`
-	Requests       int     `json:"requests"`
-	Warmup         int     `json:"warmup"`
-	GOMAXPROCS     int     `json:"gomaxprocs"`
-	GoVersion      string  `json:"go_version"`
-	CommitHash     string  `json:"commit_hash,omitempty"`
-	TotalSec       float64 `json:"total_sec"`
-	ThroughputRPS  float64 `json:"throughput_rps"`
-	P50Ms          float64 `json:"p50_ms"`
-	P95Ms          float64 `json:"p95_ms"`
-	P99Ms          float64 `json:"p99_ms"`
-	ErrorCount     int64   `json:"error_count"`
+	Server        string  `json:"server"`
+	RoutingMode   string  `json:"routing_mode"`
+	Corpus        string  `json:"corpus"`
+	Region        string  `json:"region"`
+	QueryCount    int     `json:"query_count"`
+	Concurrency   int     `json:"concurrency"`
+	Requests      int     `json:"requests"`
+	Warmup        int     `json:"warmup"`
+	GOMAXPROCS    int     `json:"gomaxprocs"`
+	GoVersion     string  `json:"go_version"`
+	CommitHash    string  `json:"commit_hash,omitempty"`
+	TotalSec      float64 `json:"total_sec"`
+	ThroughputRPS float64 `json:"throughput_rps"`
+	P50Ms         float64 `json:"p50_ms"`
+	P95Ms         float64 `json:"p95_ms"`
+	P99Ms         float64 `json:"p99_ms"`
+	ErrorCount    int64   `json:"error_count"`
 }
 
 type buildSummary struct {
-	Workers       int
+	GOMAXPROCS    int
 	OverlayTimeMs float64
 	TotalTimeMs   float64
 }
@@ -213,17 +213,17 @@ func writeBuildScaleSection(builder *strings.Builder, dir string) error {
 		return fmt.Errorf("no build logs found")
 	}
 
-	sort.Slice(results, func(i, j int) bool { return results[i].Workers < results[j].Workers })
+	sort.Slice(results, func(i, j int) bool { return results[i].GOMAXPROCS < results[j].GOMAXPROCS })
 	totalBaseline := results[0].TotalTimeMs
 	overlayBaseline := results[0].OverlayTimeMs
 
 	builder.WriteString("## Build Scaling\n\n")
-	builder.WriteString("| Workers | Overlay (ms) | Total (ms) | Overlay Speedup | Total Speedup |\n")
+	builder.WriteString("| GOMAXPROCS | Overlay (ms) | Total (ms) | Overlay Speedup | Total Speedup |\n")
 	builder.WriteString("| --- | ---: | ---: | ---: | ---: |\n")
 	for _, result := range results {
 		builder.WriteString(fmt.Sprintf(
 			"| %d | %.2f | %.2f | %s | %s |\n",
-			result.Workers,
+			result.GOMAXPROCS,
 			result.OverlayTimeMs,
 			result.TotalTimeMs,
 			ratioString(overlayBaseline, result.OverlayTimeMs),
@@ -291,7 +291,7 @@ func parseBuildLog(path string) (buildSummary, error) {
 		return buildSummary{}, err
 	}
 
-	workers := workerFromPath(path)
+	gomaxprocs := gomaxprocsFromPath(path)
 	overlay, err := parseDurationAfter(text, "overlay ready in ")
 	if err != nil {
 		return buildSummary{}, err
@@ -301,7 +301,7 @@ func parseBuildLog(path string) (buildSummary, error) {
 		return buildSummary{}, err
 	}
 	return buildSummary{
-		Workers:       workers,
+		GOMAXPROCS:    gomaxprocs,
 		OverlayTimeMs: float64(overlay.Microseconds()) / 1000.0,
 		TotalTimeMs:   float64(total.Microseconds()) / 1000.0,
 	}, nil
@@ -320,7 +320,7 @@ func parseDurationAfter(text, marker string) (time.Duration, error) {
 	return time.ParseDuration(strings.TrimSpace(text[start : start+end]))
 }
 
-func workerFromPath(path string) int {
+func gomaxprocsFromPath(path string) int {
 	base := filepath.Base(path)
 	digits := ""
 	for _, ch := range base {

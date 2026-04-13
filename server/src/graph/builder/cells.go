@@ -37,7 +37,7 @@ func PartitionCells(g *Graph, maxCellSize int) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	sem := make(chan struct{}, runtime.NumCPU())
+	sem := make(chan struct{}, max(runtime.GOMAXPROCS(0), 1))
 
 	localIdxPool := &sync.Pool{
 		New: func() interface{} {
@@ -374,7 +374,7 @@ func DetectBoundaryNodes(g *Graph) {
 // nodes. Each cell contributes cross-cell edges and intra-cell shortcuts.
 func BuildOverlayGraph(g *Graph, numWorkers int) {
 	if numWorkers <= 0 {
-		numWorkers = runtime.NumCPU()
+		numWorkers = max(runtime.GOMAXPROCS(0), 1)
 	}
 	log.Printf("%s building overlay graph with %d workers", cellBuilderLogPrefix, numWorkers)
 

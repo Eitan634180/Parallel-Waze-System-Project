@@ -18,6 +18,7 @@ set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
 set "LOADBENCH_EXE=%BIN_DIR%\route-loadbench.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder-bench.exe"
 set "REPORT_EXE=%BIN_DIR%\benchmark-report.exe"
+set "SERVER_SCALE_SCRIPT=%ROOT%server-scale.ps1"
 set "SERVER_ADDR=%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
 set "SERVER_URL=http://%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
 
@@ -179,14 +180,7 @@ call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
 for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
   echo Running server-scale for mode=%TEST_BENCH_ROUTING_MODE% GOMAXPROCS=%%P
-  powershell -NoProfile -Command ^
-    "$ErrorActionPreference = 'Stop';" ^
-    "$env:GOMAXPROCS='%%P'; $env:GOCACHE='%GOCACHE_DIR%'; $env:CGO_ENABLED='0';" ^
-    "$proc = Start-Process -FilePath '%SERVER_EXE%' -ArgumentList @('--addr','%SERVER_ADDR%','--data','%SERVER_DATA%','--routing-mode','%TEST_BENCH_ROUTING_MODE%') -WorkingDirectory '%SERVER_DIR%' -PassThru;" ^
-    "Start-Sleep -Seconds %TEST_BENCH_SERVER_STARTUP_WAIT_SEC%;" ^
-    "$benchExit = 0;" ^
-    "try { & '%LOADBENCH_EXE%' '--server' '%SERVER_URL%' '--cases' '%TEST_BENCH_CORPUS%' '--concurrency' '%TEST_BENCH_CONCURRENCY%' '--requests' '%TEST_BENCH_REQUESTS%' '--warmup' '%TEST_BENCH_WARMUP%' '--routing-mode' '%TEST_BENCH_ROUTING_MODE%' '--out' '%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P'; $benchExit = $LASTEXITCODE } finally { if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force } }" ^
-    "exit $benchExit"
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%SERVER_SCALE_SCRIPT%" -ServerExe "%SERVER_EXE%" -ServerWorkdir "%SERVER_DIR%" -ServerAddr "%SERVER_ADDR%" -ServerData "%SERVER_DATA%" -RoutingMode "%TEST_BENCH_ROUTING_MODE%" -GOMAXPROCS %%P -StartupWaitSec %TEST_BENCH_SERVER_STARTUP_WAIT_SEC% -LoadbenchExe "%LOADBENCH_EXE%" -ServerURL "%SERVER_URL%" -Cases "%TEST_BENCH_CORPUS%" -Concurrency %TEST_BENCH_CONCURRENCY% -Requests %TEST_BENCH_REQUESTS% -Warmup %TEST_BENCH_WARMUP% -Out "%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P"
   if errorlevel 1 exit /b !ERRORLEVEL!
 )
 call :write_report
@@ -198,12 +192,12 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
 for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
-  echo Running build-scale for workers=%%P
+  echo Running build-scale for GOMAXPROCS=%%P
   pushd "%SERVER_DIR%"
   set "GOCACHE=%GOCACHE_DIR%"
   set "CGO_ENABLED=0"
   set "GOMAXPROCS=%%P"
-  "%BUILDER_EXE%" --pbf "%REGION_PBF%" --out "%BUILD_WORK_DIR%\p%%P" --cell-size %TEST_BENCH_CELL_SIZE% --workers %%P > "%OUT_DIR%\build-scale\p%%P.log" 2>&1
+  "%BUILDER_EXE%" --pbf "%REGION_PBF%" --out "%BUILD_WORK_DIR%\p%%P" --cell-size %TEST_BENCH_CELL_SIZE% > "%OUT_DIR%\build-scale\p%%P.log" 2>&1
   set "EXIT_CODE=!ERRORLEVEL!"
   popd
   if not "!EXIT_CODE!"=="0" exit /b !EXIT_CODE!
@@ -227,7 +221,7 @@ echo.
 echo Targets:
 echo   compare-static  Run hierarchical vs base-astar/base-dijkstra static benchmarks
 echo   server-scale    Benchmark /route throughput as GOMAXPROCS increases
-echo   build-scale     Benchmark map-builder overlay construction as workers increases
+echo   build-scale     Benchmark map-builder throughput as GOMAXPROCS increases
 echo   all             Run every benchmark target
 echo   help            Show this help
 echo.

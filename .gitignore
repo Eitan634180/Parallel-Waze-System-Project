@@ -9,3 +9,4 @@
 /test/playwright-report/
 /test/test-results/
 /.benchmarks/
+/.gocache/

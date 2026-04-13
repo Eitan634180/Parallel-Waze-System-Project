@@ -28,23 +28,23 @@ type routeRequest struct {
 }
 
 type summary struct {
-	Server         string  `json:"server"`
-	RoutingMode    string  `json:"routing_mode"`
-	Corpus         string  `json:"corpus"`
-	Region         string  `json:"region"`
-	QueryCount     int     `json:"query_count"`
-	Concurrency    int     `json:"concurrency"`
-	Requests       int     `json:"requests"`
-	Warmup         int     `json:"warmup"`
-	GOMAXPROCS     int     `json:"gomaxprocs"`
-	GoVersion      string  `json:"go_version"`
-	CommitHash     string  `json:"commit_hash,omitempty"`
-	TotalSec       float64 `json:"total_sec"`
-	ThroughputRPS  float64 `json:"throughput_rps"`
-	P50Ms          float64 `json:"p50_ms"`
-	P95Ms          float64 `json:"p95_ms"`
-	P99Ms          float64 `json:"p99_ms"`
-	ErrorCount     int64   `json:"error_count"`
+	Server        string  `json:"server"`
+	RoutingMode   string  `json:"routing_mode"`
+	Corpus        string  `json:"corpus"`
+	Region        string  `json:"region"`
+	QueryCount    int     `json:"query_count"`
+	Concurrency   int     `json:"concurrency"`
+	Requests      int     `json:"requests"`
+	Warmup        int     `json:"warmup"`
+	GOMAXPROCS    int     `json:"gomaxprocs"`
+	GoVersion     string  `json:"go_version"`
+	CommitHash    string  `json:"commit_hash,omitempty"`
+	TotalSec      float64 `json:"total_sec"`
+	ThroughputRPS float64 `json:"throughput_rps"`
+	P50Ms         float64 `json:"p50_ms"`
+	P95Ms         float64 `json:"p95_ms"`
+	P99Ms         float64 `json:"p99_ms"`
+	ErrorCount    int64   `json:"error_count"`
 }
 
 func main() {
@@ -96,23 +96,23 @@ func main() {
 	total := time.Since(start)
 
 	report := summary{
-		Server:         *serverURL,
-		RoutingMode:    *routingMode,
-		Corpus:         *casesName,
-		Region:         fixture.Region,
-		QueryCount:     len(fixture.Corpus),
-		Concurrency:    *concurrency,
-		Requests:       *requests,
-		Warmup:         *warmup,
-		GOMAXPROCS:     runtime.GOMAXPROCS(0),
-		GoVersion:      runtime.Version(),
-		CommitHash:     readCommitHash(),
-		TotalSec:       total.Seconds(),
-		ThroughputRPS:  float64(*requests) / total.Seconds(),
-		P50Ms:          percentileMs(latencies, 50),
-		P95Ms:          percentileMs(latencies, 95),
-		P99Ms:          percentileMs(latencies, 99),
-		ErrorCount:     errorCount,
+		Server:        *serverURL,
+		RoutingMode:   *routingMode,
+		Corpus:        *casesName,
+		Region:        fixture.Region,
+		QueryCount:    len(fixture.Corpus),
+		Concurrency:   *concurrency,
+		Requests:      *requests,
+		Warmup:        *warmup,
+		GOMAXPROCS:    runtime.GOMAXPROCS(0),
+		GoVersion:     runtime.Version(),
+		CommitHash:    readCommitHash(),
+		TotalSec:      total.Seconds(),
+		ThroughputRPS: float64(*requests) / total.Seconds(),
+		P50Ms:         percentileMs(latencies, 50),
+		P95Ms:         percentileMs(latencies, 95),
+		P99Ms:         percentileMs(latencies, 99),
+		ErrorCount:    errorCount,
 	}
 
 	if *outPrefix != "" {

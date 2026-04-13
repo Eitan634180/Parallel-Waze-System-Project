@@ -176,13 +176,7 @@ func (s *Server) computeRandomSimulationCandidates(bbox geoBox, limit int) []rou
 	}
 
 	attempts := limit * randomRouteAttemptFactor
-	workerCount := runtime.NumCPU()
-	if workerCount < minSimulationWorkers {
-		workerCount = minSimulationWorkers
-	}
-	if workerCount > attempts {
-		workerCount = attempts
-	}
+	workerCount := min(max(runtime.GOMAXPROCS(0), minSimulationWorkers), attempts)
 
 	liveWeights := s.liveWeightFunc()
 	jobs := make(chan struct{}, workerCount)

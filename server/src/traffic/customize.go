@@ -89,10 +89,7 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	cellJobs := make(chan builder.Cell, len(g.Cells))
 	cellResults := make(chan cellUpdates, len(g.Cells))
 
-	workerCount := runtime.NumCPU()
-	if workerCount < 1 {
-		workerCount = 1
-	}
+	workerCount := max(runtime.GOMAXPROCS(0), 1)
 
 	var wg sync.WaitGroup
 	for i := 0; i < workerCount; i++ {

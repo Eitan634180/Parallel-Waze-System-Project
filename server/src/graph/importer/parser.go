@@ -46,7 +46,7 @@ func isRoutable(highwayVal string) uint8 {
 // Pass 1: scan Ways, collect referenced NodeIDs and classify roads.
 // Pass 2: scan Nodes, keep only those referenced in Pass 1.
 func ParsePBF(path string) (*builder.ParseResult, error) {
-	procs := runtime.NumCPU()
+	procs := max(runtime.GOMAXPROCS(0), 1)
 
 	log.Printf("%s pass 1: scanning ways", importerLogPrefix)
 

@@ -63,7 +63,7 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 		e       Edge
 	}
 
-	workerCount := runtime.NumCPU()
+	workerCount := max(runtime.GOMAXPROCS(0), 1)
 	if workerCount < minGraphBuilderWorkers {
 		workerCount = minGraphBuilderWorkers
 	}
