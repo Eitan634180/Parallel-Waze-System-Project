@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -570,7 +571,11 @@ func loadOverlayAdj(path string) (OverlayAdjList, error) {
 			IsCrossCell: b.IsCrossCell != 0,
 		}
 	}
-	return OverlayAdjList{Offsets: offsets, OverlayEdges: edges}, nil
+	return OverlayAdjList{
+		Mu:           &sync.RWMutex{},
+		Offsets:      offsets,
+		OverlayEdges: edges,
+	}, nil
 }
 
 // graphMeta stores fields written to meta.json alongside the binary files.

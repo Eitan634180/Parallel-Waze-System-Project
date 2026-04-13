@@ -121,7 +121,7 @@ type Cell struct {
 
 // OverlayAdjList stores outgoing overlay edges in CSR form over boundary nodes.
 type OverlayAdjList struct {
-	Mu           sync.RWMutex
+	Mu           *sync.RWMutex
 	Offsets      []uint32
 	OverlayEdges []OverlayEdge
 }
