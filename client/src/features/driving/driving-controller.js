@@ -1,7 +1,7 @@
 import { state, resetDrivingSession } from '../../app/app-state.js';
 import { DEFAULT_SPEED_LIMIT } from '../../app/app-config.js';
 import { mapInstance } from '../../ui/map/map-manager.js';
-import { updateDistance, updateETA, updateTrafficStatus, toggleDrivingHUD } from '../../ui/panels/hud-panel.js';
+import { updateDistance, updateETA, updateTrafficStatus, toggleDrivingHUD, updateTurnInfo } from '../../ui/panels/hud-panel.js';
 import { onArrival, showAlert } from '../../ui/panels/alerts-panel.js';
 import { renderMainCarDebug } from '../../ui/panels/debug-panel.js';
 import { ensureSimulationFeed, getNearbySimulationCars } from '../debug/debug-cars-service.js';
@@ -101,6 +101,7 @@ export async function startDriving() {
     state.drive.stepProgress = 0;
     state.drive.isActive = true;
     state.drive.distanceLeft = state.routing.activeObj.distance;
+    state.drive.distanceLeftOnStep = state.routing.activeLegs[0].base_length;
     state.drive.totalDistanceDrivenM = 0;
     state.drive.startTimeMs = Date.now();
     state.sim.pendingEdgeEvents = [];
@@ -181,6 +182,9 @@ function updateSimulation(elapsedMs) {
         state.sim.pendingEdgeEvents,
     );
 
+    const currentLeg = state.routing.activeLegs[state.drive.currentRoadIndex];
+    const nextLeg = state.routing.activeLegs[state.drive.currentRoadIndex + 1];
+    updateTurnInfo(state.drive.distanceLeftOnStep, currentLeg, nextLeg);
     updateDistance(state.drive.distanceLeft, DOM_IDS.hudDistanceLeft);
     document.getElementById(DOM_IDS.hudSpeed).textContent = `${speedKmh}${SPEED_UNIT_LABEL}`;
 }

@@ -4,4 +4,9 @@
 /server/data/.last-region
 /server/data/geofabrik-index.json
 /server/data/map/**
-tests/loadbot/node_modules
+/server/.gocache/
+/test/node_modules/
+/test/playwright-report/
+/test/test-results/
+/.benchmarks/
+/.gocache/

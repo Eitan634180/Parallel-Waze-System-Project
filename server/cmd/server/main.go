@@ -12,23 +12,28 @@ import (
 	"syscall"
 	"time"
 
-	"nav-system/internal/api"
-	"nav-system/internal/graph/builder"
-	"nav-system/internal/mapstore"
-	"nav-system/internal/routing"
-	"nav-system/internal/session"
-	"nav-system/internal/simulation"
-	"nav-system/internal/traffic"
+	"nav-system/src/api"
+	"nav-system/src/graph/builder"
+	"nav-system/src/mapstore"
+	"nav-system/src/routing"
+	"nav-system/src/session"
+	"nav-system/src/simulation"
+	"nav-system/src/traffic"
 )
 
 const serverLogPrefix = "server:"
 
 func main() {
-	dataDir := flag.String("data", "", "Directory containing binary graph files (auto-detected if empty)")
+	dataDir := flag.String("data", "", "Directory containing binary graph files")
 	addr := flag.String("addr", ":8080", "HTTP listen address")
+	routingModeFlag := flag.String("routing-mode", string(routing.RoutingModeHierarchical), "Routing mode: hierarchical|base-astar|base-dijkstra")
 	flag.Parse()
 
-	// If --data is not specified, find the region automatically.
+	routingMode, err := routing.ParseRoutingMode(*routingModeFlag)
+	if err != nil {
+		log.Fatalf("ParseRoutingMode: %v", err)
+	}
+
 	if *dataDir == "" {
 		mapRoot := filepath.Join(".", "data", "map")
 		regions, err := mapstore.ListReady(mapRoot)
@@ -70,7 +75,8 @@ func main() {
 	store := traffic.NewStore()
 	mgr := session.NewManager()
 	sim := simulation.NewManager(g, store)
-	router := routing.NewRouter(g, si)
+	router := routing.NewRouterWithMode(g, si, routingMode)
+	log.Printf("%s routing mode: %s", serverLogPrefix, routingMode)
 	traffic.CustomizeOverlayWeights(g, store)
 	srv := api.NewServer(g, store, mgr, router, sim)
 

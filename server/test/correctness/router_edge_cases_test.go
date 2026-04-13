@@ -1,0 +1,157 @@
+package correctness_test
+
+import (
+	"testing"
+
+	"nav-system/src/routing"
+	"nav-system/src/traffic"
+	"nav-system/test/testutil"
+)
+
+// TestRouterReturnsSameSourceDestinationIsNil verifies the router returns no
+// route when source and destination snap to the same node.
+func TestRouterReturnsSameSourceDestinationIsNil(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
+	routes := fixture.Router.Compute(32.0000, 34.0000, 32.0000, 34.0000, 1, routing.BaseWeight)
+	if len(routes) != 0 {
+		t.Fatalf("same-node route should return nil, got %d routes", len(routes))
+	}
+}
+
+// TestAlternativeRoutesAreDistinctPaths verifies that when k=2 and the diamond
+// graph provides two structural paths, both are returned and follow different edges.
+func TestAlternativeRoutesAreDistinctPaths(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
+	routeCase := testutil.LoadRouteCases(t, "diamond_cases.json")[0]
+
+	routes := fixture.Router.Compute(
+		routeCase.Src.Lat, routeCase.Src.Lon,
+		routeCase.Dst.Lat, routeCase.Dst.Lon,
+		2, routing.BaseWeight,
+	)
+	if len(routes) < 2 {
+		t.Fatalf("expected at least 2 alternative routes, got %d", len(routes))
+	}
+
+	// Collect edge sets for each route.
+	edgeSet := func(route routing.Route) map[uint32]struct{} {
+		m := make(map[uint32]struct{})
+		for _, step := range route.Steps {
+			if step.EdgeID != nil {
+				m[*step.EdgeID] = struct{}{}
+			}
+		}
+		return m
+	}
+
+	set0 := edgeSet(routes[0])
+	set1 := edgeSet(routes[1])
+
+	// The two paths must not use exactly the same edges.
+	identical := len(set0) == len(set1)
+	if identical {
+		for eid := range set0 {
+			if _, ok := set1[eid]; !ok {
+				identical = false
+				break
+			}
+		}
+	}
+	if identical {
+		t.Fatal("alternative routes should not traverse the exact same edges")
+	}
+}
+
+// TestAlternativeRoutesBothValid verifies that all returned alternative routes
+// are internally valid (monotonic cumulative metrics, correct edge connectivity).
+func TestAlternativeRoutesBothValid(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
+	routeCase := testutil.LoadRouteCases(t, "diamond_cases.json")[0]
+
+	routes := fixture.Router.Compute(
+		routeCase.Src.Lat, routeCase.Src.Lon,
+		routeCase.Dst.Lat, routeCase.Dst.Lon,
+		2, routing.BaseWeight,
+	)
+	for i, route := range routes {
+		_ = testutil.AssertRouteValid(t, fixture.Graph, route, routing.BaseWeight)
+		if t.Failed() {
+			t.Fatalf("route %d failed validation", i)
+		}
+	}
+}
+
+// TestTrafficCongestedEdgeRaisesLiveWeight verifies that after congestion is
+// recorded the live weight on that edge is higher than the base weight.
+func TestTrafficCongestedEdgeRaisesLiveWeight(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
+	store := traffic.NewStore()
+
+	edgeID := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
+	baseWeight := fixture.Graph.Edges[edgeID].Weight
+
+	// Record 50 observations at 5× the base time to saturate the EWMA.
+	for i := 0; i < 50; i++ {
+		store.RecordObservation(edgeID, baseWeight*5.0, baseWeight)
+	}
+
+	live := store.LiveWeight(edgeID, baseWeight)
+	if live <= baseWeight {
+		t.Fatalf("live weight %.4f should exceed base weight %.4f after congestion observations", live, baseWeight)
+	}
+}
+
+// TestGridRoutesAllMatchOracle runs the full grid corpus through the router and
+// verifies every route cost matches the Dijkstra oracle within floating-point tolerance.
+func TestGridRoutesAllMatchOracle(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "grid_city.json", 3)
+	cases := testutil.LoadRouteCases(t, "grid_cases.json")
+
+	for _, routeCase := range cases {
+		t.Run(routeCase.Name, func(t *testing.T) {
+			srcIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Src.Lat, routeCase.Src.Lon)
+			dstIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Dst.Lat, routeCase.Dst.Lon)
+
+			oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, routing.BaseWeight)
+			if !ok {
+				t.Fatalf("oracle could not find path for %s", routeCase.Name)
+			}
+
+			routes := fixture.Router.Compute(
+				routeCase.Src.Lat, routeCase.Src.Lon,
+				routeCase.Dst.Lat, routeCase.Dst.Lon,
+				1, routing.BaseWeight,
+			)
+			if len(routes) != 1 {
+				t.Fatalf("expected 1 route, got %d", len(routes))
+			}
+			testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, routing.BaseWeight)
+		})
+	}
+}
+
+// TestRouteDistanceIsPositive ensures that every step in every returned route
+// increases cumulative distance (no zero-weight loops).
+func TestRouteDistanceIsPositive(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "grid_city.json", 3)
+	cases := testutil.LoadRouteCases(t, "grid_cases.json")
+
+	for _, routeCase := range cases {
+		routes := fixture.Router.Compute(
+			routeCase.Src.Lat, routeCase.Src.Lon,
+			routeCase.Dst.Lat, routeCase.Dst.Lon,
+			1, routing.BaseWeight,
+		)
+		if len(routes) == 0 {
+			t.Fatalf("%s: no route returned", routeCase.Name)
+		}
+		for _, step := range routes[0].Steps[1:] {
+			if step.DistanceM <= 0 {
+				t.Fatalf("%s: step cumulative distance must be positive, got %.4f", routeCase.Name, step.DistanceM)
+			}
+		}
+		if routes[0].TotalDistM <= 0 {
+			t.Fatalf("%s: total route distance must be positive, got %.4f", routeCase.Name, routes[0].TotalDistM)
+		}
+	}
+}

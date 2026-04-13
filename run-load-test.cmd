@@ -2,10 +2,11 @@
 setlocal
 
 set "ROOT=%~dp0"
-set "LOADBOT_DIR=%ROOT%tests\loadbot"
+set "TESTS_DIR=%ROOT%test"
+set "LOADBOT_DIR=%TESTS_DIR%\performance\loadbot"
 set "DEFAULT_CLIENTS=20"
 
-if not exist "%LOADBOT_DIR%\package.json" (
+if not exist "%TESTS_DIR%\package.json" (
   echo Loadbot was not found in "%LOADBOT_DIR%".
   pause
   exit /b 1
@@ -30,12 +31,12 @@ set /p CLIENTS=How many browser clients should run? [default: %DEFAULT_CLIENTS%]
 if "%CLIENTS%"=="" set "CLIENTS=%DEFAULT_CLIENTS%"
 
 echo.
-echo Starting browser load test with %CLIENTS% clients against http://127.0.0.1:8080
+echo Starting browser load test with %CLIENTS% clients
 echo.
 
-pushd "%LOADBOT_DIR%"
+pushd "%TESTS_DIR%"
 
-if not exist "%LOADBOT_DIR%\node_modules\playwright" (
+if not exist "%TESTS_DIR%\node_modules\playwright" (
   echo Installing loadbot dependencies...
   call npm.cmd install
   if errorlevel 1 (
@@ -46,7 +47,7 @@ if not exist "%LOADBOT_DIR%\node_modules\playwright" (
   )
 )
 
-call node index.mjs --clients %CLIENTS%
+call node performance\loadbot\index.mjs --clients %CLIENTS%
 set "EXIT_CODE=%ERRORLEVEL%"
 
 popd

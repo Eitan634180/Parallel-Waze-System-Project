@@ -23,6 +23,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
         const step = state.routing.activeLegs[state.drive.currentRoadIndex];
         const stepDist = step.base_length || MIN_STEP_DISTANCE_M;
         const distanceLeftOnStep = stepDist - state.drive.stepProgress;
+        state.drive.distanceLeftOnStep = distanceLeftOnStep;
 
         const startPos = [step.from_node[1], step.from_node[0]];
         const endPos = [step.to_node[1], step.to_node[0]];

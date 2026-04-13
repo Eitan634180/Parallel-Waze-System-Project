@@ -946,6 +946,86 @@ button {
 }
 
 /* ——————————————————————————————————————
+   TURN BANNER
+   —————————————————————————————————————— */
+
+#driving-hud.hidden ~ #turn-banner {
+    display: none !important;
+}
+
+#turn-banner {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: var(--text-primary);
+    border-radius: var(--radius);
+    padding: 10px 30px;
+    max-width: 90%;
+    box-shadow: 0 16px 40px rgba(3, 28, 48, 0.25);
+    animation: slideDownBanner 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.turn-icon-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    background: var(--bg-main);
+    border-radius: 50%;
+    color: var(--accent-secondary);
+    flex-shrink: 0;
+}
+
+#turn-icon {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.turn-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0px;
+}
+
+.turn-distance {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    line-height: 1;
+}
+
+.turn-details {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.turn-action {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.turn-street-name {
+    font-weight: 800;
+    letter-spacing: -0.2px;
+}
+
+/* ——————————————————————————————————————
    ANIMATIONS
    —————————————————————————————————————— */
 
@@ -1047,4 +1127,15 @@ button {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes slideDownBanner {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -40px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
 }

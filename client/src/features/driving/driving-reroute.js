@@ -2,7 +2,7 @@ import { state } from '../../app/app-state.js';
 import { mapInstance } from '../../ui/map/map-manager.js';
 import { showAlert } from '../../ui/panels/alerts-panel.js';
 import { renderMainCarDebug } from '../../ui/panels/debug-panel.js';
-import { updateDistance, updateETA } from '../../ui/panels/hud-panel.js';
+import { updateDistance, updateETA, updateTurnInfo } from '../../ui/panels/hud-panel.js';
 import { sendLocationPing } from '../../services/ws/socket-client.js';
 import { processRawRoute, projectPositionOntoRoute } from '../routing/route-utils.js';
 import { createDriverProfile, createMotionState } from './traffic-model.js';
@@ -10,6 +10,7 @@ import { DOM_IDS, PANEL_TEXT } from '../../ui/ui-constants.js';
 
 const SECONDS_PER_MINUTE = 60;
 const DEFAULT_REROUTE_REASON = 'traffic';
+const OFF_ROUTE_REASON = 'off_route';
 const STEP_INDEX_OFFSET = 1;
 const ZERO_OFFSET = Object.freeze([0, 0]);
 
@@ -71,7 +72,7 @@ function syncDebugRerouteState(reason) {
 }
 
 function showRerouteAlert(reason, oldEtaSec, newEtaSec) {
-    if (reason === 'off_route') {
+    if (reason === OFF_ROUTE_REASON) {
         const distance = state.debug.serverData?.off_route_distance_m;
         const detail = typeof distance === 'number'
             ? `${distance.toFixed(1)} m away from the expected path.`
@@ -90,11 +91,13 @@ function syncDrivingProgressAfterReroute(routeObj, projectedPosition) {
             state.drive.currentRoadIndex = projectedPosition.roadIndex;
             state.drive.stepProgress = projectedPosition.stepProgress;
             state.drive.distanceLeft = projectedPosition.distanceLeft;
+            state.drive.distanceLeftOnStep = projectedPosition.distanceLeftOnStep;
             state.drive.carPos = [projectedPosition.lat, projectedPosition.lng];
         } else {
             state.drive.currentRoadIndex = 0;
             state.drive.stepProgress = 0;
             state.drive.distanceLeft = routeObj.distance;
+            state.drive.distanceLeftOnStep = routeObj.legs[0].base_length;
         }
 
         if (!state.sim.driverProfile) {
@@ -103,10 +106,16 @@ function syncDrivingProgressAfterReroute(routeObj, projectedPosition) {
         if (!state.sim.motionState) {
             state.sim.motionState = createMotionState();
         }
+        const currentLeg = state.routing.activeLegs[state.drive.currentRoadIndex];
+        const nextLeg = state.routing.activeLegs[state.drive.currentRoadIndex + 1];
+        updateTurnInfo(state.drive.distanceLeftOnStep, currentLeg, nextLeg);
         updateDistance(state.drive.distanceLeft, DOM_IDS.hudDistanceLeft);
         return;
     }
 
+    const current = routeObj.legs[0];
+    const next = routeObj.legs[1];
+    updateTurnInfo(state.drive.distanceLeftOnStep, current, next);
     updateDistance(routeObj.distance, DOM_IDS.hudDistanceLeft);
 }
 

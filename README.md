@@ -122,7 +122,7 @@ Launching the entire system (Building the map, compiling the server, and serving
 ### Prerequisites:
 * **Go** installed and added to `PATH`.
 * **Python 3** installed and added to `PATH` (used for the simple static HTTP server).
-* **Map Data:** You must have the OpenStreetMap data packet (`israel-latest.osm.pbf`) located in `server\data\map\`.
+* **Map Data:** Use the built-in region picker to choose or download a region under `server\data\map\`.
 
 ### Execution:
 1. Simply double-click the `run.cmd` file in the root directory, or execute it from the command line:
@@ -131,7 +131,7 @@ Launching the entire system (Building the map, compiling the server, and serving
    ```
 2. **What the script does:**
    * Validates Go and Python installations.
-   * Checks if compiled `.bin` map files exist. If not, it natively runs the Map Builder to crunch the `.pbf` file.
-   * Compiles the Go Server to an executable inside incrementally fast `.cache/bin/`.
-   * Pops open two new command windows: One running the Go API (`:8080`) and one running the Python Static File Server (`:3000`).
-   * Automatically opens your default web browser to `http://localhost:3000/navigation.html`.
+   * Compiles the Go server and region-picker executables inside `.cache/bin/`.
+   * Opens the region picker so you can choose an already-built region or download and build a new one.
+   * Starts the Go API (`:8080`) and the static client server (`:3000`) in new command windows.
+   * Opens your default web browser to `http://localhost:3000/navigation.html`.

@@ -9,17 +9,22 @@ import (
 	"runtime"
 	"time"
 
-	"nav-system/internal/graph/builder"
-	"nav-system/internal/graph/importer"
+	"nav-system/src/graph/builder"
+	"nav-system/src/graph/importer"
 )
 
 const builderLogPrefix = "builder:"
 
+const (
+	defaultMapBuilderCellSize = 2000
+	defaultMapBuilderWorkers  = 0
+)
+
 func main() {
 	pbfPath := flag.String("pbf", "", "Path to .osm.pbf file (required)")
 	outDir := flag.String("out", "./data/map", "Output directory")
-	cellSize := flag.Int("cell-size", 2000, "Max nodes per cell (Inertial Flow)")
-	workers := flag.Int("workers", 0, "Goroutines for overlay construction (default: NumCPU)")
+	cellSize := flag.Int("cell-size", defaultMapBuilderCellSize, "Max nodes per cell (Inertial Flow)")
+	workers := flag.Int("workers", defaultMapBuilderWorkers, "Deprecated: set process-wide GOMAXPROCS for map building")
 	flag.Parse()
 
 	if *pbfPath == "" {
@@ -28,9 +33,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *workers <= 0 {
-		*workers = runtime.NumCPU()
+	if *workers > 0 {
+		runtime.GOMAXPROCS(*workers)
 	}
+	parallelism := max(runtime.GOMAXPROCS(0), 1)
 
 	total := time.Now()
 
@@ -64,9 +70,10 @@ func main() {
 	log.Printf("%s boundary nodes ready in %s (%d nodes)",
 		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.BoundaryNodes))
 
-	log.Printf("%s building overlay graph (%d workers)", builderLogPrefix, *workers)
+	log.Printf("%s using GOMAXPROCS=%d", builderLogPrefix, parallelism)
+	log.Printf("%s building overlay graph", builderLogPrefix)
 	t = time.Now()
-	builder.BuildOverlayGraph(g, *workers)
+	builder.BuildOverlayGraph(g, 0)
 	log.Printf("%s overlay ready in %s (%d edges)",
 		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.OverlayAdj.OverlayEdges))
 

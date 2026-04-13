@@ -1,0 +1,17 @@
+[
+  {
+    "name": "corner_to_corner",
+    "src": { "lat": 32.0000, "lon": 34.0000 },
+    "dst": { "lat": 32.0020, "lon": 34.0020 }
+  },
+  {
+    "name": "west_to_east_midline",
+    "src": { "lat": 32.0010, "lon": 34.0000 },
+    "dst": { "lat": 32.0010, "lon": 34.0020 }
+  },
+  {
+    "name": "north_to_south_midline",
+    "src": { "lat": 32.0000, "lon": 34.0010 },
+    "dst": { "lat": 32.0020, "lon": 34.0010 }
+  }
+]

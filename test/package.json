@@ -1,0 +1,13 @@
+{
+  "name": "nav-shared-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:end2end": "node ./node_modules/playwright/cli.js test",
+    "test:end2end:headed": "node ./node_modules/playwright/cli.js test --headed",
+    "test:performance": "node performance/loadbot/index.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.2"
+  }
+}

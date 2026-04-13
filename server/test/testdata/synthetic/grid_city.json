@@ -1,0 +1,57 @@
+{
+  "nodes": [
+    { "id": 1, "lat": 32.0000, "lon": 34.0000 },
+    { "id": 2, "lat": 32.0000, "lon": 34.0010 },
+    { "id": 3, "lat": 32.0000, "lon": 34.0020 },
+    { "id": 4, "lat": 32.0010, "lon": 34.0000 },
+    { "id": 5, "lat": 32.0010, "lon": 34.0010 },
+    { "id": 6, "lat": 32.0010, "lon": 34.0020 },
+    { "id": 7, "lat": 32.0020, "lon": 34.0000 },
+    { "id": 8, "lat": 32.0020, "lon": 34.0010 },
+    { "id": 9, "lat": 32.0020, "lon": 34.0020 }
+  ],
+  "ways": [
+    {
+      "id": 201,
+      "node_refs": [1, 2, 3],
+      "road_class": 6,
+      "is_one_way": false,
+      "max_speed": 50
+    },
+    {
+      "id": 202,
+      "node_refs": [4, 5, 6],
+      "road_class": 6,
+      "is_one_way": false,
+      "max_speed": 45
+    },
+    {
+      "id": 203,
+      "node_refs": [7, 8, 9],
+      "road_class": 6,
+      "is_one_way": false,
+      "max_speed": 50
+    },
+    {
+      "id": 204,
+      "node_refs": [1, 4, 7],
+      "road_class": 6,
+      "is_one_way": false,
+      "max_speed": 50
+    },
+    {
+      "id": 205,
+      "node_refs": [2, 5, 8],
+      "road_class": 6,
+      "is_one_way": false,
+      "max_speed": 55
+    },
+    {
+      "id": 206,
+      "node_refs": [3, 6, 9],
+      "road_class": 6,
+      "is_one_way": false,
+      "max_speed": 50
+    }
+  ]
+}

@@ -63,7 +63,7 @@ export function computeIntersectionDelayMs(route, roadIndex, profile) {
 
     const current = route[roadIndex];
     const next = route[roadIndex + 1];
-    const angle = turnAngleDeg(current, next);
+    const { angle } = getTurnInfo(current, next);
     const nextSpeed = next?.speed_limit || current?.speed_limit || (DEFAULT_SPEED_LIMIT * KMH_PER_MPS);
 
     let delayMs = 0;
@@ -84,24 +84,30 @@ export function computeIntersectionDelayMs(route, roadIndex, profile) {
     return Math.round(Math.max(MIN_DELAY_MS, delayMs * (profile?.junctionBias || 1)));
 }
 
-function turnAngleDeg(current, next) {
+export function getTurnInfo(current, next) {
     if (!current || !next) {
-        return 0;
+        return { angle: 0, direction: 0 };
     }
 
     const ax = current.to_node[0] - current.from_node[0];
     const ay = current.to_node[1] - current.from_node[1];
     const bx = next.to_node[0] - next.from_node[0];
     const by = next.to_node[1] - next.from_node[1];
+
     const magA = Math.hypot(ax, ay);
     const magB = Math.hypot(bx, by);
     if (magA === 0 || magB === 0) {
-        return 0;
+        return { angle: 0, direction: 0 };
     }
 
     const dot = ((ax * bx) + (ay * by)) / (magA * magB);
     const cosTheta = clamp(dot, MIN_COS_THETA, MAX_COS_THETA);
-    return Math.acos(cosTheta) * DEGREES_PER_RADIAN;
+    const angle = Math.acos(cosTheta) * DEGREES_PER_RADIAN;
+
+    const cross = ax * by - ay * bx;
+    const direction = cross > 0 ? 1 : -1;
+
+    return { angle, direction };
 }
 
 function seededRange(seed, min, max) {
