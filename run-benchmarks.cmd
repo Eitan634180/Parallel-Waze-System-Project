@@ -164,7 +164,7 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 pushd "%SERVER_DIR%"
 set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
-go test ./test/benchmark -run TestBenchmarkCorpusMatchesBaseAStarStatic -bench BenchmarkRouterCompareStatic -benchmem -count %TEST_BENCH_REPEAT_COUNT% > "%OUT_DIR%\compare-static.txt" 2>&1
+go test ./test/benchmark -run TestBenchmarkCorpusMatchesBaseAStarStatic -bench BenchmarkRouterCompareStatic -benchmem -count %TEST_BENCH_REPEAT_COUNT% -timeout %TEST_BENCH_GO_TEST_TIMEOUT% > "%OUT_DIR%\compare-static.txt" 2>&1
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%

@@ -3,6 +3,7 @@ package benchmark_test
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -10,14 +11,16 @@ import (
 
 	"nav-system/src/graph/builder"
 	"nav-system/src/routing"
+	"nav-system/src/utilities"
 )
 
 type CorpusSpec struct {
-	Region          string `json:"region"`
-	Seed            int64  `json:"seed"`
-	Count           int    `json:"count"`
-	MinNodeIndexGap int    `json:"min_node_index_gap"`
-	MaxAttempts     int    `json:"max_attempts"`
+	Region          string  `json:"region"`
+	Seed            int64   `json:"seed"`
+	Count           int     `json:"count"`
+	MinNodeIndexGap int     `json:"min_node_index_gap"`
+	MinDistanceM    float64 `json:"min_distance_m"`
+	MaxAttempts     int     `json:"max_attempts"`
 }
 
 type CorpusCase struct {
@@ -96,6 +99,14 @@ func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 			}
 		}
 
+		if spec.MinDistanceM > 0 {
+			src := g.Nodes[srcIdx]
+			dst := g.Nodes[dstIdx]
+			if utilities.HaversineM(src.Lat, src.Lon, dst.Lat, dst.Lon) < spec.MinDistanceM {
+				continue
+			}
+		}
+
 		key := [2]uint32{srcIdx, dstIdx}
 		if _, ok := seen[key]; ok {
 			continue
@@ -118,6 +129,10 @@ func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 			DstLon: dst.Lon,
 		})
 		seen[key] = struct{}{}
+
+		if len(cases)%100 == 0 {
+			log.Printf("Generated %d/%d benchmark cases for region %q\n", len(cases), spec.Count, spec.Region)
+		}
 	}
 
 	if len(cases) != spec.Count {
