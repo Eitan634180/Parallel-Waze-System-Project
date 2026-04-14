@@ -18,11 +18,11 @@ func distanceFromExpectedPathMLocked(s *Session, lat, lon float64, g *builder.Gr
 		return 0
 	}
 
-	px, py := utilities.Project(lat, lon)
+	px, py := utilities.ProjectAtReferenceLat(lat, lon, g.ProjectionRefLat)
 	best := distanceFromExpectedProjectionMLocked(s, g, px, py)
 
 	if lat < minLatitude || lat > maxLatitude {
-		swappedX, swappedY := utilities.Project(lon, lat)
+		swappedX, swappedY := utilities.ProjectAtReferenceLat(lon, lat, g.ProjectionRefLat)
 		swappedBest := distanceFromExpectedProjectionMLocked(s, g, swappedX, swappedY)
 		if swappedBest < best {
 			return swappedBest

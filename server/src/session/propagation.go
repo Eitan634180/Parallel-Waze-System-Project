@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"nav-system/src/utilities"
 	"nav-system/src/graph/builder"
 	"nav-system/src/traffic"
+	"nav-system/src/utilities"
 )
 
 const propagationJobQueueFactor = 4
@@ -125,6 +125,8 @@ func flagBetterRouteIfHelpful(s *Session, improvedEdges []traffic.ChangedEdge, s
 		return
 	}
 
+	carX, carY := utilities.ProjectAtReferenceLat(snapshot.carLat, snapshot.carLon, g.ProjectionRefLat)
+
 	for _, changed := range improvedEdges {
 		edge, ok := graphEdge(g, changed.EdgeID)
 		if !ok {
@@ -137,7 +139,7 @@ func flagBetterRouteIfHelpful(s *Session, improvedEdges []traffic.ChangedEdge, s
 			continue
 		}
 
-		distCarToEdge := utilities.Distance(snapshot.carX, snapshot.carY, fromNode.X, fromNode.Y)
+		distCarToEdge := utilities.Distance(carX, carY, fromNode.X, fromNode.Y)
 		distEdgeToDestination := utilities.Distance(toNode.X, toNode.Y, snapshot.destination.X, snapshot.destination.Y)
 		idealETA :=
 			(distCarToEdge / maxHeuristicSpeedMps) +
@@ -154,8 +156,8 @@ func flagBetterRouteIfHelpful(s *Session, improvedEdges []traffic.ChangedEdge, s
 }
 
 type heuristicSessionSnapshot struct {
-	carX        float32
-	carY        float32
+	carLat      float64
+	carLon      float64
 	destination *builder.Node
 	eta         float32
 }
@@ -174,10 +176,9 @@ func heuristicSnapshot(s *Session, g *builder.Graph) (heuristicSessionSnapshot, 
 		return heuristicSessionSnapshot{}, false
 	}
 
-	carX, carY := utilities.Project(s.LastLat, s.LastLon)
 	return heuristicSessionSnapshot{
-		carX:        carX,
-		carY:        carY,
+		carLat:      s.LastLat,
+		carLon:      s.LastLon,
 		destination: destinationNode,
 		eta:         s.ETA,
 	}, true

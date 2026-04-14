@@ -185,6 +185,8 @@ func LoadGraph(dir string) (*Graph, error) {
 		log.Printf("%s recomputing bounding box from node data", graphStoreLogPrefix)
 		g.BBox = boundingBoxFromNodes(g.Nodes)
 	}
+	g.ProjectionRefLat = g.BBox.CenterLat()
+	reprojectNodes(g)
 
 	log.Printf("%s graph ready (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
 		graphStoreLogPrefix,

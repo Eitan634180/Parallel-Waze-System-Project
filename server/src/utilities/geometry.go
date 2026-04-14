@@ -9,10 +9,17 @@ const (
 
 var cosReferenceLat = float32(math.Cos(ReferenceLat * math.Pi / 180.0))
 
-// Project converts geographic coordinates into planar metres using the same
-// projection the graph builder uses.
+// Project converts geographic coordinates into planar metres using a
+// default ReferenceLat.
 func Project(lat, lon float64) (x, y float32) {
-	x = float32(lon*math.Pi/180.0) * cosReferenceLat * EarthRadiusM
+	return ProjectAtReferenceLat(lat, lon, ReferenceLat)
+}
+
+// ProjectAtReferenceLat converts geographic coordinates into planar metres
+// using an equirectangular projection anchored at the supplied reference latitude.
+func ProjectAtReferenceLat(lat, lon, referenceLat float64) (x, y float32) {
+	cosRefLat := float32(math.Cos(referenceLat * math.Pi / 180.0))
+	x = float32(lon*math.Pi/180.0) * cosRefLat * EarthRadiusM
 	y = float32(lat*math.Pi/180.0) * EarthRadiusM
 	return
 }

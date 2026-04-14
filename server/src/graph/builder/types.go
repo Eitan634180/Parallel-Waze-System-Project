@@ -64,8 +64,8 @@ type Node struct {
 	ID     NodeID
 	Lat    float64 // WGS-84 latitude.
 	Lon    float64 // WGS-84 longitude.
-	X      float32 // Projected X in meters for heuristics.
-	Y      float32 // Projected Y in meters for heuristics.
+	X      float32 // Projected X in meters for region-local spatial calculations.
+	Y      float32 // Projected Y in meters for region-local spatial calculations.
 	CellID CellID  // Owning partition cell.
 }
 
@@ -168,7 +168,8 @@ type Graph struct {
 
 	OverlayAdj OverlayAdjList
 
-	BBox BoundingBox
+	BBox             BoundingBox
+	ProjectionRefLat float64
 }
 
 // NodeByID returns the node for an OSM ID, or nil if it is missing.

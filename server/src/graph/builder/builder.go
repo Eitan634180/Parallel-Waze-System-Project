@@ -32,13 +32,10 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 	for _, rn := range pr.Nodes {
 		idx := uint32(len(g.Nodes))
 		g.NodeIdx[rn.ID] = idx
-		x, y := utilities.Project(rn.Lat, rn.Lon)
 		g.Nodes = append(g.Nodes, Node{
 			ID:  rn.ID,
 			Lat: rn.Lat,
 			Lon: rn.Lon,
-			X:   x,
-			Y:   y,
 		})
 	}
 
@@ -47,6 +44,8 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 	// Compute bounding box from all nodes.
 	bbox := boundingBoxFromNodes(g.Nodes)
 	g.BBox = bbox
+	g.ProjectionRefLat = bbox.CenterLat()
+	reprojectNodes(g)
 	log.Printf("%s bounding box: lat [%.4f, %.4f] lon [%.4f, %.4f]",
 		graphBuilderLogPrefix, bbox.MinLat, bbox.MaxLat, bbox.MinLon, bbox.MaxLon)
 	log.Printf("%s building edges", graphBuilderLogPrefix)
@@ -241,4 +240,11 @@ func boundingBoxFromNodes(nodes []Node) BoundingBox {
 		}
 	}
 	return bbox
+}
+
+func reprojectNodes(g *Graph) {
+	for i := range g.Nodes {
+		node := &g.Nodes[i]
+		node.X, node.Y = utilities.ProjectAtReferenceLat(node.Lat, node.Lon, g.ProjectionRefLat)
+	}
 }

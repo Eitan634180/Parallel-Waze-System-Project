@@ -36,7 +36,7 @@ func remainingFractionOnCurrentEdge(s *Session, step routing.Step, edge *builder
 		return 1
 	}
 
-	px, py := utilities.Project(s.LastLat, s.LastLon)
+	px, py := utilities.ProjectAtReferenceLat(s.LastLat, s.LastLon, g.ProjectionRefLat)
 	node := g.NodeByID(builder.NodeID(step.NodeID))
 	if node == nil {
 		return 1

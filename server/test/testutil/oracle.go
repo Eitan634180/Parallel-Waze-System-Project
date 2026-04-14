@@ -50,7 +50,7 @@ func BruteForceSnap(g *builder.Graph, lat, lon float64) uint32 {
 		return 0
 	}
 
-	qx, qy := utilities.Project(lat, lon)
+	qx, qy := utilities.ProjectAtReferenceLat(lat, lon, g.ProjectionRefLat)
 	bestIdx := uint32(0)
 	bestDist := float32(math.MaxFloat32)
 
