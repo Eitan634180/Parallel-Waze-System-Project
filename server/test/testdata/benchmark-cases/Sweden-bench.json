@@ -1,0 +1,8 @@
+{
+  "region": "sweden",
+  "seed": 20260409,
+  "count": 5,
+  "min_node_index_gap": 0,
+  "min_distance_m": 10000,
+  "max_attempts": 100000000
+}
