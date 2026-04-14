@@ -48,6 +48,12 @@ type buildSummary struct {
 	TotalTimeMs   float64
 }
 
+type overlaySummary struct {
+	GOMAXPROCS int
+	AvgTimeMs  float64
+	Runs       int
+}
+
 type compareRow struct {
 	Mode         string
 	NsPerOp      float64
@@ -79,6 +85,9 @@ func main() {
 	}
 	if writeBuildScaleSection(&builder, filepath.Join(reportDir, "build-scale")); err != nil {
 		builder.WriteString(fmt.Sprintf("_Build-scale results unavailable: %v_\n\n", err))
+	}
+	if writeOverlayScaleSection(&builder, filepath.Join(reportDir, "overlay-scale")); err != nil {
+		builder.WriteString(fmt.Sprintf("_Overlay-scale results unavailable: %v_\n\n", err))
 	}
 
 	summaryPath := filepath.Join(reportDir, "summary.md")
@@ -234,6 +243,46 @@ func writeBuildScaleSection(builder *strings.Builder, dir string) error {
 	return nil
 }
 
+func writeOverlayScaleSection(builder *strings.Builder, dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	var results []overlaySummary
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
+			continue
+		}
+		summaries, err := parseOverlayLog(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return err
+		}
+		results = append(results, summaries...)
+	}
+	if len(results) == 0 {
+		return fmt.Errorf("no overlay-scale logs found")
+	}
+
+	sort.Slice(results, func(i, j int) bool { return results[i].GOMAXPROCS < results[j].GOMAXPROCS })
+	baseline := results[0].AvgTimeMs
+
+	builder.WriteString("## Overlay Build Scaling\n\n")
+	builder.WriteString("| GOMAXPROCS | Avg Overlay (ms) | Runs | Speedup |\n")
+	builder.WriteString("| --- | ---: | ---: | ---: |\n")
+	for _, result := range results {
+		builder.WriteString(fmt.Sprintf(
+			"| %d | %.2f | %d | %s |\n",
+			result.GOMAXPROCS,
+			result.AvgTimeMs,
+			result.Runs,
+			ratioString(baseline, result.AvgTimeMs),
+		))
+	}
+	builder.WriteString("\n")
+	return nil
+}
+
 func parseGoBenchmarkFile(path string) (*goBenchmarkReport, error) {
 	text, err := readTextFile(path)
 	if err != nil {
@@ -307,6 +356,57 @@ func parseBuildLog(path string) (buildSummary, error) {
 	}, nil
 }
 
+func parseOverlayLog(path string) ([]overlaySummary, error) {
+	text, err := readTextFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	summaries := make([]overlaySummary, 0)
+	scanner := bufio.NewScanner(strings.NewReader(text))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "overlay-bench: workers=") || !strings.Contains(line, " avg=") {
+			continue
+		}
+
+		summary := overlaySummary{GOMAXPROCS: gomaxprocsFromPath(path)}
+		if workersText, ok := fieldValue(line, "workers="); ok {
+			workers, err := strconv.Atoi(workersText)
+			if err != nil {
+				return nil, err
+			}
+			summary.GOMAXPROCS = workers
+		}
+
+		avgText, ok := fieldValue(line, "avg=")
+		if !ok {
+			continue
+		}
+		avg, err := time.ParseDuration(avgText)
+		if err != nil {
+			return nil, err
+		}
+		summary.AvgTimeMs = float64(avg.Microseconds()) / 1000.0
+
+		if runsText, ok := fieldValue(line, "runs="); ok {
+			runs, err := strconv.Atoi(runsText)
+			if err != nil {
+				return nil, err
+			}
+			summary.Runs = runs
+		}
+		summaries = append(summaries, summary)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if len(summaries) == 0 {
+		return nil, fmt.Errorf("missing overlay summary in %s", path)
+	}
+	return summaries, nil
+}
+
 func parseDurationAfter(text, marker string) (time.Duration, error) {
 	idx := strings.Index(text, marker)
 	if idx < 0 {
@@ -330,6 +430,15 @@ func gomaxprocsFromPath(path string) int {
 	}
 	value, _ := strconv.Atoi(digits)
 	return value
+}
+
+func fieldValue(line, prefix string) (string, bool) {
+	for _, field := range strings.Fields(line) {
+		if strings.HasPrefix(field, prefix) {
+			return strings.TrimPrefix(field, prefix), true
+		}
+	}
+	return "", false
 }
 
 func trimGOMAXPROCSSuffix(name string) string {

@@ -20,6 +20,7 @@ type CorpusSpec struct {
 	Count           int     `json:"count"`
 	MinNodeIndexGap int     `json:"min_node_index_gap"`
 	MinDistanceM    float64 `json:"min_distance_m"`
+	MaxDistanceM    float64 `json:"max_distance_m"`
 	MaxAttempts     int     `json:"max_attempts"`
 }
 
@@ -99,10 +100,11 @@ func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 			}
 		}
 
+		src := g.Nodes[srcIdx]
+		dst := g.Nodes[dstIdx]
+		dist := utilities.HaversineM(src.Lat, src.Lon, dst.Lat, dst.Lon)
 		if spec.MinDistanceM > 0 {
-			src := g.Nodes[srcIdx]
-			dst := g.Nodes[dstIdx]
-			if utilities.HaversineM(src.Lat, src.Lon, dst.Lat, dst.Lon) < spec.MinDistanceM {
+			if dist < spec.MinDistanceM || dist > spec.MaxDistanceM {
 				continue
 			}
 		}
@@ -117,8 +119,6 @@ func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 			continue
 		}
 
-		src := g.Nodes[srcIdx]
-		dst := g.Nodes[dstIdx]
 		cases = append(cases, CorpusCase{
 			Name:   fmt.Sprintf("case-%03d", len(cases)+1),
 			SrcIdx: srcIdx,

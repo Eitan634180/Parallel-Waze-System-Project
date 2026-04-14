@@ -17,6 +17,7 @@ set "TARGET=%~1"
 set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
 set "LOADBENCH_EXE=%BIN_DIR%\route-loadbench.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder-bench.exe"
+set "OVERLAYBENCH_EXE=%BIN_DIR%\overlay-build-bench.exe"
 set "REPORT_EXE=%BIN_DIR%\benchmark-report.exe"
 set "SERVER_SCALE_SCRIPT=%ROOT%server-scale.ps1"
 set "SERVER_ADDR=%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
@@ -30,11 +31,13 @@ if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 if not exist "%OUT_DIR%\server-scale" mkdir "%OUT_DIR%\server-scale"
 if not exist "%OUT_DIR%\build-scale" mkdir "%OUT_DIR%\build-scale"
+if not exist "%OUT_DIR%\overlay-scale" mkdir "%OUT_DIR%\overlay-scale"
 if not exist "%BUILD_WORK_DIR%" mkdir "%BUILD_WORK_DIR%"
 
 if /I "%TARGET%"=="compare-static" goto :cmp
 if /I "%TARGET%"=="server-scale" goto :server_scale
 if /I "%TARGET%"=="build-scale" goto :build_scale
+if /I "%TARGET%"=="overlay-scale" goto :overlay_scale
 if /I "%TARGET%"=="all" goto :all
 if /I "%TARGET%"=="help" goto :help
 
@@ -145,6 +148,11 @@ if errorlevel 1 (
   popd
   exit /b %ERRORLEVEL%
 )
+go build -buildvcs=false -o "%OVERLAYBENCH_EXE%" .\cmd\overlay-build-bench
+if errorlevel 1 (
+  popd
+  exit /b %ERRORLEVEL%
+)
 go build -buildvcs=false -o "%REPORT_EXE%" .\cmd\benchmark-report
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
@@ -205,12 +213,35 @@ for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
 call :write_report
 exit /b %ERRORLEVEL%
 
+:overlay_scale
+call :rdir
+if errorlevel 1 exit /b %ERRORLEVEL%
+if not defined TEST_BENCH_OVERLAY_RUNS (
+  echo TEST_BENCH_OVERLAY_RUNS was not set in project.env.test.
+  exit /b 1
+)
+call :build_tools
+if errorlevel 1 exit /b %ERRORLEVEL%
+set "OVERLAY_WORKERS=%TEST_BENCH_GOMAXPROCS: =,%"
+echo Running overlay-scale for workers=%OVERLAY_WORKERS%
+pushd "%SERVER_DIR%"
+set "GOCACHE=%GOCACHE_DIR%"
+set "CGO_ENABLED=0"
+"%OVERLAYBENCH_EXE%" --data "%SERVER_DATA%" --workers "%OVERLAY_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\overlay-scale\summary.log" 2>&1
+set "EXIT_CODE=!ERRORLEVEL!"
+popd
+if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
+call :write_report
+exit /b %ERRORLEVEL%
+
 :all
 call "%~f0" compare-static
 if errorlevel 1 exit /b %ERRORLEVEL%
 call "%~f0" server-scale
 if errorlevel 1 exit /b %ERRORLEVEL%
 call "%~f0" build-scale
+if errorlevel 1 exit /b %ERRORLEVEL%
+call "%~f0" overlay-scale
 if errorlevel 1 exit /b %ERRORLEVEL%
 exit /b 0
 
@@ -222,6 +253,7 @@ echo Targets:
 echo   compare-static  Run hierarchical vs base-astar/base-dijkstra static benchmarks
 echo   server-scale    Benchmark /route throughput as GOMAXPROCS increases
 echo   build-scale     Benchmark map-builder throughput as GOMAXPROCS increases
+echo   overlay-scale   Benchmark BuildOverlayGraph over a saved graph as GOMAXPROCS increases
 echo   all             Run every benchmark target
 echo   help            Show this help
 echo.
