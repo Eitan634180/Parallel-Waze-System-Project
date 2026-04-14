@@ -39,12 +39,8 @@ func main() {
 		var total time.Duration
 		for run := 1; run <= *runs; run++ {
 			runtime.GOMAXPROCS(workers)
-
-			start := time.Now()
-			builder.BuildOverlayGraph(g, workers)
-			elapsed := time.Since(start)
+			elapsed := builder.BuildOverlayGraph(g, workers)
 			total += elapsed
-
 			log.Printf("%s workers=%d run=%d duration=%s", overlayBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))
 		}
 

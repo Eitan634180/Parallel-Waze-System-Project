@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"slices"
 	"sync"
+	"time"
 
 	"nav-system/src/utilities"
 )
@@ -372,7 +373,7 @@ func DetectBoundaryNodes(g *Graph) {
 
 // BuildOverlayGraph constructs the overlay adjacency list for all boundary
 // nodes. Each cell contributes cross-cell edges and intra-cell shortcuts.
-func BuildOverlayGraph(g *Graph, numWorkers int) {
+func BuildOverlayGraph(g *Graph, numWorkers int) time.Duration {
 	if numWorkers <= 0 {
 		numWorkers = max(runtime.GOMAXPROCS(0), 1)
 	}
@@ -384,6 +385,8 @@ func BuildOverlayGraph(g *Graph, numWorkers int) {
 
 	jobs := make(chan int, len(g.Cells))
 	results := make(chan cellResult, len(g.Cells))
+	start := time.Now()
+	elapsed := time.Since(start)
 
 	var wg sync.WaitGroup
 	for w := 0; w < numWorkers; w++ {
@@ -403,6 +406,7 @@ func BuildOverlayGraph(g *Graph, numWorkers int) {
 
 	go func() {
 		wg.Wait()
+		elapsed = time.Since(start)
 		close(results)
 	}()
 
@@ -434,6 +438,8 @@ func BuildOverlayGraph(g *Graph, numWorkers int) {
 		countCrossCell(edges),
 		totalEdges-countCrossCell(edges),
 	)
+
+	return elapsed
 }
 
 func countCrossCell(edges []OverlayEdge) int {
