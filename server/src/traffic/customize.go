@@ -87,8 +87,9 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	type cellUpdates struct {
 		updates []overlayWeightUpdate
 	}
-	cellJobs := make(chan builder.Cell, len(g.Cells))
-	cellResults := make(chan cellUpdates, len(g.Cells))
+	affectedCellIDs := affectedCellIDsForDirtyEdges(g, dirtyEdges)
+	cellJobs := make(chan builder.Cell, len(affectedCellIDs))
+	cellResults := make(chan cellUpdates, len(affectedCellIDs))
 
 	workerCount := max(runtime.GOMAXPROCS(0), 1)
 
@@ -103,8 +104,10 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		}()
 	}
 
-	for _, cell := range g.Cells {
-		cellJobs <- cell
+	for _, cellID := range affectedCellIDs {
+		if int(cellID) < len(g.Cells) {
+			cellJobs <- g.Cells[cellID]
+		}
 	}
 	close(cellJobs)
 
@@ -138,9 +141,6 @@ func computeCellCustomizationUpdates(
 	weights map[builder.EdgeID]float32,
 ) []overlayWeightUpdate {
 	if len(cell.BoundaryNodeIDs) < 2 {
-		return nil
-	}
-	if !cellHasDirtyIntraEdge(g, cell, dirtyEdges) {
 		return nil
 	}
 
@@ -214,26 +214,35 @@ func unionDirtyEdges(current, previous map[builder.EdgeID]struct{}) map[builder.
 	return combined
 }
 
-func cellHasDirtyIntraEdge(g *builder.Graph, cell builder.Cell, dirtyEdges map[builder.EdgeID]struct{}) bool {
-	for _, nodeID := range cell.InternalNodeIDs {
-		nodeIdx, ok := g.NodeIdx[nodeID]
+func affectedCellIDsForDirtyEdges(g *builder.Graph, dirtyEdges map[builder.EdgeID]struct{}) []builder.CellID {
+	if len(dirtyEdges) == 0 {
+		return nil
+	}
+
+	affected := make(map[builder.CellID]struct{}, len(dirtyEdges))
+	for edgeID := range dirtyEdges {
+		if int(edgeID) >= len(g.Edges) {
+			continue
+		}
+
+		edge := &g.Edges[edgeID]
+		fromIdx, ok := g.NodeIdx[edge.FromNodeID]
 		if !ok {
 			continue
 		}
 
-		for _, edgeID := range g.BaseAdj.Neighbours(nodeIdx) {
-			if _, dirty := dirtyEdges[edgeID]; !dirty {
-				continue
-			}
-
-			toIdx := g.Edges[edgeID].ToNodeIdx
-			if g.Nodes[toIdx].CellID == cell.ID {
-				return true
-			}
+		fromCellID := g.Nodes[fromIdx].CellID
+		toCellID := g.Nodes[edge.ToNodeIdx].CellID
+		if fromCellID == toCellID {
+			affected[fromCellID] = struct{}{}
 		}
 	}
 
-	return false
+	cellIDs := make([]builder.CellID, 0, len(affected))
+	for cellID := range affected {
+		cellIDs = append(cellIDs, cellID)
+	}
+	return cellIDs
 }
 
 func liveCellDijkstra(
