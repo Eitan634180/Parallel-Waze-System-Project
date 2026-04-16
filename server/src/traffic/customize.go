@@ -150,11 +150,6 @@ func computeCellCustomizationUpdates(
 		return nil
 	}
 
-	inCell := make(map[builder.NodeID]struct{}, len(cell.InternalNodeIDs))
-	for _, nid := range cell.InternalNodeIDs {
-		inCell[nid] = struct{}{}
-	}
-
 	type shortcutTarget struct {
 		toID    builder.NodeID
 		edgeIdx uint32
@@ -179,7 +174,7 @@ func computeCellCustomizationUpdates(
 			continue
 		}
 
-		dists := liveCellDijkstra(g, srcID, cell.BoundaryNodeIDs, inCell, weights)
+		dists := liveCellDijkstra(g, srcID, cell.BoundaryNodeIDs, cell.ID, weights)
 		for _, target := range targets {
 			weight, ok := dists[target.toID]
 			if !ok {
@@ -255,7 +250,7 @@ func liveCellDijkstra(
 	g *builder.Graph,
 	srcID builder.NodeID,
 	targetNodeIDs []builder.NodeID,
-	inCell map[builder.NodeID]struct{},
+	cellID builder.CellID,
 	weights map[builder.EdgeID]float32,
 ) map[builder.NodeID]float32 {
 	const inf = float32(math.MaxFloat32)
@@ -297,7 +292,7 @@ func liveCellDijkstra(
 		for _, eid := range g.BaseAdj.Neighbours(curIdx) {
 			e := &g.Edges[eid]
 			toID := e.ToNodeID
-			if _, ok := inCell[toID]; !ok {
+			if g.Nodes[e.ToNodeIdx].CellID != cellID {
 				continue
 			}
 
