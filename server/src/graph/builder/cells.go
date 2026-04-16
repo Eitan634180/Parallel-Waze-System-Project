@@ -24,8 +24,7 @@ const (
 	boundaryNodeCapacityHint = 32768
 )
 
-// PartitionCells recursively bisects the graph with Inertial Flow and fills
-// g.Cells.
+// PartitionCells recursively bisects the graph with Inertial Flow and fills g.Cells.
 func PartitionCells(g *Graph, maxCellSize int) {
 	log.Printf("%s partitioning %d nodes (max size %d)", cellBuilderLogPrefix, len(g.Nodes), maxCellSize)
 

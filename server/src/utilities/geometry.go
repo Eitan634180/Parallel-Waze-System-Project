@@ -15,8 +15,8 @@ func Project(lat, lon float64) (x, y float32) {
 	return ProjectAtReferenceLat(lat, lon, ReferenceLat)
 }
 
-// ProjectAtReferenceLat converts geographic coordinates into planar metres
-// using an equirectangular projection anchored at the supplied reference latitude.
+// Convert (lat, lon) to (x, y) with using an equirectangular projection anchored at the supplied reference latitude.
+// Note: Earth is not round so there is a small error when converting to flat coordinates!
 func ProjectAtReferenceLat(lat, lon, referenceLat float64) (x, y float32) {
 	cosRefLat := float32(math.Cos(referenceLat * math.Pi / 180.0))
 	x = float32(lon*math.Pi/180.0) * cosRefLat * EarthRadiusM
