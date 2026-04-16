@@ -136,6 +136,18 @@ func (s *Store) Multiplier(id builder.EdgeID) float32 {
 	return m
 }
 
+// SnapshotWeights returns a clone of the current observed multipliers.
+func (s *Store) SnapshotWeights() map[builder.EdgeID]float32 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	weights := make(map[builder.EdgeID]float32, len(s.weight))
+	for edgeID, multiplier := range s.weight {
+		weights[edgeID] = multiplier
+	}
+	return weights
+}
+
 // RecommendedSpeedKmh returns a density-based speed hint for an edge in km/h.
 func (s *Store) RecommendedSpeedKmh(id builder.EdgeID, baseKmh, distanceM float32) float32 {
 	if baseKmh <= 0 {

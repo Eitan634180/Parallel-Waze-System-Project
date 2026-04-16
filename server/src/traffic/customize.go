@@ -58,6 +58,7 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 
 func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}) {
 	start := time.Now()
+	weights := store.SnapshotWeights()
 
 	g.OverlayAdj.Mu.RLock()
 	offsets := append([]uint32(nil), g.OverlayAdj.Offsets...)
@@ -79,7 +80,7 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		}
 		updates = append(updates, overlayWeightUpdate{
 			edgeIdx: uint32(idx),
-			weight:  store.LiveWeight(eid, g.Edges[eid].Weight),
+			weight:  liveWeightFromSnapshot(weights, eid, g.Edges[eid].Weight),
 		})
 	}
 
@@ -97,7 +98,7 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		go func() {
 			defer wg.Done()
 			for cell := range cellJobs {
-				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, store, cell, offsets, overlayEdges, dirtyEdges)}
+				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, cell, offsets, overlayEdges, dirtyEdges, weights)}
 			}
 		}()
 	}
@@ -130,11 +131,11 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 
 func computeCellCustomizationUpdates(
 	g *builder.Graph,
-	store *Store,
 	cell builder.Cell,
 	offsets []uint32,
 	overlayEdges []builder.OverlayEdge,
 	dirtyEdges map[builder.EdgeID]struct{},
+	weights map[builder.EdgeID]float32,
 ) []overlayWeightUpdate {
 	if len(cell.BoundaryNodeIDs) < 2 {
 		return nil
@@ -172,7 +173,7 @@ func computeCellCustomizationUpdates(
 			continue
 		}
 
-		dists := liveCellDijkstra(g, store, srcID, cell.BoundaryNodeIDs, inCell)
+		dists := liveCellDijkstra(g, srcID, cell.BoundaryNodeIDs, inCell, weights)
 		for _, target := range targets {
 			weight, ok := dists[target.toID]
 			if !ok {
@@ -237,10 +238,10 @@ func cellHasDirtyIntraEdge(g *builder.Graph, cell builder.Cell, dirtyEdges map[b
 
 func liveCellDijkstra(
 	g *builder.Graph,
-	store *Store,
 	srcID builder.NodeID,
 	targetNodeIDs []builder.NodeID,
 	inCell map[builder.NodeID]struct{},
+	weights map[builder.EdgeID]float32,
 ) map[builder.NodeID]float32 {
 	const inf = float32(math.MaxFloat32)
 
@@ -285,7 +286,7 @@ func liveCellDijkstra(
 				continue
 			}
 
-			newCost := best + store.LiveWeight(eid, e.Weight)
+			newCost := best + liveWeightFromSnapshot(weights, eid, e.Weight)
 			if existing, has := dist[toID]; !has || newCost < existing {
 				dist[toID] = newCost
 				pq.Push(livePQItem{id: toID, cost: newCost})
@@ -300,6 +301,14 @@ func liveCellDijkstra(
 		}
 	}
 	return result
+}
+
+func liveWeightFromSnapshot(weights map[builder.EdgeID]float32, id builder.EdgeID, baseSec float32) float32 {
+	multiplier, ok := weights[id]
+	if !ok {
+		return baseSec
+	}
+	return baseSec * multiplier
 }
 
 func baseEdgeIDBetweenNodeIDs(g *builder.Graph, fromID, toID builder.NodeID) (builder.EdgeID, bool) {
