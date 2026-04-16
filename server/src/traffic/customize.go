@@ -23,12 +23,20 @@ type overlayWeightUpdate struct {
 
 type livePQItem struct {
 	id   builder.NodeID
+	idx  uint32
 	cost float32
 }
 
 type shortcutTarget struct {
 	toID    builder.NodeID
 	edgeIdx uint32
+}
+
+type customizationJob struct {
+	cellID  builder.CellID
+	srcID   builder.NodeID
+	srcIdx  uint32
+	srcBIdx uint32
 }
 
 type customizationIndex struct {
@@ -95,8 +103,9 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		updates []overlayWeightUpdate
 	}
 	affectedCellIDs := affectedCellIDsForDirtyEdges(g, dirtyEdges)
-	cellJobs := make(chan builder.Cell, len(affectedCellIDs))
-	cellResults := make(chan cellUpdates, len(affectedCellIDs))
+	jobs := makeCustomizationJobs(g, affectedCellIDs, index)
+	cellJobs := make(chan customizationJob, len(jobs))
+	cellResults := make(chan cellUpdates, len(jobs))
 
 	workerCount := max(runtime.GOMAXPROCS(0), 1)
 
@@ -105,16 +114,14 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for cell := range cellJobs {
-				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, cell, index, weights)}
+			for job := range cellJobs {
+				cellResults <- cellUpdates{updates: computeBoundaryCustomizationUpdates(g, job, index, weights)}
 			}
 		}()
 	}
 
-	for _, cellID := range affectedCellIDs {
-		if int(cellID) < len(g.Cells) {
-			cellJobs <- g.Cells[cellID]
-		}
+	for _, job := range jobs {
+		cellJobs <- job
 	}
 	close(cellJobs)
 
@@ -139,38 +146,70 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	}
 }
 
-func computeCellCustomizationUpdates(
+func makeCustomizationJobs(
 	g *builder.Graph,
-	cell builder.Cell,
+	affectedCellIDs []builder.CellID,
 	index *customizationIndex,
-	weights map[builder.EdgeID]float32,
-) []overlayWeightUpdate {
-	if len(cell.BoundaryNodeIDs) < 2 {
+) []customizationJob {
+	if len(affectedCellIDs) == 0 {
 		return nil
 	}
 
-	updates := make([]overlayWeightUpdate, 0, len(cell.BoundaryNodeIDs))
-	for _, srcID := range cell.BoundaryNodeIDs {
-		srcBIdx, ok := g.BoundaryNodeIdx[srcID]
-		if !ok {
-			continue
-		}
-		targets := index.shortcutTargetsByBoundary[srcBIdx]
-		if len(targets) == 0 {
+	jobs := make([]customizationJob, 0, len(affectedCellIDs))
+	for _, cellID := range affectedCellIDs {
+		if int(cellID) >= len(g.Cells) {
 			continue
 		}
 
-		dists := liveCellDijkstra(g, srcID, cell.BoundaryNodeIDs, cell.ID, weights)
-		for _, target := range targets {
-			weight, ok := dists[target.toID]
+		cell := g.Cells[cellID]
+		for _, srcID := range cell.BoundaryNodeIDs {
+			srcBIdx, ok := g.BoundaryNodeIdx[srcID]
 			if !ok {
 				continue
 			}
-			updates = append(updates, overlayWeightUpdate{
-				edgeIdx: target.edgeIdx,
-				weight:  weight,
+			targets := index.shortcutTargetsByBoundary[srcBIdx]
+			if len(targets) == 0 {
+				continue
+			}
+
+			srcIdx, ok := g.NodeIdx[srcID]
+			if !ok {
+				continue
+			}
+
+			jobs = append(jobs, customizationJob{
+				cellID:  cell.ID,
+				srcID:   srcID,
+				srcIdx:  srcIdx,
+				srcBIdx: srcBIdx,
 			})
 		}
+	}
+	return jobs
+}
+
+func computeBoundaryCustomizationUpdates(
+	g *builder.Graph,
+	job customizationJob,
+	index *customizationIndex,
+	weights map[builder.EdgeID]float32,
+) []overlayWeightUpdate {
+	targets := index.shortcutTargetsByBoundary[job.srcBIdx]
+	if len(targets) == 0 {
+		return nil
+	}
+
+	dists := liveCellDijkstra(g, job.srcID, job.srcIdx, targets, job.cellID, weights)
+	updates := make([]overlayWeightUpdate, 0, len(targets))
+	for _, target := range targets {
+		weight, ok := dists[target.toID]
+		if !ok {
+			continue
+		}
+		updates = append(updates, overlayWeightUpdate{
+			edgeIdx: target.edgeIdx,
+			weight:  weight,
+		})
 	}
 	return updates
 }
@@ -235,7 +274,8 @@ func affectedCellIDsForDirtyEdges(g *builder.Graph, dirtyEdges map[builder.EdgeI
 func liveCellDijkstra(
 	g *builder.Graph,
 	srcID builder.NodeID,
-	targetNodeIDs []builder.NodeID,
+	srcIdx uint32,
+	targets []shortcutTarget,
 	cellID builder.CellID,
 	weights map[builder.EdgeID]float32,
 ) map[builder.NodeID]float32 {
@@ -244,14 +284,14 @@ func liveCellDijkstra(
 	dist := make(map[builder.NodeID]float32)
 	dist[srcID] = 0
 
-	targetSet := make(map[builder.NodeID]struct{}, len(targetNodeIDs))
-	for _, nid := range targetNodeIDs {
-		targetSet[nid] = struct{}{}
+	targetSet := make(map[builder.NodeID]struct{}, len(targets))
+	for _, target := range targets {
+		targetSet[target.toID] = struct{}{}
 	}
 	remaining := len(targetSet)
 
 	pq := utilities.NewHeap(func(a, b livePQItem) bool { return a.cost < b.cost })
-	pq.Push(livePQItem{id: srcID, cost: 0})
+	pq.Push(livePQItem{id: srcID, idx: srcIdx, cost: 0})
 
 	for pq.Len() > 0 {
 		cur := pq.Pop()
@@ -270,12 +310,7 @@ func liveCellDijkstra(
 			}
 		}
 
-		curIdx, ok := g.NodeIdx[cur.id]
-		if !ok {
-			continue
-		}
-
-		for _, eid := range g.BaseAdj.Neighbours(curIdx) {
+		for _, eid := range g.BaseAdj.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
 			toID := e.ToNodeID
 			if g.Nodes[e.ToNodeIdx].CellID != cellID {
@@ -285,15 +320,15 @@ func liveCellDijkstra(
 			newCost := best + liveWeightFromSnapshot(weights, eid, e.Weight)
 			if existing, has := dist[toID]; !has || newCost < existing {
 				dist[toID] = newCost
-				pq.Push(livePQItem{id: toID, cost: newCost})
+				pq.Push(livePQItem{id: toID, idx: e.ToNodeIdx, cost: newCost})
 			}
 		}
 	}
 
-	result := make(map[builder.NodeID]float32, len(targetNodeIDs))
-	for _, nid := range targetNodeIDs {
-		if d, ok := dist[nid]; ok && d < inf {
-			result[nid] = d
+	result := make(map[builder.NodeID]float32, len(targets))
+	for _, target := range targets {
+		if d, ok := dist[target.toID]; ok && d < inf {
+			result[target.toID] = d
 		}
 	}
 	return result
