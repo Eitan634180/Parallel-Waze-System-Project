@@ -18,6 +18,7 @@ set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
 set "LOADBENCH_EXE=%BIN_DIR%\route-loadbench.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder-bench.exe"
 set "OVERLAYBENCH_EXE=%BIN_DIR%\overlay-build-bench.exe"
+set "CUSTOMBENCH_EXE=%BIN_DIR%\customization-bench.exe"
 set "REPORT_EXE=%BIN_DIR%\benchmark-report.exe"
 set "SERVER_SCALE_SCRIPT=%ROOT%server-scale.ps1"
 set "SERVER_ADDR=%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
@@ -32,12 +33,14 @@ if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 if not exist "%OUT_DIR%\server-scale" mkdir "%OUT_DIR%\server-scale"
 if not exist "%OUT_DIR%\build-scale" mkdir "%OUT_DIR%\build-scale"
 if not exist "%OUT_DIR%\overlay-scale" mkdir "%OUT_DIR%\overlay-scale"
+if not exist "%OUT_DIR%\customization-scale" mkdir "%OUT_DIR%\customization-scale"
 if not exist "%BUILD_WORK_DIR%" mkdir "%BUILD_WORK_DIR%"
 
 if /I "%TARGET%"=="compare-static" goto :cmp
 if /I "%TARGET%"=="server-scale" goto :server_scale
 if /I "%TARGET%"=="build-scale" goto :build_scale
 if /I "%TARGET%"=="overlay-scale" goto :overlay_scale
+if /I "%TARGET%"=="customization-scale" goto :customization_scale
 if /I "%TARGET%"=="all" goto :all
 if /I "%TARGET%"=="help" goto :help
 
@@ -153,6 +156,11 @@ if errorlevel 1 (
   popd
   exit /b %ERRORLEVEL%
 )
+go build -buildvcs=false -o "%CUSTOMBENCH_EXE%" .\cmd\customization-bench
+if errorlevel 1 (
+  popd
+  exit /b %ERRORLEVEL%
+)
 go build -buildvcs=false -o "%REPORT_EXE%" .\cmd\benchmark-report
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
@@ -234,6 +242,27 @@ if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
 call :write_report
 exit /b %ERRORLEVEL%
 
+:customization_scale
+call :rdir
+if errorlevel 1 exit /b %ERRORLEVEL%
+if not defined TEST_BENCH_OVERLAY_RUNS (
+  echo TEST_BENCH_OVERLAY_RUNS was not set in project.env.test.
+  exit /b 1
+)
+call :build_tools
+if errorlevel 1 exit /b %ERRORLEVEL%
+set "CUSTOMIZATION_WORKERS=%TEST_BENCH_GOMAXPROCS: =,%"
+echo Running customization-scale for workers=%CUSTOMIZATION_WORKERS%
+pushd "%SERVER_DIR%"
+set "GOCACHE=%GOCACHE_DIR%"
+set "CGO_ENABLED=0"
+"%CUSTOMBENCH_EXE%" --data "%SERVER_DATA%" --workers "%CUSTOMIZATION_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\customization-scale\summary.log" 2>&1
+set "EXIT_CODE=!ERRORLEVEL!"
+popd
+if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
+call :write_report
+exit /b %ERRORLEVEL%
+
 :all
 call "%~f0" compare-static
 if errorlevel 1 exit /b %ERRORLEVEL%
@@ -242,6 +271,8 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 call "%~f0" build-scale
 if errorlevel 1 exit /b %ERRORLEVEL%
 call "%~f0" overlay-scale
+if errorlevel 1 exit /b %ERRORLEVEL%
+call "%~f0" customization-scale
 if errorlevel 1 exit /b %ERRORLEVEL%
 exit /b 0
 
@@ -254,6 +285,7 @@ echo   compare-static  Run hierarchical vs base-astar/base-dijkstra static bench
 echo   server-scale    Benchmark /route throughput as GOMAXPROCS increases
 echo   build-scale     Benchmark map-builder throughput as GOMAXPROCS increases
 echo   overlay-scale   Benchmark BuildOverlayGraph over a saved graph as GOMAXPROCS increases
+echo   customization-scale Benchmark overlay customization throughput as GOMAXPROCS increases
 echo   all             Run every benchmark target
 echo   help            Show this help
 echo.
