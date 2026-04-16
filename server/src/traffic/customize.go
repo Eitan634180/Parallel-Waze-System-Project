@@ -14,6 +14,7 @@ import (
 
 const customizationInterval = 5 * time.Second
 const slowCustomizationLogThreshold = 500 * time.Millisecond
+const noOverlayEdgeIdx = ^uint32(0)
 
 type overlayWeightUpdate struct {
 	edgeIdx uint32
@@ -24,6 +25,12 @@ type livePQItem struct {
 	id   builder.NodeID
 	cost float32
 }
+
+type customizationIndex struct {
+	crossCellOverlayByBaseEdge []uint32
+}
+
+var customizationIndexCache sync.Map
 
 // RunCustomization periodically reweights overlay edges using live traffic.
 func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
@@ -59,6 +66,7 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}) {
 	start := time.Now()
 	weights := store.SnapshotWeights()
+	index := getCustomizationIndex(g)
 
 	g.OverlayAdj.Mu.RLock()
 	offsets := append([]uint32(nil), g.OverlayAdj.Offsets...)
@@ -67,20 +75,18 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 
 	updates := make([]overlayWeightUpdate, 0, len(overlayEdges))
 
-	for idx, oe := range overlayEdges {
-		if !oe.IsCrossCell {
+	for edgeID := range dirtyEdges {
+		if int(edgeID) >= len(index.crossCellOverlayByBaseEdge) {
 			continue
 		}
-		eid, ok := baseEdgeIDBetweenNodeIDs(g, oe.FromNodeID, oe.ToNodeID)
-		if !ok {
+		overlayEdgeIdx := index.crossCellOverlayByBaseEdge[edgeID]
+		if overlayEdgeIdx == noOverlayEdgeIdx {
 			continue
 		}
-		if _, dirty := dirtyEdges[eid]; !dirty {
-			continue
-		}
+
 		updates = append(updates, overlayWeightUpdate{
-			edgeIdx: uint32(idx),
-			weight:  liveWeightFromSnapshot(weights, eid, g.Edges[eid].Weight),
+			edgeIdx: overlayEdgeIdx,
+			weight:  liveWeightFromSnapshot(weights, edgeID, g.Edges[edgeID].Weight),
 		})
 	}
 
@@ -318,6 +324,42 @@ func liveWeightFromSnapshot(weights map[builder.EdgeID]float32, id builder.EdgeI
 		return baseSec
 	}
 	return baseSec * multiplier
+}
+
+func getCustomizationIndex(g *builder.Graph) *customizationIndex {
+	if cached, ok := customizationIndexCache.Load(g); ok {
+		return cached.(*customizationIndex)
+	}
+
+	built := buildCustomizationIndex(g)
+	actual, _ := customizationIndexCache.LoadOrStore(g, built)
+	return actual.(*customizationIndex)
+}
+
+func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
+	index := &customizationIndex{
+		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
+	}
+	for i := range index.crossCellOverlayByBaseEdge {
+		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
+	}
+
+	g.OverlayAdj.Mu.RLock()
+	defer g.OverlayAdj.Mu.RUnlock()
+
+	for overlayEdgeIdx, overlayEdge := range g.OverlayAdj.OverlayEdges {
+		if !overlayEdge.IsCrossCell {
+			continue
+		}
+
+		baseEdgeID, ok := baseEdgeIDBetweenNodeIDs(g, overlayEdge.FromNodeID, overlayEdge.ToNodeID)
+		if !ok || int(baseEdgeID) >= len(index.crossCellOverlayByBaseEdge) {
+			continue
+		}
+		index.crossCellOverlayByBaseEdge[baseEdgeID] = uint32(overlayEdgeIdx)
+	}
+
+	return index
 }
 
 func baseEdgeIDBetweenNodeIDs(g *builder.Graph, fromID, toID builder.NodeID) (builder.EdgeID, bool) {
