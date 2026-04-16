@@ -26,11 +26,18 @@ type livePQItem struct {
 	cost float32
 }
 
-type customizationIndex struct {
-	crossCellOverlayByBaseEdge []uint32
+type shortcutTarget struct {
+	toID    builder.NodeID
+	edgeIdx uint32
 }
 
-var customizationIndexCache sync.Map
+type customizationIndex struct {
+	crossCellOverlayByBaseEdge []uint32
+	shortcutTargetsByBoundary  [][]shortcutTarget
+}
+
+var customizationIndexMu sync.RWMutex
+var customizationIndexCache = make(map[*builder.Graph]*customizationIndex)
 
 // RunCustomization periodically reweights overlay edges using live traffic.
 func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
@@ -67,13 +74,7 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	start := time.Now()
 	weights := store.SnapshotWeights()
 	index := getCustomizationIndex(g)
-
-	g.OverlayAdj.Mu.RLock()
-	offsets := append([]uint32(nil), g.OverlayAdj.Offsets...)
-	overlayEdges := append([]builder.OverlayEdge(nil), g.OverlayAdj.OverlayEdges...)
-	g.OverlayAdj.Mu.RUnlock()
-
-	updates := make([]overlayWeightUpdate, 0, len(overlayEdges))
+	updates := make([]overlayWeightUpdate, 0, len(index.crossCellOverlayByBaseEdge))
 
 	for edgeID := range dirtyEdges {
 		if int(edgeID) >= len(index.crossCellOverlayByBaseEdge) {
@@ -105,7 +106,7 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		go func() {
 			defer wg.Done()
 			for cell := range cellJobs {
-				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, cell, offsets, overlayEdges, dirtyEdges, weights)}
+				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, cell, index, weights)}
 			}
 		}()
 	}
@@ -141,18 +142,11 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 func computeCellCustomizationUpdates(
 	g *builder.Graph,
 	cell builder.Cell,
-	offsets []uint32,
-	overlayEdges []builder.OverlayEdge,
-	dirtyEdges map[builder.EdgeID]struct{},
+	index *customizationIndex,
 	weights map[builder.EdgeID]float32,
 ) []overlayWeightUpdate {
 	if len(cell.BoundaryNodeIDs) < 2 {
 		return nil
-	}
-
-	type shortcutTarget struct {
-		toID    builder.NodeID
-		edgeIdx uint32
 	}
 
 	updates := make([]overlayWeightUpdate, 0, len(cell.BoundaryNodeIDs))
@@ -161,15 +155,7 @@ func computeCellCustomizationUpdates(
 		if !ok {
 			continue
 		}
-
-		var targets []shortcutTarget
-		for edgeIdx := offsets[srcBIdx]; edgeIdx < offsets[srcBIdx+1]; edgeIdx++ {
-			oe := overlayEdges[edgeIdx]
-			if oe.IsCrossCell {
-				continue
-			}
-			targets = append(targets, shortcutTarget{toID: oe.ToNodeID, edgeIdx: edgeIdx})
-		}
+		targets := index.shortcutTargetsByBoundary[srcBIdx]
 		if len(targets) == 0 {
 			continue
 		}
@@ -322,18 +308,28 @@ func liveWeightFromSnapshot(weights map[builder.EdgeID]float32, id builder.EdgeI
 }
 
 func getCustomizationIndex(g *builder.Graph) *customizationIndex {
-	if cached, ok := customizationIndexCache.Load(g); ok {
-		return cached.(*customizationIndex)
+	customizationIndexMu.RLock()
+	cached := customizationIndexCache[g]
+	customizationIndexMu.RUnlock()
+	if cached != nil {
+		return cached
 	}
 
 	built := buildCustomizationIndex(g)
-	actual, _ := customizationIndexCache.LoadOrStore(g, built)
-	return actual.(*customizationIndex)
+	customizationIndexMu.Lock()
+	if existing := customizationIndexCache[g]; existing != nil {
+		customizationIndexMu.Unlock()
+		return existing
+	}
+	customizationIndexCache[g] = built
+	customizationIndexMu.Unlock()
+	return built
 }
 
 func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 	index := &customizationIndex{
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
+		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.BoundaryNodes)),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
@@ -344,6 +340,13 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 
 	for overlayEdgeIdx, overlayEdge := range g.OverlayAdj.OverlayEdges {
 		if !overlayEdge.IsCrossCell {
+			fromBoundaryIdx, ok := g.BoundaryNodeIdx[overlayEdge.FromNodeID]
+			if ok {
+				index.shortcutTargetsByBoundary[fromBoundaryIdx] = append(
+					index.shortcutTargetsByBoundary[fromBoundaryIdx],
+					shortcutTarget{toID: overlayEdge.ToNodeID, edgeIdx: uint32(overlayEdgeIdx)},
+				)
+			}
 			continue
 		}
 
