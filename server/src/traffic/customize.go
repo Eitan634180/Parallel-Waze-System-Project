@@ -32,13 +32,6 @@ type shortcutTarget struct {
 	edgeIdx uint32
 }
 
-type customizationJob struct {
-	cellID  builder.CellID
-	srcID   builder.NodeID
-	srcIdx  uint32
-	srcBIdx uint32
-}
-
 type customizationIndex struct {
 	crossCellOverlayByBaseEdge []uint32
 	shortcutTargetsByBoundary  [][]shortcutTarget
@@ -109,9 +102,8 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		updates []overlayWeightUpdate
 	}
 	affectedCellIDs := affectedCellIDsForDirtyEdges(g, dirtyEdges)
-	jobs := makeCustomizationJobs(g, affectedCellIDs, index)
-	cellJobs := make(chan customizationJob, len(jobs))
-	cellResults := make(chan cellUpdates, len(jobs))
+	cellJobs := make(chan builder.Cell, len(affectedCellIDs))
+	cellResults := make(chan cellUpdates, len(affectedCellIDs))
 
 	workerCount := max(runtime.GOMAXPROCS(0), 1)
 
@@ -121,14 +113,17 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		go func() {
 			defer wg.Done()
 			scratch := newLiveDijkstraScratch(len(g.Nodes))
-			for job := range cellJobs {
-				cellResults <- cellUpdates{updates: computeBoundaryCustomizationUpdates(g, job, index, weights, scratch)}
+			// The work done in every cell is small enough that splitting it into boundary node jobs costs more than it saves
+			for cell := range cellJobs {
+				cellResults <- cellUpdates{updates: computeCellCustomizationUpdates(g, cell, index, weights, scratch)}
 			}
 		}()
 	}
 
-	for _, job := range jobs {
-		cellJobs <- job
+	for _, cellID := range affectedCellIDs {
+		if int(cellID) < len(g.Cells) {
+			cellJobs <- g.Cells[cellID]
+		}
 	}
 	close(cellJobs)
 
@@ -153,71 +148,44 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	}
 }
 
-func makeCustomizationJobs(
+func computeCellCustomizationUpdates(
 	g *builder.Graph,
-	affectedCellIDs []builder.CellID,
-	index *customizationIndex,
-) []customizationJob {
-	if len(affectedCellIDs) == 0 {
-		return nil
-	}
-
-	jobs := make([]customizationJob, 0, len(affectedCellIDs))
-	for _, cellID := range affectedCellIDs {
-		if int(cellID) >= len(g.Cells) {
-			continue
-		}
-
-		cell := g.Cells[cellID]
-		for _, srcID := range cell.BoundaryNodeIDs {
-			srcBIdx, ok := g.BoundaryNodeIdx[srcID]
-			if !ok {
-				continue
-			}
-			targets := index.shortcutTargetsByBoundary[srcBIdx]
-			if len(targets) == 0 {
-				continue
-			}
-
-			srcIdx, ok := g.NodeIdx[srcID]
-			if !ok {
-				continue
-			}
-
-			jobs = append(jobs, customizationJob{
-				cellID:  cell.ID,
-				srcID:   srcID,
-				srcIdx:  srcIdx,
-				srcBIdx: srcBIdx,
-			})
-		}
-	}
-	return jobs
-}
-
-func computeBoundaryCustomizationUpdates(
-	g *builder.Graph,
-	job customizationJob,
+	cell builder.Cell,
 	index *customizationIndex,
 	weights map[builder.EdgeID]float32,
 	scratch *liveDijkstraScratch,
 ) []overlayWeightUpdate {
-	targets := index.shortcutTargetsByBoundary[job.srcBIdx]
-	if len(targets) == 0 {
+	if len(cell.BoundaryNodeIDs) < 2 {
 		return nil
 	}
 
-	liveCellDijkstra(g, job.srcIdx, targets, job.cellID, weights, scratch)
-	updates := make([]overlayWeightUpdate, 0, len(targets))
-	for _, target := range targets {
-		weight, ok := scratch.cost(target.toIdx)
+	updates := make([]overlayWeightUpdate, 0, len(cell.BoundaryNodeIDs))
+	for _, srcID := range cell.BoundaryNodeIDs {
+		srcBIdx, ok := g.BoundaryNodeIdx[srcID]
 		if !ok {
 			continue
 		}
-		updates = append(updates, overlayWeightUpdate{
-			edgeIdx: target.edgeIdx,
-			weight:  weight,
-		})
+		targets := index.shortcutTargetsByBoundary[srcBIdx]
+		if len(targets) == 0 {
+			continue
+		}
+
+		srcIdx, ok := g.NodeIdx[srcID]
+		if !ok {
+			continue
+		}
+
+		liveCellDijkstra(g, srcIdx, targets, cell.ID, weights, scratch)
+		for _, target := range targets {
+			weight, ok := scratch.cost(target.toIdx)
+			if !ok {
+				continue
+			}
+			updates = append(updates, overlayWeightUpdate{
+				edgeIdx: target.edgeIdx,
+				weight:  weight,
+			})
+		}
 	}
 	return updates
 }

@@ -451,8 +451,7 @@ func countCrossCell(edges []OverlayEdge) int {
 	return n
 }
 
-// computeCellOverlayEdges emits cross-cell edges and intra-cell shortcuts for
-// one cell.
+// computeCellOverlayEdges emits cross-cell edges and intra-cell shortcuts for one cell.
 func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 	var result []OverlayEdge
 

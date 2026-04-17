@@ -42,6 +42,7 @@ func main() {
 	log.Printf("%s store ready (%d dirty edges)", customizationBenchLogPrefix, dirtyEdges)
 
 	traffic.CustomizeOverlayWeights(g, store)
+	log.Printf("%s finished initial customization", customizationBenchLogPrefix)
 
 	for _, workers := range workerCounts {
 		var total time.Duration
