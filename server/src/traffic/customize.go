@@ -15,6 +15,7 @@ import (
 const customizationInterval = 5 * time.Second
 const slowCustomizationLogThreshold = 500 * time.Millisecond
 const noOverlayEdgeIdx = ^uint32(0)
+const fullAffectedCellsDirtyCoverage = 0.25
 
 type overlayWeightUpdate struct {
 	edgeIdx uint32
@@ -44,6 +45,7 @@ type liveDijkstraScratch struct {
 	dist      []float32
 	seenEpoch []uint32
 	epoch     uint32
+	heap      *utilities.Heap[livePQItem]
 }
 
 type CustomizationProfile struct {
@@ -51,6 +53,7 @@ type CustomizationProfile struct {
 	DirtyEdges           int
 	CrossCellUpdates     int
 	AffectedCells        int
+	AffectedScanSkipped  bool
 	CellsProcessed       int
 	DijkstraRuns         int
 	SnapshotTime         time.Duration
@@ -132,21 +135,39 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		profile.SnapshotTime = time.Since(snapshotStart)
 	}
 	updates := make([]overlayWeightUpdate, 0, len(index.crossCellOverlayByBaseEdge))
-	affectedCells := make(map[builder.CellID]struct{}, len(g.Cells))
-
 	affectedCellsStart := time.Now()
-	for edgeID := range dirtyEdges {
-		if int(edgeID) >= len(g.Edges) {
-			continue
+	affectedCellIDs := make([]builder.CellID, 0, len(g.Cells))
+	coverage := 0.0
+	if len(g.Edges) > 0 {
+		coverage = float64(len(dirtyEdges)) / float64(len(g.Edges))
+	}
+	if coverage >= fullAffectedCellsDirtyCoverage {
+		affectedCellIDs = affectedCellIDs[:0]
+		for _, cell := range g.Cells {
+			affectedCellIDs = append(affectedCellIDs, cell.ID)
 		}
-
-		edge := &g.Edges[edgeID]
-		fromIdx, ok := g.NodeIdx[edge.FromNodeID]
-		if ok {
-			fromCellID := g.Nodes[fromIdx].CellID
-			if fromCellID == g.Nodes[edge.ToNodeIdx].CellID {
-				affectedCells[fromCellID] = struct{}{}
+		if profile != nil {
+			profile.AffectedScanSkipped = true
+		}
+	} else {
+		affectedCells := make(map[builder.CellID]struct{}, len(g.Cells))
+		for edgeID := range dirtyEdges {
+			if int(edgeID) >= len(g.Edges) {
+				continue
 			}
+
+			edge := &g.Edges[edgeID]
+			fromIdx, ok := g.NodeIdx[edge.FromNodeID]
+			if ok {
+				fromCellID := g.Nodes[fromIdx].CellID
+				if fromCellID == g.Nodes[edge.ToNodeIdx].CellID {
+					affectedCells[fromCellID] = struct{}{}
+				}
+			}
+		}
+		affectedCellIDs = make([]builder.CellID, 0, len(affectedCells))
+		for cellID := range affectedCells {
+			affectedCellIDs = append(affectedCellIDs, cellID)
 		}
 	}
 	if profile != nil {
@@ -176,10 +197,6 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 
 	type cellUpdates struct {
 		updates []overlayWeightUpdate
-	}
-	affectedCellIDs := make([]builder.CellID, 0, len(affectedCells))
-	for cellID := range affectedCells {
-		affectedCellIDs = append(affectedCellIDs, cellID)
 	}
 	if profile != nil {
 		profile.AffectedCells = len(affectedCellIDs)
@@ -379,11 +396,11 @@ func liveCellDijkstra(
 	}
 	remaining := len(targetSet)
 
-	pq := utilities.NewHeap(func(a, b livePQItem) bool { return a.cost < b.cost })
-	pq.Push(livePQItem{idx: srcIdx, cost: 0})
+	scratch.heap.Reset()
+	scratch.heap.Push(livePQItem{idx: srcIdx, cost: 0})
 
-	for pq.Len() > 0 {
-		cur := pq.Pop()
+	for scratch.heap.Len() > 0 {
+		cur := scratch.heap.Pop()
 
 		// Skip stale queue entries after a better path has already been recorded.
 		best, hasBest := scratch.cost(cur.idx)
@@ -408,7 +425,7 @@ func liveCellDijkstra(
 			newCost := best + liveWeightFromSnapshot(weights, eid, e.Weight)
 			if existing, has := scratch.cost(e.ToNodeIdx); !has || newCost < existing {
 				scratch.set(e.ToNodeIdx, newCost)
-				pq.Push(livePQItem{idx: e.ToNodeIdx, cost: newCost})
+				scratch.heap.Push(livePQItem{idx: e.ToNodeIdx, cost: newCost})
 			}
 		}
 	}
@@ -493,6 +510,7 @@ func newLiveDijkstraScratch(nodeCount int) *liveDijkstraScratch {
 	return &liveDijkstraScratch{
 		dist:      make([]float32, nodeCount),
 		seenEpoch: make([]uint32, nodeCount),
+		heap:      utilities.NewHeap(func(a, b livePQItem) bool { return a.cost < b.cost }),
 	}
 }
 
