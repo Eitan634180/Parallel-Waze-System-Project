@@ -19,6 +19,7 @@ const customizationObservedRatio = float32(2.0)
 func main() {
 	dataDir := flag.String("data", "./data/map", "Path to saved graph directory")
 	workersFlag := flag.String("workers", "1", "Comma-separated worker counts")
+	profile := flag.Bool("profile", false, "Log a customization phase breakdown once per worker count")
 	runs := flag.Int("runs", 5, "Timed runs per worker count")
 	flag.Parse()
 
@@ -45,9 +46,35 @@ func main() {
 	log.Printf("%s finished initial customization", customizationBenchLogPrefix)
 
 	for _, workers := range workerCounts {
+		runtime.GOMAXPROCS(workers)
+		if *profile {
+			p := traffic.ProfileCustomizeOverlayWeights(g, store)
+			log.Printf(
+				"%s profile workers=%d total=%s snapshot=%s cross-cell=%s affected-scan=%s worker-phase=%s apply=%s dirty=%d cross-cell-updates=%d affected-cells=%d cells=%d dijkstras=%d worker-compute-total=%s max-worker=%s min-worker=%s max-cell=%s worker-cells=%d..%d",
+				customizationBenchLogPrefix,
+				workers,
+				p.TotalTime.Round(time.Millisecond),
+				p.SnapshotTime.Round(time.Millisecond),
+				p.CrossCellTime.Round(time.Millisecond),
+				p.AffectedCellsTime.Round(time.Millisecond),
+				p.WorkerPhaseTime.Round(time.Millisecond),
+				p.ApplyTime.Round(time.Millisecond),
+				p.DirtyEdges,
+				p.CrossCellUpdates,
+				p.AffectedCells,
+				p.CellsProcessed,
+				p.DijkstraRuns,
+				p.WorkerComputeTotal.Round(time.Millisecond),
+				p.MaxWorkerComputeTime.Round(time.Millisecond),
+				p.MinWorkerComputeTime.Round(time.Millisecond),
+				p.MaxCellComputeTime.Round(time.Millisecond),
+				p.MinWorkerCells,
+				p.MaxWorkerCells,
+			)
+		}
+
 		var total time.Duration
 		for run := 1; run <= *runs; run++ {
-			runtime.GOMAXPROCS(workers)
 			start := time.Now()
 			traffic.CustomizeOverlayWeights(g, store)
 			elapsed := time.Since(start)
