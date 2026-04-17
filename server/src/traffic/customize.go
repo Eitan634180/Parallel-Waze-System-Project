@@ -37,6 +37,9 @@ type customizationIndex struct {
 	crossCellOverlayByBaseEdge []uint32
 	crossCellBaseEdgeIDs       []builder.EdgeID
 	shortcutTargetsByBoundary  [][]shortcutTarget
+	edgeSourceCellIDs          []builder.CellID
+	edgeIsIntraCell            []bool
+	intraCellAdj               builder.AdjacencyList
 	weightSnapshotMu           sync.Mutex
 	weightMultipliers          []float32
 }
@@ -46,35 +49,6 @@ type liveDijkstraScratch struct {
 	seenEpoch []uint32
 	epoch     uint32
 	heap      *utilities.Heap[livePQItem]
-}
-
-type CustomizationProfile struct {
-	Workers              int
-	DirtyEdges           int
-	CrossCellUpdates     int
-	AffectedCells        int
-	AffectedScanSkipped  bool
-	CellsProcessed       int
-	DijkstraRuns         int
-	SnapshotTime         time.Duration
-	CrossCellTime        time.Duration
-	AffectedCellsTime    time.Duration
-	WorkerPhaseTime      time.Duration
-	ApplyTime            time.Duration
-	TotalTime            time.Duration
-	WorkerComputeTotal   time.Duration
-	MaxCellComputeTime   time.Duration
-	MaxWorkerComputeTime time.Duration
-	MinWorkerComputeTime time.Duration
-	MaxWorkerCells       int
-	MinWorkerCells       int
-}
-
-type workerCustomizationProfile struct {
-	cells        int
-	dijkstraRuns int
-	computeTime  time.Duration
-	maxCellTime  time.Duration
 }
 
 var customizationIndexMu sync.RWMutex
@@ -94,7 +68,7 @@ func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 			currentDirtyEdges := snapshotDirtyEdges(store)
 			dirtyEdges := unionDirtyEdges(currentDirtyEdges, previousDirtyEdges)
 			if len(dirtyEdges) > 0 {
-				customizeOverlayWeights(g, store, dirtyEdges, nil)
+				customizeOverlayWeights(g, store, dirtyEdges)
 			}
 			previousDirtyEdges = currentDirtyEdges
 		}
@@ -108,34 +82,18 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 	if len(dirtyEdges) == 0 {
 		return
 	}
-	customizeOverlayWeights(g, store, dirtyEdges, nil)
+	customizeOverlayWeights(g, store, dirtyEdges)
 }
 
-func ProfileCustomizeOverlayWeights(g *builder.Graph, store *Store) CustomizationProfile {
-	dirtyEdges := snapshotDirtyEdges(store)
-	profile := CustomizationProfile{DirtyEdges: len(dirtyEdges)}
-	if len(dirtyEdges) == 0 {
-		return profile
-	}
-	customizeOverlayWeights(g, store, dirtyEdges, &profile)
-	return profile
-}
-
-func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}, profile *CustomizationProfile) {
+func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}) {
 	start := time.Now()
 	index := getCustomizationIndex(g)
 	index.weightSnapshotMu.Lock()
 	defer index.weightSnapshotMu.Unlock()
 
-	snapshotStart := time.Now()
 	index.weightMultipliers = store.SnapshotWeightMultipliers(index.weightMultipliers, len(g.Edges))
 	weights := index.weightMultipliers
-	if profile != nil {
-		profile.DirtyEdges = len(dirtyEdges)
-		profile.SnapshotTime = time.Since(snapshotStart)
-	}
 	updates := make([]overlayWeightUpdate, 0, len(index.crossCellOverlayByBaseEdge))
-	affectedCellsStart := time.Now()
 	affectedCellIDs := make([]builder.CellID, 0, len(g.Cells))
 	coverage := 0.0
 	if len(g.Edges) > 0 {
@@ -146,35 +104,20 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		for _, cell := range g.Cells {
 			affectedCellIDs = append(affectedCellIDs, cell.ID)
 		}
-		if profile != nil {
-			profile.AffectedScanSkipped = true
-		}
 	} else {
 		affectedCells := make(map[builder.CellID]struct{}, len(g.Cells))
 		for edgeID := range dirtyEdges {
-			if int(edgeID) >= len(g.Edges) {
+			if int(edgeID) >= len(index.edgeSourceCellIDs) || !index.edgeIsIntraCell[edgeID] {
 				continue
 			}
-
-			edge := &g.Edges[edgeID]
-			fromIdx, ok := g.NodeIdx[edge.FromNodeID]
-			if ok {
-				fromCellID := g.Nodes[fromIdx].CellID
-				if fromCellID == g.Nodes[edge.ToNodeIdx].CellID {
-					affectedCells[fromCellID] = struct{}{}
-				}
-			}
+			affectedCells[index.edgeSourceCellIDs[edgeID]] = struct{}{}
 		}
 		affectedCellIDs = make([]builder.CellID, 0, len(affectedCells))
 		for cellID := range affectedCells {
 			affectedCellIDs = append(affectedCellIDs, cellID)
 		}
 	}
-	if profile != nil {
-		profile.AffectedCellsTime = time.Since(affectedCellsStart)
-	}
 
-	crossCellStart := time.Now()
 	for _, edgeID := range index.crossCellBaseEdgeIDs {
 		if _, dirty := dirtyEdges[edgeID]; !dirty {
 			continue
@@ -190,54 +133,24 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 			weight:  liveWeightFromSnapshot(weights, edgeID, g.Edges[edgeID].Weight),
 		})
 	}
-	if profile != nil {
-		profile.CrossCellTime = time.Since(crossCellStart)
-		profile.CrossCellUpdates = len(updates)
-	}
 
 	type cellUpdates struct {
 		updates []overlayWeightUpdate
-	}
-	if profile != nil {
-		profile.AffectedCells = len(affectedCellIDs)
 	}
 	cellJobs := make(chan builder.Cell, len(affectedCellIDs))
 	cellResults := make(chan cellUpdates, len(affectedCellIDs))
 
 	workerCount := max(runtime.GOMAXPROCS(0), 1)
-	if profile != nil {
-		profile.Workers = workerCount
-	}
-	var workerProfiles chan workerCustomizationProfile
-	if profile != nil {
-		workerProfiles = make(chan workerCustomizationProfile, workerCount)
-	}
-
 	var wg sync.WaitGroup
-	workerPhaseStart := time.Now()
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			scratch := newLiveDijkstraScratch(len(g.Nodes))
 			// The work done in every cell is small enough that splitting it into boundary node jobs costs more than it saves
-			localProfile := workerCustomizationProfile{}
 			for cell := range cellJobs {
-				cellStart := time.Now()
-				updates, dijkstraRuns := computeCellCustomizationUpdates(g, cell, index, weights, scratch)
+				updates := computeCellCustomizationUpdates(g, cell, index, weights, scratch)
 				cellResults <- cellUpdates{updates: updates}
-				if profile != nil {
-					cellElapsed := time.Since(cellStart)
-					localProfile.cells++
-					localProfile.dijkstraRuns += dijkstraRuns
-					localProfile.computeTime += cellElapsed
-					if cellElapsed > localProfile.maxCellTime {
-						localProfile.maxCellTime = cellElapsed
-					}
-				}
-			}
-			if workerProfiles != nil {
-				workerProfiles <- localProfile
 			}
 		}()
 	}
@@ -252,56 +165,17 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	go func() {
 		wg.Wait()
 		close(cellResults)
-		if workerProfiles != nil {
-			close(workerProfiles)
-		}
 	}()
 
 	for result := range cellResults {
 		updates = append(updates, result.updates...)
 	}
-	if profile != nil {
-		profile.WorkerPhaseTime = time.Since(workerPhaseStart)
-		profile.MinWorkerComputeTime = time.Duration(1<<63 - 1)
-		profile.MinWorkerCells = int(^uint(0) >> 1)
-		for workerProfile := range workerProfiles {
-			profile.CellsProcessed += workerProfile.cells
-			profile.DijkstraRuns += workerProfile.dijkstraRuns
-			profile.WorkerComputeTotal += workerProfile.computeTime
-			if workerProfile.maxCellTime > profile.MaxCellComputeTime {
-				profile.MaxCellComputeTime = workerProfile.maxCellTime
-			}
-			if workerProfile.computeTime > profile.MaxWorkerComputeTime {
-				profile.MaxWorkerComputeTime = workerProfile.computeTime
-			}
-			if workerProfile.computeTime < profile.MinWorkerComputeTime {
-				profile.MinWorkerComputeTime = workerProfile.computeTime
-			}
-			if workerProfile.cells > profile.MaxWorkerCells {
-				profile.MaxWorkerCells = workerProfile.cells
-			}
-			if workerProfile.cells < profile.MinWorkerCells {
-				profile.MinWorkerCells = workerProfile.cells
-			}
-		}
-		if profile.MinWorkerComputeTime == time.Duration(1<<63-1) {
-			profile.MinWorkerComputeTime = 0
-		}
-		if profile.MinWorkerCells == int(^uint(0)>>1) {
-			profile.MinWorkerCells = 0
-		}
-	}
 
-	applyStart := time.Now()
 	g.OverlayAdj.Mu.Lock()
 	for _, update := range updates {
 		g.OverlayAdj.OverlayEdges[update.edgeIdx].Weight = update.weight
 	}
 	g.OverlayAdj.Mu.Unlock()
-	if profile != nil {
-		profile.ApplyTime = time.Since(applyStart)
-		profile.TotalTime = time.Since(start)
-	}
 
 	elapsed := time.Since(start)
 	if elapsed >= slowCustomizationLogThreshold {
@@ -315,13 +189,12 @@ func computeCellCustomizationUpdates(
 	index *customizationIndex,
 	weights []float32,
 	scratch *liveDijkstraScratch,
-) ([]overlayWeightUpdate, int) {
+) []overlayWeightUpdate {
 	if len(cell.BoundaryNodeIDs) < 2 {
-		return nil, 0
+		return nil
 	}
 
 	updates := make([]overlayWeightUpdate, 0, len(cell.BoundaryNodeIDs))
-	dijkstraRuns := 0
 	for _, srcID := range cell.BoundaryNodeIDs {
 		srcBIdx, ok := g.BoundaryNodeIdx[srcID]
 		if !ok {
@@ -337,8 +210,7 @@ func computeCellCustomizationUpdates(
 			continue
 		}
 
-		liveCellDijkstra(g, srcIdx, targets, cell.ID, weights, scratch)
-		dijkstraRuns++
+		liveCellDijkstra(g, index, srcIdx, targets, weights, scratch)
 		for _, target := range targets {
 			weight, ok := scratch.cost(target.toIdx)
 			if !ok {
@@ -350,7 +222,7 @@ func computeCellCustomizationUpdates(
 			})
 		}
 	}
-	return updates, dijkstraRuns
+	return updates
 }
 
 func snapshotDirtyEdges(store *Store) map[builder.EdgeID]struct{} {
@@ -381,9 +253,9 @@ func unionDirtyEdges(current, previous map[builder.EdgeID]struct{}) map[builder.
 
 func liveCellDijkstra(
 	g *builder.Graph,
+	index *customizationIndex,
 	srcIdx uint32,
 	targets []shortcutTarget,
-	cellID builder.CellID,
 	weights []float32,
 	scratch *liveDijkstraScratch,
 ) {
@@ -416,12 +288,8 @@ func liveCellDijkstra(
 			}
 		}
 
-		for _, eid := range g.BaseAdj.Neighbours(cur.idx) {
+		for _, eid := range index.intraCellAdj.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
-			if g.Nodes[e.ToNodeIdx].CellID != cellID {
-				continue
-			}
-
 			newCost := best + liveWeightFromSnapshot(weights, eid, e.Weight)
 			if existing, has := scratch.cost(e.ToNodeIdx); !has || newCost < existing {
 				scratch.set(e.ToNodeIdx, newCost)
@@ -462,9 +330,26 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
 		crossCellBaseEdgeIDs:       make([]builder.EdgeID, 0),
 		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.BoundaryNodes)),
+		edgeSourceCellIDs:          make([]builder.CellID, len(g.Edges)),
+		edgeIsIntraCell:            make([]bool, len(g.Edges)),
+		intraCellAdj: builder.AdjacencyList{
+			Offsets: make([]uint32, len(g.Nodes)+1),
+			EdgeIDs: make([]builder.EdgeID, 0, len(g.BaseAdj.EdgeIDs)),
+		},
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
+	}
+	for nodeIdx := uint32(0); int(nodeIdx) < len(g.Nodes); nodeIdx++ {
+		sourceCellID := g.Nodes[nodeIdx].CellID
+		for _, eid := range g.BaseAdj.Neighbours(nodeIdx) {
+			index.edgeSourceCellIDs[eid] = sourceCellID
+			if g.Nodes[g.Edges[eid].ToNodeIdx].CellID == sourceCellID {
+				index.edgeIsIntraCell[eid] = true
+				index.intraCellAdj.EdgeIDs = append(index.intraCellAdj.EdgeIDs, eid)
+			}
+		}
+		index.intraCellAdj.Offsets[nodeIdx+1] = uint32(len(index.intraCellAdj.EdgeIDs))
 	}
 
 	g.OverlayAdj.Mu.RLock()
