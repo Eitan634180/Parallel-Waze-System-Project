@@ -148,6 +148,29 @@ func (s *Store) SnapshotWeights() map[builder.EdgeID]float32 {
 	return weights
 }
 
+// SnapshotWeightMultipliers fills a dense multiplier slice indexed by EdgeID.
+// Entries default to 1.0 when an edge has no observed override.
+func (s *Store) SnapshotWeightMultipliers(dst []float32, edgeCount int) []float32 {
+	if cap(dst) < edgeCount {
+		dst = make([]float32, edgeCount)
+	} else {
+		dst = dst[:edgeCount]
+	}
+
+	for i := range dst {
+		dst[i] = 1.0
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for edgeID, multiplier := range s.weight {
+		if int(edgeID) < len(dst) {
+			dst[edgeID] = multiplier
+		}
+	}
+	return dst
+}
+
 // RecommendedSpeedKmh returns a density-based speed hint for an edge in km/h.
 func (s *Store) RecommendedSpeedKmh(id builder.EdgeID, baseKmh, distanceM float32) float32 {
 	if baseKmh <= 0 {

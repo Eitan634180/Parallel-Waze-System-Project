@@ -34,7 +34,10 @@ type shortcutTarget struct {
 
 type customizationIndex struct {
 	crossCellOverlayByBaseEdge []uint32
+	crossCellBaseEdgeIDs       []builder.EdgeID
 	shortcutTargetsByBoundary  [][]shortcutTarget
+	weightSnapshotMu           sync.Mutex
+	weightMultipliers          []float32
 }
 
 type liveDijkstraScratch struct {
@@ -117,19 +120,23 @@ func ProfileCustomizeOverlayWeights(g *builder.Graph, store *Store) Customizatio
 
 func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}, profile *CustomizationProfile) {
 	start := time.Now()
+	index := getCustomizationIndex(g)
+	index.weightSnapshotMu.Lock()
+	defer index.weightSnapshotMu.Unlock()
+
 	snapshotStart := time.Now()
-	weights := store.SnapshotWeights()
+	index.weightMultipliers = store.SnapshotWeightMultipliers(index.weightMultipliers, len(g.Edges))
+	weights := index.weightMultipliers
 	if profile != nil {
 		profile.DirtyEdges = len(dirtyEdges)
 		profile.SnapshotTime = time.Since(snapshotStart)
 	}
-	index := getCustomizationIndex(g)
 	updates := make([]overlayWeightUpdate, 0, len(index.crossCellOverlayByBaseEdge))
 	affectedCells := make(map[builder.CellID]struct{}, len(g.Cells))
 
-	dirtyScanStart := time.Now()
+	affectedCellsStart := time.Now()
 	for edgeID := range dirtyEdges {
-		if int(edgeID) >= len(g.Edges) || int(edgeID) >= len(index.crossCellOverlayByBaseEdge) {
+		if int(edgeID) >= len(g.Edges) {
 			continue
 		}
 
@@ -141,6 +148,16 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 				affectedCells[fromCellID] = struct{}{}
 			}
 		}
+	}
+	if profile != nil {
+		profile.AffectedCellsTime = time.Since(affectedCellsStart)
+	}
+
+	crossCellStart := time.Now()
+	for _, edgeID := range index.crossCellBaseEdgeIDs {
+		if _, dirty := dirtyEdges[edgeID]; !dirty {
+			continue
+		}
 
 		overlayEdgeIdx := index.crossCellOverlayByBaseEdge[edgeID]
 		if overlayEdgeIdx == noOverlayEdgeIdx {
@@ -149,13 +166,12 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 
 		updates = append(updates, overlayWeightUpdate{
 			edgeIdx: overlayEdgeIdx,
-			weight:  liveWeightFromSnapshot(weights, edgeID, edge.Weight),
+			weight:  liveWeightFromSnapshot(weights, edgeID, g.Edges[edgeID].Weight),
 		})
 	}
 	if profile != nil {
-		profile.CrossCellTime = time.Since(dirtyScanStart)
+		profile.CrossCellTime = time.Since(crossCellStart)
 		profile.CrossCellUpdates = len(updates)
-		profile.AffectedCellsTime = 0
 	}
 
 	type cellUpdates struct {
@@ -280,7 +296,7 @@ func computeCellCustomizationUpdates(
 	g *builder.Graph,
 	cell builder.Cell,
 	index *customizationIndex,
-	weights map[builder.EdgeID]float32,
+	weights []float32,
 	scratch *liveDijkstraScratch,
 ) ([]overlayWeightUpdate, int) {
 	if len(cell.BoundaryNodeIDs) < 2 {
@@ -351,7 +367,7 @@ func liveCellDijkstra(
 	srcIdx uint32,
 	targets []shortcutTarget,
 	cellID builder.CellID,
-	weights map[builder.EdgeID]float32,
+	weights []float32,
 	scratch *liveDijkstraScratch,
 ) {
 	scratch.begin()
@@ -398,12 +414,11 @@ func liveCellDijkstra(
 	}
 }
 
-func liveWeightFromSnapshot(weights map[builder.EdgeID]float32, id builder.EdgeID, baseSec float32) float32 {
-	multiplier, ok := weights[id]
-	if !ok {
+func liveWeightFromSnapshot(weights []float32, id builder.EdgeID, baseSec float32) float32 {
+	if int(id) >= len(weights) {
 		return baseSec
 	}
-	return baseSec * multiplier
+	return baseSec * weights[id]
 }
 
 func getCustomizationIndex(g *builder.Graph) *customizationIndex {
@@ -428,6 +443,7 @@ func getCustomizationIndex(g *builder.Graph) *customizationIndex {
 func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 	index := &customizationIndex{
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
+		crossCellBaseEdgeIDs:       make([]builder.EdgeID, 0),
 		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.BoundaryNodes)),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
@@ -454,6 +470,7 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 			continue
 		}
 		index.crossCellOverlayByBaseEdge[baseEdgeID] = uint32(overlayEdgeIdx)
+		index.crossCellBaseEdgeIDs = append(index.crossCellBaseEdgeIDs, baseEdgeID)
 	}
 
 	return index
