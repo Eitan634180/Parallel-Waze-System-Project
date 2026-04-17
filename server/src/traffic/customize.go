@@ -22,13 +22,13 @@ type overlayWeightUpdate struct {
 }
 
 type livePQItem struct {
-	id   builder.NodeID
 	idx  uint32
 	cost float32
 }
 
 type shortcutTarget struct {
 	toID    builder.NodeID
+	toIdx   uint32
 	edgeIdx uint32
 }
 
@@ -42,6 +42,12 @@ type customizationJob struct {
 type customizationIndex struct {
 	crossCellOverlayByBaseEdge []uint32
 	shortcutTargetsByBoundary  [][]shortcutTarget
+}
+
+type liveDijkstraScratch struct {
+	dist      []float32
+	seenEpoch []uint32
+	epoch     uint32
 }
 
 var customizationIndexMu sync.RWMutex
@@ -114,8 +120,9 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			scratch := newLiveDijkstraScratch(len(g.Nodes))
 			for job := range cellJobs {
-				cellResults <- cellUpdates{updates: computeBoundaryCustomizationUpdates(g, job, index, weights)}
+				cellResults <- cellUpdates{updates: computeBoundaryCustomizationUpdates(g, job, index, weights, scratch)}
 			}
 		}()
 	}
@@ -193,16 +200,17 @@ func computeBoundaryCustomizationUpdates(
 	job customizationJob,
 	index *customizationIndex,
 	weights map[builder.EdgeID]float32,
+	scratch *liveDijkstraScratch,
 ) []overlayWeightUpdate {
 	targets := index.shortcutTargetsByBoundary[job.srcBIdx]
 	if len(targets) == 0 {
 		return nil
 	}
 
-	dists := liveCellDijkstra(g, job.srcID, job.srcIdx, targets, job.cellID, weights)
+	liveCellDijkstra(g, job.srcIdx, targets, job.cellID, weights, scratch)
 	updates := make([]overlayWeightUpdate, 0, len(targets))
 	for _, target := range targets {
-		weight, ok := dists[target.toID]
+		weight, ok := scratch.cost(target.toIdx)
 		if !ok {
 			continue
 		}
@@ -273,38 +281,36 @@ func affectedCellIDsForDirtyEdges(g *builder.Graph, dirtyEdges map[builder.EdgeI
 
 func liveCellDijkstra(
 	g *builder.Graph,
-	srcID builder.NodeID,
 	srcIdx uint32,
 	targets []shortcutTarget,
 	cellID builder.CellID,
 	weights map[builder.EdgeID]float32,
-) map[builder.NodeID]float32 {
-	const inf = float32(math.MaxFloat32)
+	scratch *liveDijkstraScratch,
+) {
+	scratch.begin()
+	scratch.set(srcIdx, 0)
 
-	dist := make(map[builder.NodeID]float32)
-	dist[srcID] = 0
-
-	targetSet := make(map[builder.NodeID]struct{}, len(targets))
+	targetSet := make(map[uint32]struct{}, len(targets))
 	for _, target := range targets {
-		targetSet[target.toID] = struct{}{}
+		targetSet[target.toIdx] = struct{}{}
 	}
 	remaining := len(targetSet)
 
 	pq := utilities.NewHeap(func(a, b livePQItem) bool { return a.cost < b.cost })
-	pq.Push(livePQItem{id: srcID, idx: srcIdx, cost: 0})
+	pq.Push(livePQItem{idx: srcIdx, cost: 0})
 
 	for pq.Len() > 0 {
 		cur := pq.Pop()
 
 		// Skip stale queue entries after a better path has already been recorded.
-		best, hasBest := dist[cur.id]
+		best, hasBest := scratch.cost(cur.idx)
 		if !hasBest || cur.cost > best {
 			continue
 		}
 
-		if _, isTarget := targetSet[cur.id]; isTarget {
+		if _, isTarget := targetSet[cur.idx]; isTarget {
 			remaining--
-			delete(targetSet, cur.id)
+			delete(targetSet, cur.idx)
 			if remaining == 0 {
 				break
 			}
@@ -312,26 +318,17 @@ func liveCellDijkstra(
 
 		for _, eid := range g.BaseAdj.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
-			toID := e.ToNodeID
 			if g.Nodes[e.ToNodeIdx].CellID != cellID {
 				continue
 			}
 
 			newCost := best + liveWeightFromSnapshot(weights, eid, e.Weight)
-			if existing, has := dist[toID]; !has || newCost < existing {
-				dist[toID] = newCost
-				pq.Push(livePQItem{id: toID, idx: e.ToNodeIdx, cost: newCost})
+			if existing, has := scratch.cost(e.ToNodeIdx); !has || newCost < existing {
+				scratch.set(e.ToNodeIdx, newCost)
+				pq.Push(livePQItem{idx: e.ToNodeIdx, cost: newCost})
 			}
 		}
 	}
-
-	result := make(map[builder.NodeID]float32, len(targets))
-	for _, target := range targets {
-		if d, ok := dist[target.toID]; ok && d < inf {
-			result[target.toID] = d
-		}
-	}
-	return result
 }
 
 func liveWeightFromSnapshot(weights map[builder.EdgeID]float32, id builder.EdgeID, baseSec float32) float32 {
@@ -379,7 +376,7 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 			if ok {
 				index.shortcutTargetsByBoundary[fromBoundaryIdx] = append(
 					index.shortcutTargetsByBoundary[fromBoundaryIdx],
-					shortcutTarget{toID: overlayEdge.ToNodeID, edgeIdx: uint32(overlayEdgeIdx)},
+					shortcutTarget{toID: overlayEdge.ToNodeID, toIdx: overlayEdge.ToNodeIdx, edgeIdx: uint32(overlayEdgeIdx)},
 				)
 			}
 			continue
@@ -406,4 +403,33 @@ func baseEdgeIDBetweenNodeIDs(g *builder.Graph, fromID, toID builder.NodeID) (bu
 		}
 	}
 	return 0, false
+}
+
+func newLiveDijkstraScratch(nodeCount int) *liveDijkstraScratch {
+	return &liveDijkstraScratch{
+		dist:      make([]float32, nodeCount),
+		seenEpoch: make([]uint32, nodeCount),
+	}
+}
+
+func (s *liveDijkstraScratch) begin() {
+	s.epoch++
+	if s.epoch != 0 {
+		return
+	}
+
+	clear(s.seenEpoch)
+	s.epoch = 1
+}
+
+func (s *liveDijkstraScratch) cost(idx uint32) (float32, bool) {
+	if s.seenEpoch[idx] != s.epoch {
+		return math.MaxFloat32, false
+	}
+	return s.dist[idx], true
+}
+
+func (s *liveDijkstraScratch) set(idx uint32, cost float32) {
+	s.seenEpoch[idx] = s.epoch
+	s.dist[idx] = cost
 }
