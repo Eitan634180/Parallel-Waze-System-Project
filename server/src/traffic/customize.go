@@ -125,12 +125,23 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	}
 	index := getCustomizationIndex(g)
 	updates := make([]overlayWeightUpdate, 0, len(index.crossCellOverlayByBaseEdge))
+	affectedCells := make(map[builder.CellID]struct{}, len(g.Cells))
 
-	crossCellStart := time.Now()
+	dirtyScanStart := time.Now()
 	for edgeID := range dirtyEdges {
-		if int(edgeID) >= len(index.crossCellOverlayByBaseEdge) {
+		if int(edgeID) >= len(g.Edges) || int(edgeID) >= len(index.crossCellOverlayByBaseEdge) {
 			continue
 		}
+
+		edge := &g.Edges[edgeID]
+		fromIdx, ok := g.NodeIdx[edge.FromNodeID]
+		if ok {
+			fromCellID := g.Nodes[fromIdx].CellID
+			if fromCellID == g.Nodes[edge.ToNodeIdx].CellID {
+				affectedCells[fromCellID] = struct{}{}
+			}
+		}
+
 		overlayEdgeIdx := index.crossCellOverlayByBaseEdge[edgeID]
 		if overlayEdgeIdx == noOverlayEdgeIdx {
 			continue
@@ -138,22 +149,24 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 
 		updates = append(updates, overlayWeightUpdate{
 			edgeIdx: overlayEdgeIdx,
-			weight:  liveWeightFromSnapshot(weights, edgeID, g.Edges[edgeID].Weight),
+			weight:  liveWeightFromSnapshot(weights, edgeID, edge.Weight),
 		})
 	}
 	if profile != nil {
-		profile.CrossCellTime = time.Since(crossCellStart)
+		profile.CrossCellTime = time.Since(dirtyScanStart)
 		profile.CrossCellUpdates = len(updates)
+		profile.AffectedCellsTime = 0
 	}
 
 	type cellUpdates struct {
 		updates []overlayWeightUpdate
 	}
-	affectedCellsStart := time.Now()
-	affectedCellIDs := affectedCellIDsForDirtyEdges(g, dirtyEdges)
+	affectedCellIDs := make([]builder.CellID, 0, len(affectedCells))
+	for cellID := range affectedCells {
+		affectedCellIDs = append(affectedCellIDs, cellID)
+	}
 	if profile != nil {
 		profile.AffectedCells = len(affectedCellIDs)
-		profile.AffectedCellsTime = time.Since(affectedCellsStart)
 	}
 	cellJobs := make(chan builder.Cell, len(affectedCellIDs))
 	cellResults := make(chan cellUpdates, len(affectedCellIDs))
@@ -331,37 +344,6 @@ func unionDirtyEdges(current, previous map[builder.EdgeID]struct{}) map[builder.
 		combined[edgeID] = struct{}{}
 	}
 	return combined
-}
-
-func affectedCellIDsForDirtyEdges(g *builder.Graph, dirtyEdges map[builder.EdgeID]struct{}) []builder.CellID {
-	if len(dirtyEdges) == 0 {
-		return nil
-	}
-
-	affected := make(map[builder.CellID]struct{}, len(dirtyEdges))
-	for edgeID := range dirtyEdges {
-		if int(edgeID) >= len(g.Edges) {
-			continue
-		}
-
-		edge := &g.Edges[edgeID]
-		fromIdx, ok := g.NodeIdx[edge.FromNodeID]
-		if !ok {
-			continue
-		}
-
-		fromCellID := g.Nodes[fromIdx].CellID
-		toCellID := g.Nodes[edge.ToNodeIdx].CellID
-		if fromCellID == toCellID {
-			affected[fromCellID] = struct{}{}
-		}
-	}
-
-	cellIDs := make([]builder.CellID, 0, len(affected))
-	for cellID := range affected {
-		cellIDs = append(cellIDs, cellID)
-	}
-	return cellIDs
 }
 
 func liveCellDijkstra(
