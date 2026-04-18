@@ -49,6 +49,7 @@ func main() {
 
 		var total time.Duration
 		for run := 1; run <= *runs; run++ {
+			store.RefillPendingForBenchmarks()
 			start := time.Now()
 			traffic.CustomizeOverlayWeights(g, store)
 			elapsed := time.Since(start)

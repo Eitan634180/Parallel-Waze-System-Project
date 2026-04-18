@@ -58,19 +58,13 @@ var customizationIndexCache = make(map[*builder.Graph]*customizationIndex)
 func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 	ticker := time.NewTicker(customizationInterval)
 	defer ticker.Stop()
-	previousDirtyEdges := make(map[builder.EdgeID]struct{})
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			currentDirtyEdges := snapshotDirtyEdges(store)
-			dirtyEdges := unionDirtyEdges(currentDirtyEdges, previousDirtyEdges)
-			if len(dirtyEdges) > 0 {
-				customizeOverlayWeights(g, store, dirtyEdges)
-			}
-			previousDirtyEdges = currentDirtyEdges
+			CustomizeOverlayWeights(g, store)
 		}
 	}
 }
@@ -78,15 +72,13 @@ func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 // CustomizeOverlayWeights recomputes all overlay edge weights against the
 // current live traffic multipliers in store.
 func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
-	dirtyEdges := snapshotDirtyEdges(store)
-	if len(dirtyEdges) == 0 {
+	start := time.Now()
+	
+	pendingEdges := store.SwapPending()
+	if len(pendingEdges) == 0 {
 		return
 	}
-	customizeOverlayWeights(g, store, dirtyEdges)
-}
 
-func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[builder.EdgeID]struct{}) {
-	start := time.Now()
 	index := getCustomizationIndex(g)
 	index.weightSnapshotMu.Lock()
 	defer index.weightSnapshotMu.Unlock()
@@ -97,29 +89,37 @@ func customizeOverlayWeights(g *builder.Graph, store *Store, dirtyEdges map[buil
 	affectedCellIDs := make([]builder.CellID, 0, len(g.Cells))
 	coverage := 0.0
 	if len(g.Edges) > 0 {
-		coverage = float64(len(dirtyEdges)) / float64(len(g.Edges))
+		coverage = float64(len(pendingEdges)) / float64(len(g.Edges))
 	}
+	
+	isDirty := make([]bool, len(g.Edges))
+	for _, id := range pendingEdges {
+		if int(id) < len(isDirty) {
+			isDirty[id] = true
+		}
+	}
+
 	if coverage >= fullAffectedCellsDirtyCoverage {
 		affectedCellIDs = affectedCellIDs[:0]
 		for _, cell := range g.Cells {
 			affectedCellIDs = append(affectedCellIDs, cell.ID)
 		}
 	} else {
-		affectedCells := make(map[builder.CellID]struct{}, len(g.Cells))
-		for edgeID := range dirtyEdges {
+		cellSeen := make([]bool, len(g.Cells))
+		for _, edgeID := range pendingEdges {
 			if int(edgeID) >= len(index.edgeSourceCellIDs) || !index.edgeIsIntraCell[edgeID] {
 				continue
 			}
-			affectedCells[index.edgeSourceCellIDs[edgeID]] = struct{}{}
-		}
-		affectedCellIDs = make([]builder.CellID, 0, len(affectedCells))
-		for cellID := range affectedCells {
-			affectedCellIDs = append(affectedCellIDs, cellID)
+			cID := index.edgeSourceCellIDs[edgeID]
+			if !cellSeen[cID] {
+				cellSeen[cID] = true
+				affectedCellIDs = append(affectedCellIDs, cID)
+			}
 		}
 	}
 
 	for _, edgeID := range index.crossCellBaseEdgeIDs {
-		if _, dirty := dirtyEdges[edgeID]; !dirty {
+		if int(edgeID) >= len(isDirty) || !isDirty[edgeID] {
 			continue
 		}
 
@@ -223,32 +223,6 @@ func computeCellCustomizationUpdates(
 		}
 	}
 	return updates
-}
-
-func snapshotDirtyEdges(store *Store) map[builder.EdgeID]struct{} {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
-
-	dirty := make(map[builder.EdgeID]struct{}, len(store.dirty))
-	for edgeID := range store.dirty {
-		dirty[edgeID] = struct{}{}
-	}
-	return dirty
-}
-
-func unionDirtyEdges(current, previous map[builder.EdgeID]struct{}) map[builder.EdgeID]struct{} {
-	if len(current) == 0 && len(previous) == 0 {
-		return nil
-	}
-
-	combined := make(map[builder.EdgeID]struct{}, len(current)+len(previous))
-	for edgeID := range current {
-		combined[edgeID] = struct{}{}
-	}
-	for edgeID := range previous {
-		combined[edgeID] = struct{}{}
-	}
-	return combined
 }
 
 func liveCellDijkstra(

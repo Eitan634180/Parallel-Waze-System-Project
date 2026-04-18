@@ -28,47 +28,101 @@ const (
 )
 
 // Store holds the live traffic state for every edge that has been observed.
-// The zero value is NOT valid; use NewStore().
+// The zero value is valid via lazy ensure allocations; use NewStore() for clarity.
 type Store struct {
 	mu          sync.RWMutex
-	weight      map[builder.EdgeID]float32  // observed EWMA multiplier (1.0 = free-flow)
-	density     map[builder.EdgeID]int      // number of active sessions currently on edge
-	dirty       map[builder.EdgeID]struct{} // edges whose multiplier != 1.0
-	activity    map[builder.EdgeID]struct{} // edges whose density changed since last snapshot
-	prev        map[builder.EdgeID]float32  // multiplier at last propagation snapshot
-	prevDensity map[builder.EdgeID]int      // density at last propagation snapshot
+	weight      []float32 // observed EWMA multiplier (1.0 = free-flow)
+	density     []int     // number of active sessions currently on edge
+	prev        []float32 // multiplier at last propagation snapshot
+	prevDensity []int     // density at last propagation snapshot
+
+	dirtyEdges   []builder.EdgeID // persistent: edges whose multiplier != 1.0 (for decay)
+	isDirty      []bool
+	pendingEdges []builder.EdgeID // consumable: edges whose weights changed recently (for customization)
+	isPending    []bool
+	activityEdges []builder.EdgeID // edges whose density changed since last snapshot
+	isActive      []bool
+
+	snapshotDedup []bool
 }
 
 // NewStore creates an empty Store.
 func NewStore() *Store {
-	return &Store{
-		weight:      make(map[builder.EdgeID]float32),
-		density:     make(map[builder.EdgeID]int),
-		dirty:       make(map[builder.EdgeID]struct{}),
-		activity:    make(map[builder.EdgeID]struct{}),
-		prev:        make(map[builder.EdgeID]float32),
-		prevDensity: make(map[builder.EdgeID]int),
+	return &Store{}
+}
+
+func (s *Store) ensure(id builder.EdgeID) {
+	if int(id) < len(s.weight) {
+		return
 	}
+
+	newLen := int(id)*2 + 1024
+
+	newWeight := make([]float32, newLen)
+	for i := range newWeight {
+		newWeight[i] = 1.0
+	}
+	copy(newWeight, s.weight)
+	s.weight = newWeight
+
+	newPrev := make([]float32, newLen)
+	for i := range newPrev {
+		newPrev[i] = 1.0
+	}
+	copy(newPrev, s.prev)
+	s.prev = newPrev
+
+	newDensity := make([]int, newLen)
+	copy(newDensity, s.density)
+	s.density = newDensity
+
+	newPrevDensity := make([]int, newLen)
+	copy(newPrevDensity, s.prevDensity)
+	s.prevDensity = newPrevDensity
+
+	newIsDirty := make([]bool, newLen)
+	copy(newIsDirty, s.isDirty)
+	s.isDirty = newIsDirty
+
+	newIsPending := make([]bool, newLen)
+	copy(newIsPending, s.isPending)
+	s.isPending = newIsPending
+
+	newIsActive := make([]bool, newLen)
+	copy(newIsActive, s.isActive)
+	s.isActive = newIsActive
+
+	newSnapshotDedup := make([]bool, newLen)
+	copy(newSnapshotDedup, s.snapshotDedup)
+	s.snapshotDedup = newSnapshotDedup
 }
 
 // EnterEdge increments the active-session count for an edge.
 func (s *Store) EnterEdge(id builder.EdgeID) {
 	s.mu.Lock()
+	s.ensure(id)
 	s.density[id]++
-	s.activity[id] = struct{}{}
+	if !s.isActive[id] {
+		s.isActive[id] = true
+		s.activityEdges = append(s.activityEdges, id)
+	}
 	s.mu.Unlock()
 }
 
 // LeaveEdge decrements the active-session count for an edge.
 func (s *Store) LeaveEdge(id builder.EdgeID) {
 	s.mu.Lock()
+	s.ensure(id)
 	d := s.density[id] - 1
 	if d <= 0 {
-		delete(s.density, id)
+		s.density[id] = 0
 	} else {
 		s.density[id] = d
 	}
-	s.activity[id] = struct{}{}
+	if !s.isActive[id] {
+		s.isActive[id] = true
+		s.activityEdges = append(s.activityEdges, id)
+	}
 	s.mu.Unlock()
 }
 
@@ -76,6 +130,9 @@ func (s *Store) LeaveEdge(id builder.EdgeID) {
 func (s *Store) Density(id builder.EdgeID) int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if int(id) >= len(s.density) {
+		return 0
+	}
 	return s.density[id]
 }
 
@@ -104,48 +161,44 @@ func (s *Store) recordObservedRatio(id builder.EdgeID, ratio, alpha float32) {
 		return
 	}
 	s.mu.Lock()
-	cur, ok := s.weight[id]
-	if !ok {
-		cur = 1.0
-	}
+	s.ensure(id)
+	cur := s.weight[id]
 	updated := alpha*ratio + (1-alpha)*cur
 	s.weight[id] = updated
-	s.dirty[id] = struct{}{}
+	
+	if !s.isDirty[id] {
+		s.isDirty[id] = true
+		s.dirtyEdges = append(s.dirtyEdges, id)
+	}
+	if !s.isPending[id] {
+		s.isPending[id] = true
+		s.pendingEdges = append(s.pendingEdges, id)
+	}
 	s.mu.Unlock()
 }
 
 // LiveWeight returns the routing/ETA cost for an edge based on observed traffic only.
 func (s *Store) LiveWeight(id builder.EdgeID, baseSec float32) float32 {
 	s.mu.RLock()
-	m, ok := s.weight[id]
-	s.mu.RUnlock()
-	if !ok {
+	if int(id) >= len(s.weight) {
+		s.mu.RUnlock()
 		return baseSec
 	}
+	m := s.weight[id]
+	s.mu.RUnlock()
 	return baseSec * m
 }
 
 // Multiplier returns the raw multiplier for an edge (1.0 if not observed).
 func (s *Store) Multiplier(id builder.EdgeID) float32 {
 	s.mu.RLock()
-	m, ok := s.weight[id]
-	s.mu.RUnlock()
-	if !ok {
+	if int(id) >= len(s.weight) {
+		s.mu.RUnlock()
 		return 1.0
 	}
+	m := s.weight[id]
+	s.mu.RUnlock()
 	return m
-}
-
-// SnapshotWeights returns a clone of the current observed multipliers.
-func (s *Store) SnapshotWeights() map[builder.EdgeID]float32 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	weights := make(map[builder.EdgeID]float32, len(s.weight))
-	for edgeID, multiplier := range s.weight {
-		weights[edgeID] = multiplier
-	}
-	return weights
 }
 
 // SnapshotWeightMultipliers fills a dense multiplier slice indexed by EdgeID.
@@ -163,9 +216,9 @@ func (s *Store) SnapshotWeightMultipliers(dst []float32, edgeCount int) []float3
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for edgeID, multiplier := range s.weight {
+	for _, edgeID := range s.dirtyEdges {
 		if int(edgeID) < len(dst) {
-			dst[edgeID] = multiplier
+			dst[edgeID] = s.weight[edgeID]
 		}
 	}
 	return dst
@@ -219,44 +272,83 @@ type ChangedEdge struct {
 	NewMultiplier float32
 }
 
+func (s *Store) checkDedup(id builder.EdgeID, changed *[]ChangedEdge) {
+	if s.snapshotDedup[id] {
+		return
+	}
+	s.snapshotDedup[id] = true
+
+	cur := s.weight[id]
+	prev := s.prev[id]
+	delta := cur - prev
+	if delta < 0 {
+		delta = -delta
+	}
+
+	density := s.density[id]
+	densityChanged := density != s.prevDensity[id]
+
+	if delta >= SignificantShift || densityChanged {
+		*changed = append(*changed, ChangedEdge{EdgeID: id, OldMultiplier: prev, NewMultiplier: cur})
+		s.prev[id] = cur
+		s.prevDensity[id] = density
+	}
+}
+
 // DirtySnapshot returns edges whose multiplier or density changed since the previous call.
 // Safe to call concurrently with EnterEdge/LeaveEdge/RecordObservation.
 func (s *Store) DirtySnapshot() []ChangedEdge {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	edgeIDs := make(map[builder.EdgeID]struct{}, len(s.dirty)+len(s.activity))
-	for id := range s.dirty {
-		edgeIDs[id] = struct{}{}
-	}
-	for id := range s.activity {
-		edgeIDs[id] = struct{}{}
-	}
 	var changed []ChangedEdge
-	for id := range edgeIDs {
-		cur, ok := s.weight[id]
-		if !ok {
-			cur = 1.0
-		}
-		prev, ok := s.prev[id]
-		if !ok {
-			prev = 1.0
-		}
-		delta := cur - prev
-		if delta < 0 {
-			delta = -delta
-		}
-		density := s.density[id]
-		densityChanged := density != s.prevDensity[id]
-		if delta >= SignificantShift || densityChanged {
-			changed = append(changed, ChangedEdge{EdgeID: id, OldMultiplier: prev, NewMultiplier: cur})
-			s.prev[id] = cur
-			s.prevDensity[id] = density
-		}
+	for _, id := range s.dirtyEdges {
+		s.checkDedup(id, &changed)
+	}
+	for _, id := range s.activityEdges {
+		s.checkDedup(id, &changed)
 	}
 
-	clear(s.activity)
+	// Cleanup dedup state for the next call
+	for _, id := range s.dirtyEdges {
+		s.snapshotDedup[id] = false
+	}
+	for _, id := range s.activityEdges {
+		s.snapshotDedup[id] = false
+		s.isActive[id] = false
+	}
+	
+	s.activityEdges = s.activityEdges[:0]
+
 	return changed
+}
+
+// SwapPending atomically takes ownership of the pending set and replaces it
+// with a fresh empty slice. Used by the customization loop to find edges whose weights changed.
+func (s *Store) SwapPending() []builder.EdgeID {
+	s.mu.Lock()
+	pending := s.pendingEdges
+	s.pendingEdges = nil
+	for _, id := range pending {
+		s.isPending[id] = false
+	}
+	s.mu.Unlock()
+	return pending
+}
+
+// RefillPendingForBenchmarks artificially repopulates the pending queue with all 
+// currently dirty edges. This is strictly for synthetic benchmarks where ApplyDecay 
+// does not naturally run between customization cycles.
+func (s *Store) RefillPendingForBenchmarks() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pendingEdges = s.pendingEdges[:0]
+	for _, id := range s.dirtyEdges {
+		if !s.isPending[id] {
+			s.isPending[id] = true
+			s.pendingEdges = append(s.pendingEdges, id)
+		}
+	}
 }
 
 // ApplyDecay exponentially decays dirty-edge multipliers back toward 1.0.
@@ -264,23 +356,32 @@ func (s *Store) ApplyDecay(factor, tolerance float32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for id := range s.dirty {
+	newDirty := s.dirtyEdges[:0]
+	for _, id := range s.dirtyEdges {
 		cur := s.weight[id]
 		updated := 1.0 + (cur-1.0)*factor
 		diff := updated - 1.0
 		if diff < 0 {
 			diff = -diff
 		}
+		
 		if diff < tolerance {
-			delete(s.weight, id)
-			delete(s.dirty, id)
+			s.weight[id] = 1.0
+			s.isDirty[id] = false
 			if s.density[id] == 0 {
-				delete(s.activity, id)
-				delete(s.prev, id)
-				delete(s.prevDensity, id)
+				s.isActive[id] = false
+				s.prev[id] = 1.0
+				s.prevDensity[id] = 0
 			}
 		} else {
 			s.weight[id] = updated
+			newDirty = append(newDirty, id)
+		}
+
+		if !s.isPending[id] {
+			s.isPending[id] = true
+			s.pendingEdges = append(s.pendingEdges, id)
 		}
 	}
+	s.dirtyEdges = newDirty
 }
