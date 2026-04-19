@@ -66,8 +66,8 @@ func captureCongestionContext(s *Session, g *builder.Graph, store *traffic.Store
 		enabled:       true,
 		repairStepIdx: repairStepIdx,
 		congestedCost: congestedCost,
-		fromNodeID:    s.Route.Steps[repairStepIdx-1].NodeID,
-		toNodeID:      s.Route.Steps[repairStepIdx].NodeID,
+		fromNodeIdx:   s.Route.Steps[repairStepIdx-1].NodeIdx,
+		toNodeIdx:     s.Route.Steps[repairStepIdx].NodeIdx,
 		isCrossCell:   isCrossCell,
 	}
 	return context, true
@@ -84,16 +84,16 @@ func buildCongestionCandidate(
 		var ok bool
 		if context.localRepair.isCrossCell {
 			patchSteps, ok = router.LocalRepairOverlay(
-				context.localRepair.fromNodeID,
-				context.localRepair.toNodeID,
+				context.localRepair.fromNodeIdx,
+				context.localRepair.toNodeIdx,
 				context.localRepair.congestedCost,
 				localRepairMaxHops,
 				wf,
 			)
 		} else {
 			patchSteps, ok = router.LocalRepairOriginal(
-				context.localRepair.fromNodeID,
-				context.localRepair.toNodeID,
+				context.localRepair.fromNodeIdx,
+				context.localRepair.toNodeIdx,
 				context.localRepair.congestedCost,
 				localRepairOriginalMaxHops,
 				wf,

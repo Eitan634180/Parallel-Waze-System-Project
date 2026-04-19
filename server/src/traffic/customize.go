@@ -28,7 +28,6 @@ type livePQItem struct {
 }
 
 type shortcutTarget struct {
-	toID    builder.NodeID
 	toIdx   uint32
 	edgeIdx uint32
 }
@@ -42,7 +41,6 @@ type customizationIndex struct {
 	intraCellAdj               builder.AdjacencyList
 	weightSnapshotMu           sync.Mutex
 	weightMultipliers          []float32
-	boundaryToNodeIdx []uint32
 	cellBoundaryIdxs  [][]uint32
 }
 
@@ -207,7 +205,7 @@ func computeCellCustomizationUpdates(
 			continue
 		}
 
-		srcIdx := index.boundaryToNodeIdx[srcBIdx]
+		srcIdx := g.BoundaryBaseIdxs[srcBIdx]
 		liveCellDijkstra(g, index, srcIdx, targets, weights, scratch)
 		for _, target := range targets {
 			weight, ok := scratch.cost(target.toIdx)
@@ -301,14 +299,13 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 	index := &customizationIndex{
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
 		crossCellBaseEdgeIDs:       make([]builder.EdgeID, 0),
-		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.BoundaryNodes)),
+		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.BoundaryBaseIdxs)),
 		edgeSourceCellIDs:          make([]builder.CellID, len(g.Edges)),
 		edgeIsIntraCell:            make([]bool, len(g.Edges)),
 		intraCellAdj: builder.AdjacencyList{
 			Offsets: make([]uint32, len(g.Nodes)+1),
 			EdgeIDs: make([]builder.EdgeID, 0, len(g.BaseAdj.EdgeIDs)),
 		},
-		boundaryToNodeIdx: make([]uint32, len(g.BoundaryNodes)),
 		cellBoundaryIdxs:  make([][]uint32, len(g.Cells)),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
@@ -326,14 +323,7 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 		index.intraCellAdj.Offsets[nodeIdx+1] = uint32(len(index.intraCellAdj.EdgeIDs))
 	}
 
-	for bIdx, nid := range g.BoundaryNodes {
-		if nodeIdx, ok := g.NodeIdx[nid]; ok {
-			index.boundaryToNodeIdx[bIdx] = nodeIdx
-		}
-	}
-
-	for bIdx := range g.BoundaryNodes {
-		nodeIdx := index.boundaryToNodeIdx[bIdx]
+	for bIdx, nodeIdx := range g.BoundaryBaseIdxs {
 		cellID := g.Nodes[nodeIdx].CellID
 		if int(cellID) < len(index.cellBoundaryIdxs) {
 			index.cellBoundaryIdxs[cellID] = append(index.cellBoundaryIdxs[cellID], uint32(bIdx))
@@ -345,17 +335,17 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 
 	for overlayEdgeIdx, overlayEdge := range g.OverlayAdj.OverlayEdges {
 		if !overlayEdge.IsCrossCell {
-			fromBoundaryIdx, ok := g.BoundaryNodeIdx[overlayEdge.FromNodeID]
-			if ok {
+			fromBoundaryIdx := g.BoundaryNodeIdx[overlayEdge.FromNodeIdx]
+			if fromBoundaryIdx != -1 {
 				index.shortcutTargetsByBoundary[fromBoundaryIdx] = append(
 					index.shortcutTargetsByBoundary[fromBoundaryIdx],
-					shortcutTarget{toID: overlayEdge.ToNodeID, toIdx: overlayEdge.ToNodeIdx, edgeIdx: uint32(overlayEdgeIdx)},
+					shortcutTarget{toIdx: overlayEdge.ToNodeIdx, edgeIdx: uint32(overlayEdgeIdx)},
 				)
 			}
 			continue
 		}
 
-		baseEdgeID, ok := baseEdgeIDBetweenNodeIDs(g, overlayEdge.FromNodeID, overlayEdge.ToNodeID)
+		baseEdgeID, ok := baseEdgeIDBetweenNodeIdxs(g, overlayEdge.FromNodeIdx, overlayEdge.ToNodeIdx)
 		if !ok || int(baseEdgeID) >= len(index.crossCellOverlayByBaseEdge) {
 			continue
 		}
@@ -366,13 +356,9 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 	return index
 }
 
-func baseEdgeIDBetweenNodeIDs(g *builder.Graph, fromID, toID builder.NodeID) (builder.EdgeID, bool) {
-	fromIdx, ok := g.NodeIdx[fromID]
-	if !ok {
-		return 0, false
-	}
+func baseEdgeIDBetweenNodeIdxs(g *builder.Graph, fromIdx, toIdx uint32) (builder.EdgeID, bool) {
 	for _, eid := range g.BaseAdj.Neighbours(fromIdx) {
-		if g.Edges[eid].ToNodeID == toID {
+		if g.Edges[eid].ToNodeIdx == toIdx {
 			return eid, true
 		}
 	}

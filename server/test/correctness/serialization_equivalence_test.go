@@ -36,8 +36,8 @@ func TestSerializationRoundTripPreservesRoutingResults(t *testing.T) {
 	beforeValidated := testutil.AssertRouteValid(t, fixture.Graph, before[0], routing.BaseWeight)
 	afterValidated := testutil.AssertRouteValid(t, reloadedGraph, after[0], routing.BaseWeight)
 
-	if beforeValidated.SourceID != afterValidated.SourceID || beforeValidated.TargetID != afterValidated.TargetID {
-		t.Fatalf("route endpoints changed across save/load: before=%d->%d after=%d->%d", beforeValidated.SourceID, beforeValidated.TargetID, afterValidated.SourceID, afterValidated.TargetID)
+	if beforeValidated.SourceIdx != afterValidated.SourceIdx || beforeValidated.TargetIdx != afterValidated.TargetIdx {
+		t.Fatalf("route endpoints changed across save/load: before=%d->%d after=%d->%d", beforeValidated.SourceIdx, beforeValidated.TargetIdx, afterValidated.SourceIdx, afterValidated.TargetIdx)
 	}
 	if len(beforeValidated.EdgeIDs) != len(afterValidated.EdgeIDs) {
 		t.Fatalf("edge count changed across save/load: before=%d after=%d", len(beforeValidated.EdgeIDs), len(afterValidated.EdgeIDs))

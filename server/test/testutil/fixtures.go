@@ -157,13 +157,18 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 func FindEdgeID(tb testing.TB, g *builder.Graph, fromID, toID builder.NodeID) builder.EdgeID {
 	tb.Helper()
 
-	fromIdx, ok := g.NodeIdx[fromID]
+	nodeIdx := g.BuildNodeIdxMap()
+	fromIdx, ok := nodeIdx[fromID]
 	if !ok {
 		tb.Fatalf("from node %d not found", fromID)
 	}
+	toIdx, ok := nodeIdx[toID]
+	if !ok {
+		tb.Fatalf("to node %d not found", toID)
+	}
 
 	for _, edgeID := range g.BaseAdj.Neighbours(fromIdx) {
-		if g.Edges[edgeID].ToNodeID == toID {
+		if g.Edges[edgeID].ToNodeIdx == toIdx {
 			return edgeID
 		}
 	}

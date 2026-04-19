@@ -37,7 +37,7 @@ func remainingFractionOnCurrentEdge(s *Session, step routing.Step, edge *builder
 	}
 
 	px, py := utilities.ProjectAtReferenceLat(s.LastLat, s.LastLon, g.ProjectionRefLat)
-	node := g.NodeByID(builder.NodeID(step.NodeID))
+	node := nodeByIndex(g, step.NodeIdx)
 	if node == nil {
 		return 1
 	}
@@ -84,4 +84,11 @@ func graphEdge(g *builder.Graph, edgeID builder.EdgeID) (*builder.Edge, bool) {
 		return nil, false
 	}
 	return &g.Edges[edgeID], true
+}
+
+func nodeByIndex(g *builder.Graph, idx uint32) *builder.Node {
+	if idx >= uint32(len(g.Nodes)) {
+		return nil
+	}
+	return &g.Nodes[idx]
 }

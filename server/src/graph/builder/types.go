@@ -76,11 +76,10 @@ const (
 
 // Edge is a directed edge in the base road graph.
 type Edge struct {
-	ID         EdgeID
-	FromNodeID NodeID
-	ToNodeID   NodeID
-	ToNodeIdx  uint32
-	Weight     float32 // Travel time in seconds.
+	ID          EdgeID
+	FromNodeIdx uint32
+	ToNodeIdx   uint32
+	Weight      float32 // Travel time in seconds.
 	DistanceM  float32 // Physical length in meters.
 	SpeedKmh   float32 // Speed used to compute Weight.
 	RoadClass  uint8
@@ -93,8 +92,7 @@ func (e *Edge) IsOneWay() bool { return e.Flags&FlagOneWay != 0 }
 // copied from the base graph; shortcut edges summarize the best path inside one
 // cell between two boundary nodes.
 type OverlayEdge struct {
-	FromNodeID  NodeID
-	ToNodeID    NodeID
+	FromNodeIdx uint32
 	ToNodeIdx   uint32
 	Weight      float32 // Travel time in seconds.
 	DistanceM   float32 // Shortest-path distance in meters.
@@ -159,12 +157,11 @@ func (b BoundingBox) NominatimViewBox() string {
 type Graph struct {
 	Nodes   []Node
 	Edges   []Edge
-	NodeIdx map[NodeID]uint32
 	BaseAdj AdjacencyList
+	Cells   []Cell
 
-	Cells           []Cell
-	BoundaryNodeIdx map[NodeID]uint32
-	BoundaryNodes   []NodeID
+	BoundaryNodeIdx  []int32
+	BoundaryBaseIdxs []uint32
 
 	OverlayAdj OverlayAdjList
 
@@ -172,11 +169,11 @@ type Graph struct {
 	ProjectionRefLat float64
 }
 
-// NodeByID returns the node for an OSM ID, or nil if it is missing.
-func (g *Graph) NodeByID(id NodeID) *Node {
-	idx, ok := g.NodeIdx[id]
-	if !ok {
-		return nil
+// BuildNodeIdxMap returns a map from OSM NodeID to internal node index.
+func (g *Graph) BuildNodeIdxMap() map[NodeID]uint32 {
+	m := make(map[NodeID]uint32, len(g.Nodes))
+	for i, n := range g.Nodes {
+		m[n.ID] = uint32(i)
 	}
-	return &g.Nodes[idx]
+	return m
 }

@@ -20,7 +20,7 @@ import (
 
 const (
 	fileMagic   = "NAVI"
-	fileVersion = uint16(2)
+	fileVersion = uint16(3)
 
 	nodesFileName      = "nodes.bin"
 	edgesFileName      = "edges.bin"
@@ -114,10 +114,6 @@ func LoadGraph(dir string) (*Graph, error) {
 			return fmt.Errorf("nodes: %w", err)
 		}
 		g.Nodes = nodes
-		g.NodeIdx = make(map[NodeID]uint32, len(nodes))
-		for i, n := range nodes {
-			g.NodeIdx[n.ID] = uint32(i)
-		}
 		return nil
 	})
 
@@ -149,15 +145,11 @@ func LoadGraph(dir string) (*Graph, error) {
 	})
 
 	eg.Go(func() error {
-		boundaryNodes, err := loadBoundary(filepath.Join(dir, boundaryFileName))
+		boundaryBaseIdxs, err := loadBoundary(filepath.Join(dir, boundaryFileName))
 		if err != nil {
 			return fmt.Errorf("boundary: %w", err)
 		}
-		g.BoundaryNodes = boundaryNodes
-		g.BoundaryNodeIdx = make(map[NodeID]uint32, len(boundaryNodes))
-		for i, nid := range boundaryNodes {
-			g.BoundaryNodeIdx[nid] = uint32(i)
-		}
+		g.BoundaryBaseIdxs = boundaryBaseIdxs
 		return nil
 	})
 
@@ -181,6 +173,14 @@ func LoadGraph(dir string) (*Graph, error) {
 		return nil, err
 	}
 
+	g.BoundaryNodeIdx = make([]int32, len(g.Nodes))
+	for i := range g.BoundaryNodeIdx {
+		g.BoundaryNodeIdx[i] = -1
+	}
+	for i, idx := range g.BoundaryBaseIdxs {
+		g.BoundaryNodeIdx[idx] = int32(i)
+	}
+
 	if g.BBox.IsZero() {
 		log.Printf("%s recomputing bounding box from node data", graphStoreLogPrefix)
 		g.BBox = boundingBoxFromNodes(g.Nodes)
@@ -193,7 +193,7 @@ func LoadGraph(dir string) (*Graph, error) {
 		len(g.Nodes),
 		len(g.Edges),
 		len(g.Cells),
-		len(g.BoundaryNodes),
+		len(g.BoundaryBaseIdxs),
 		len(g.OverlayAdj.OverlayEdges),
 	)
 	return g, nil
@@ -249,16 +249,15 @@ func loadNodes(path string) ([]Node, error) {
 }
 
 type edgeBin struct {
-	ID         uint32
-	FromNodeID uint64
-	ToNodeID   uint64
-	ToNodeIdx  uint32
-	Weight     float32
-	DistanceM  float32
-	SpeedKmh   float32
-	RoadClass  uint8
-	Flags      uint8
-	Pad        [2]byte
+	ID          uint32
+	FromNodeIdx uint32
+	ToNodeIdx   uint32
+	Weight      float32
+	DistanceM   float32
+	SpeedKmh    float32
+	RoadClass   uint8
+	Flags       uint8
+	Pad         [2]byte
 }
 
 func saveEdges(g *Graph, path string) error {
@@ -275,15 +274,14 @@ func saveEdges(g *Graph, path string) error {
 	for i := range g.Edges {
 		e := &g.Edges[i]
 		if err := writeFixed(bw, edgeBin{
-			ID:         e.ID,
-			FromNodeID: e.FromNodeID,
-			ToNodeID:   e.ToNodeID,
-			ToNodeIdx:  e.ToNodeIdx,
-			Weight:     e.Weight,
-			DistanceM:  e.DistanceM,
-			SpeedKmh:   e.SpeedKmh,
-			RoadClass:  e.RoadClass,
-			Flags:      e.Flags,
+			ID:          e.ID,
+			FromNodeIdx: e.FromNodeIdx,
+			ToNodeIdx:   e.ToNodeIdx,
+			Weight:      e.Weight,
+			DistanceM:   e.DistanceM,
+			SpeedKmh:    e.SpeedKmh,
+			RoadClass:   e.RoadClass,
+			Flags:       e.Flags,
 		}); err != nil {
 			return err
 		}
@@ -306,15 +304,14 @@ func loadEdges(path string) ([]Edge, error) {
 			return nil, err
 		}
 		edges[i] = Edge{
-			ID:         b.ID,
-			FromNodeID: b.FromNodeID,
-			ToNodeID:   b.ToNodeID,
-			ToNodeIdx:  b.ToNodeIdx,
-			Weight:     b.Weight,
-			DistanceM:  b.DistanceM,
-			SpeedKmh:   b.SpeedKmh,
-			RoadClass:  b.RoadClass,
-			Flags:      b.Flags,
+			ID:          b.ID,
+			FromNodeIdx: b.FromNodeIdx,
+			ToNodeIdx:   b.ToNodeIdx,
+			Weight:      b.Weight,
+			DistanceM:   b.DistanceM,
+			SpeedKmh:    b.SpeedKmh,
+			RoadClass:   b.RoadClass,
+			Flags:       b.Flags,
 		}
 	}
 	return edges, nil
@@ -466,18 +463,18 @@ func saveBoundary(g *Graph, path string) error {
 	defer f.Close()
 	bw := bufio.NewWriterSize(f, fileBufferSize)
 
-	if err := writeHeader(bw, uint64(len(g.BoundaryNodes))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.BoundaryBaseIdxs))); err != nil {
 		return err
 	}
-	for _, nid := range g.BoundaryNodes {
-		if err := writeUint64(bw, nid); err != nil {
+	for _, idx := range g.BoundaryBaseIdxs {
+		if err := writeUint32(bw, idx); err != nil {
 			return err
 		}
 	}
 	return bw.Flush()
 }
 
-func loadBoundary(path string) ([]NodeID, error) {
+func loadBoundary(path string) ([]uint32, error) {
 	f, count, err := openFile(path)
 	if err != nil {
 		return nil, err
@@ -485,9 +482,9 @@ func loadBoundary(path string) ([]NodeID, error) {
 	defer f.Close()
 	br := bufio.NewReaderSize(f, fileBufferSize)
 
-	nodes := make([]NodeID, count)
+	nodes := make([]uint32, count)
 	for i := range nodes {
-		v, err := readUint64(br)
+		v, err := readUint32(br)
 		if err != nil {
 			return nil, err
 		}
@@ -497,8 +494,7 @@ func loadBoundary(path string) ([]NodeID, error) {
 }
 
 type overlayEdgeBin struct {
-	FromNodeID  uint64
-	ToNodeID    uint64
+	FromNodeIdx uint32
 	ToNodeIdx   uint32
 	Weight      float32
 	DistanceM   float32
@@ -530,7 +526,7 @@ func saveOverlayAdj(g *Graph, path string) error {
 		if e.IsCrossCell {
 			cc = crossCellTrue
 		}
-		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeID, e.ToNodeID, e.ToNodeIdx, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
+		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeIdx, e.ToNodeIdx, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
 			return err
 		}
 	}
@@ -565,8 +561,7 @@ func loadOverlayAdj(path string) (OverlayAdjList, error) {
 			return OverlayAdjList{}, err
 		}
 		edges[i] = OverlayEdge{
-			FromNodeID:  b.FromNodeID,
-			ToNodeID:    b.ToNodeID,
+			FromNodeIdx: b.FromNodeIdx,
 			ToNodeIdx:   b.ToNodeIdx,
 			Weight:      b.Weight,
 			DistanceM:   b.DistanceM,

@@ -133,8 +133,8 @@ func flagBetterRouteIfHelpful(s *Session, improvedEdges []traffic.ChangedEdge, s
 			continue
 		}
 
-		fromNode := g.NodeByID(edge.FromNodeID)
-		toNode := g.NodeByID(edge.ToNodeID)
+		fromNode := &g.Nodes[edge.FromNodeIdx]
+		toNode := &g.Nodes[edge.ToNodeIdx]
 		if fromNode == nil || toNode == nil {
 			continue
 		}
@@ -171,7 +171,10 @@ func heuristicSnapshot(s *Session, g *builder.Graph) (heuristicSessionSnapshot, 
 		return heuristicSessionSnapshot{}, false
 	}
 
-	destinationNode := g.NodeByID(destinationStep.NodeID)
+	var destinationNode *builder.Node
+	if destinationStep.NodeIdx < uint32(len(g.Nodes)) {
+		destinationNode = &g.Nodes[destinationStep.NodeIdx]
+	}
 	if destinationNode == nil {
 		return heuristicSessionSnapshot{}, false
 	}

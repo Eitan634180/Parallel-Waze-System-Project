@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
-	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.BoundaryNodes), len(g.Edges))
+	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs), len(g.Edges))
 
 	store := traffic.NewStore()
 	dirtyEdges := seedDirtyStore(g, store)

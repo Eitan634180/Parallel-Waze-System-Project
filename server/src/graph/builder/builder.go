@@ -4,7 +4,6 @@ import (
 	"log"
 	"math"
 	"runtime"
-	"sort"
 
 	"nav-system/src/utilities"
 
@@ -21,17 +20,15 @@ const (
 
 // BuildGraph constructs the base graph from parsed OSM nodes and ways.
 func BuildGraph(pr *ParseResult) (*Graph, error) {
-	g := &Graph{
-		NodeIdx:         make(map[NodeID]uint32, len(pr.Nodes)),
-		BoundaryNodeIdx: make(map[NodeID]uint32),
-	}
+	g := &Graph{}
+	nodeIdx := make(map[NodeID]uint32, len(pr.Nodes))
 
 	log.Printf("%s building nodes", graphBuilderLogPrefix)
 
 	g.Nodes = make([]Node, 0, len(pr.Nodes))
 	for _, rn := range pr.Nodes {
 		idx := uint32(len(g.Nodes))
-		g.NodeIdx[rn.ID] = idx
+		nodeIdx[rn.ID] = idx
 		g.Nodes = append(g.Nodes, Node{
 			ID:  rn.ID,
 			Lat: rn.Lat,
@@ -107,8 +104,8 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 					n1id := rw.NodeRefs[j]
 					n2id := rw.NodeRefs[j+1]
 
-					n1idx, ok1 := g.NodeIdx[n1id]
-					n2idx, ok2 := g.NodeIdx[n2id]
+					n1idx, ok1 := nodeIdx[n1id]
+					n2idx, ok2 := nodeIdx[n2id]
 					if !ok1 || !ok2 {
 						continue
 					}
@@ -127,8 +124,7 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 					localEdges = append(localEdges, pendingEdge{
 						fromIdx: n1idx,
 						e: Edge{
-							FromNodeID: n1id,
-							ToNodeID:   n2id,
+							FromNodeIdx: n1idx,
 							ToNodeIdx:  n2idx,
 							Weight:     weightSec,
 							DistanceM:  distM,
@@ -142,8 +138,8 @@ func BuildGraph(pr *ParseResult) (*Graph, error) {
 						localEdges = append(localEdges, pendingEdge{
 							fromIdx: n2idx,
 							e: Edge{
-								FromNodeID: n2id,
-								ToNodeID:   n1id,
+								FromNodeIdx: n2idx,
+								
 								ToNodeIdx:  n1idx,
 								Weight:     weightSec,
 								DistanceM:  distM,
@@ -198,21 +194,6 @@ func buildCSR(adjTmp [][]EdgeID, edgeCount int) AdjacencyList {
 	return AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}
 }
 
-// SortedEdgesFrom returns all edge IDs leaving nodeID, sorted by ToNodeID.
-func (g *Graph) SortedEdgesFrom(nodeID NodeID) []EdgeID {
-	idx, ok := g.NodeIdx[nodeID]
-	if !ok {
-		return nil
-	}
-	raw := g.BaseAdj.Neighbours(idx)
-	out := make([]EdgeID, len(raw))
-	copy(out, raw)
-	sort.Slice(out, func(i, j int) bool {
-		return g.Edges[out[i]].ToNodeID < g.Edges[out[j]].ToNodeID
-	})
-	return out
-}
-
 func boundingBoxFromNodes(nodes []Node) BoundingBox {
 	if len(nodes) == 0 {
 		return BoundingBox{}
@@ -248,3 +229,4 @@ func reprojectNodes(g *Graph) {
 		node.X, node.Y = utilities.ProjectAtReferenceLat(node.Lat, node.Lon, g.ProjectionRefLat)
 	}
 }
+

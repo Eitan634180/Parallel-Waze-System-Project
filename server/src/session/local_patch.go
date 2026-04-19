@@ -24,9 +24,11 @@ func checkLocalRepairTriggerLocked(s *Session, store *traffic.Store, g *builder.
 			continue
 		}
 
-		u := g.NodeByID(s.Route.Steps[i-1].NodeID)
-		v := g.NodeByID(s.Route.Steps[i].NodeID)
-		if u != nil && v != nil {
+		idxU := s.Route.Steps[i-1].NodeIdx
+		idxV := s.Route.Steps[i].NodeIdx
+		if idxU < uint32(len(g.Nodes)) && idxV < uint32(len(g.Nodes)) {
+			u := &g.Nodes[idxU]
+			v := &g.Nodes[idxV]
 			isCrossCell := u.CellID != v.CellID
 			return true, i, liveWeight, isCrossCell
 		}

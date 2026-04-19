@@ -60,7 +60,7 @@ func distanceFromExpectedProjectionMLocked(s *Session, g *builder.Graph, px, py 
 }
 
 func distanceToRouteNode(g *builder.Graph, step routing.Step, px, py float32) float32 {
-	node := g.NodeByID(builder.NodeID(step.NodeID))
+	node := nodeByIndex(g, step.NodeIdx)
 	if node == nil {
 		return 0
 	}
@@ -70,8 +70,8 @@ func distanceToRouteNode(g *builder.Graph, step routing.Step, px, py float32) fl
 func minDistanceToSegmentRangeLocked(s *Session, g *builder.Graph, px, py float32, start, end int) float32 {
 	best := float32(-1)
 	for idx := start; idx <= end; idx++ {
-		prev := g.NodeByID(builder.NodeID(s.Route.Steps[idx-1].NodeID))
-		next := g.NodeByID(builder.NodeID(s.Route.Steps[idx].NodeID))
+		prev := nodeByIndex(g, s.Route.Steps[idx-1].NodeIdx)
+		next := nodeByIndex(g, s.Route.Steps[idx].NodeIdx)
 		if prev == nil || next == nil {
 			continue
 		}

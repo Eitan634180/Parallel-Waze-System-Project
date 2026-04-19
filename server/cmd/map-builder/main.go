@@ -68,7 +68,7 @@ func main() {
 	t = time.Now()
 	builder.DetectBoundaryNodes(g)
 	log.Printf("%s boundary nodes ready in %s (%d nodes)",
-		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.BoundaryNodes))
+		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.BoundaryBaseIdxs))
 
 	log.Printf("%s using GOMAXPROCS=%d", builderLogPrefix, parallelism)
 	log.Printf("%s building overlay graph", builderLogPrefix)
@@ -89,7 +89,7 @@ func main() {
 		len(g.Nodes),
 		len(g.Edges),
 		len(g.Cells),
-		len(g.BoundaryNodes),
+		len(g.BoundaryBaseIdxs),
 		len(g.OverlayAdj.OverlayEdges),
 	)
 }

@@ -2,23 +2,17 @@ package routing
 
 import (
 	"nav-system/src/utilities"
-	"nav-system/src/graph/builder"
 )
 
 // LocalRepairOverlay searches for a short overlay detour around a congested cross-cell edge.
 func (r *Router) LocalRepairOverlay(
-	srcNodeID, dstNodeID builder.NodeID,
+	srcIdx, dstIdx uint32,
 	maxCost float32,
 	maxHops int,
 	wf WeightFunc,
 ) ([]Step, bool) {
 	g := r.g
-	srcIdx, ok := g.NodeIdx[srcNodeID]
-	if !ok {
-		return nil, false
-	}
-	dstIdx, ok := g.NodeIdx[dstNodeID]
-	if !ok {
+	if srcIdx >= uint32(len(g.Nodes)) || dstIdx >= uint32(len(g.Nodes)) {
 		return nil, false
 	}
 	dstNode := &g.Nodes[dstIdx]
@@ -55,15 +49,14 @@ func (r *Router) LocalRepairOverlay(
 			continue
 		}
 
-		nodeID := g.Nodes[current.idx].ID
-		boundaryIdx, ok := g.BoundaryNodeIdx[nodeID]
-		if !ok {
+		boundaryIdx := g.BoundaryNodeIdx[current.idx]
+		if boundaryIdx == -1 {
 			continue
 		}
 
 		g.OverlayAdj.Mu.RLock()
 		baseEdgeIdx := g.OverlayAdj.Offsets[boundaryIdx]
-		for i, overlayEdge := range g.OverlayAdj.Neighbours(boundaryIdx) {
+		for i, overlayEdge := range g.OverlayAdj.Neighbours(uint32(boundaryIdx)) {
 			edgeIdx := baseEdgeIdx + uint32(i)
 			if current.idx == srcIdx && overlayEdge.ToNodeIdx == dstIdx {
 				continue
@@ -97,18 +90,13 @@ func (r *Router) LocalRepairOverlay(
 
 // LocalRepairOriginal searches for a short detour around a congested intra-cell edge on the base graph.
 func (r *Router) LocalRepairOriginal(
-	srcNodeID, dstNodeID builder.NodeID,
+	srcIdx, dstIdx uint32,
 	maxCost float32,
 	maxHops int,
 	wf WeightFunc,
 ) ([]Step, bool) {
 	g := r.g
-	srcIdx, ok := g.NodeIdx[srcNodeID]
-	if !ok {
-		return nil, false
-	}
-	dstIdx, ok := g.NodeIdx[dstNodeID]
-	if !ok {
+	if srcIdx >= uint32(len(g.Nodes)) || dstIdx >= uint32(len(g.Nodes)) {
 		return nil, false
 	}
 	dstNode := &g.Nodes[dstIdx]

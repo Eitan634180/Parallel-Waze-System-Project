@@ -3,7 +3,7 @@ package routing
 // Step is one node in a route, describing the geographic position, which edge
 // leads to this node, and the cumulative cost metrics up to this point.
 type Step struct {
-	NodeID      uint64  `json:"node_id"`
+	NodeIdx     uint32  `json:"node_idx"`
 	Lat         float64 `json:"lat"`
 	Lon         float64 `json:"lon"`
 	EdgeID      *uint32 `json:"edge_id,omitempty"` // nil on the first step (no incoming edge)

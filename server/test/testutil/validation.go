@@ -14,8 +14,8 @@ type ValidatedRoute struct {
 	EdgeIDs   []builder.EdgeID
 	Cost      float32
 	Distance  float32
-	SourceID  builder.NodeID
-	TargetID  builder.NodeID
+	SourceIdx uint32
+	TargetIdx uint32
 	FinalStep routing.Step
 }
 
@@ -48,8 +48,8 @@ func AssertRouteValid(tb testing.TB, g *builder.Graph, route routing.Route, wf r
 			tb.Fatalf("step %d edge %d is out of range", i, edgeID)
 		}
 		edge := &g.Edges[edgeID]
-		if edge.FromNodeID != prev.NodeID || edge.ToNodeID != cur.NodeID {
-			tb.Fatalf("step %d edge %d does not connect %d -> %d", i, edgeID, prev.NodeID, cur.NodeID)
+		if edge.FromNodeIdx != prev.NodeIdx || edge.ToNodeIdx != cur.NodeIdx {
+			tb.Fatalf("step %d edge %d does not connect %d -> %d", i, edgeID, prev.NodeIdx, cur.NodeIdx)
 		}
 
 		cumulativeDistance += edge.DistanceM
@@ -71,8 +71,8 @@ func AssertRouteValid(tb testing.TB, g *builder.Graph, route routing.Route, wf r
 		EdgeIDs:   edgeIDs,
 		Cost:      cumulativeCost,
 		Distance:  cumulativeDistance,
-		SourceID:  route.Steps[0].NodeID,
-		TargetID:  route.Steps[len(route.Steps)-1].NodeID,
+		SourceIdx: route.Steps[0].NodeIdx,
+		TargetIdx: route.Steps[len(route.Steps)-1].NodeIdx,
 		FinalStep: route.Steps[len(route.Steps)-1],
 	}
 }
@@ -85,11 +85,11 @@ func AssertRouteMatchesOracle(tb testing.TB, g *builder.Graph, route routing.Rou
 		tb.Fatalf("oracle path is empty")
 	}
 
-	if validated.SourceID != g.Nodes[oracle.NodeIdxs[0]].ID {
-		tb.Fatalf("route source %d does not match oracle source %d", validated.SourceID, g.Nodes[oracle.NodeIdxs[0]].ID)
+	if validated.SourceIdx != oracle.NodeIdxs[0] {
+		tb.Fatalf("route source %d does not match oracle source %d", validated.SourceIdx, oracle.NodeIdxs[0])
 	}
-	if validated.TargetID != g.Nodes[oracle.NodeIdxs[len(oracle.NodeIdxs)-1]].ID {
-		tb.Fatalf("route target %d does not match oracle target %d", validated.TargetID, g.Nodes[oracle.NodeIdxs[len(oracle.NodeIdxs)-1]].ID)
+	if validated.TargetIdx != oracle.NodeIdxs[len(oracle.NodeIdxs)-1] {
+		tb.Fatalf("route target %d does not match oracle target %d", validated.TargetIdx, oracle.NodeIdxs[len(oracle.NodeIdxs)-1])
 	}
 
 	assertApprox32(tb, validated.Cost, oracle.Cost, "route cost mismatch against oracle")

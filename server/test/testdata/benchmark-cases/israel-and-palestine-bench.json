@@ -3,7 +3,7 @@
   "seed": 20260409,
   "count": 8,
   "min_node_index_gap": 250,
-  "min_distance_m": 50,
-  "max_distance_m": 100,
-  "max_attempts": 10000
+  "min_distance_m": 100000,
+  "max_distance_m": 400000,
+  "max_attempts": 1000000
 }

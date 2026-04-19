@@ -27,8 +27,8 @@ type localRepairRequest struct {
 	enabled       bool
 	repairStepIdx int
 	congestedCost float32
-	fromNodeID    builder.NodeID
-	toNodeID      builder.NodeID
+	fromNodeIdx   uint32
+	toNodeIdx     uint32
 	isCrossCell   bool
 }
 

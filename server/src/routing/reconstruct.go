@@ -12,8 +12,6 @@ func reconstructPath(
 	egressPred map[uint32]predEntry,
 	wf WeightFunc,
 ) ([]Step, []uint32, bool) {
-	srcID := g.Nodes[srcIdx].ID
-	dstID := g.Nodes[dstIdx].ID
 
 	egressSteps, entryBoundaryIdx := walkBaseBack(g, dstIdx, egressPred, wf)
 	if entryBoundaryIdx == ^uint32(0) {
@@ -35,11 +33,11 @@ func reconstructPath(
 	allSteps := append(srcSteps, dedup(overlaySteps, srcSteps)...)
 	allSteps = append(allSteps, dedup(egressSteps, allSteps)...)
 
-	if len(allSteps) == 0 || allSteps[0].NodeID != srcID {
+	if len(allSteps) == 0 || allSteps[0].NodeIdx != srcIdx {
 		firstStep := nodeToStep(g, srcIdx, 0, 0, 0)
 		allSteps = append([]Step{firstStep}, allSteps...)
 	}
-	if len(allSteps) == 0 || allSteps[len(allSteps)-1].NodeID != dstID {
+	if len(allSteps) == 0 || allSteps[len(allSteps)-1].NodeIdx != dstIdx {
 		return nil, nil, false
 	}
 
@@ -122,7 +120,7 @@ func nodeToStep(g *builder.Graph, nodeIdx uint32, edgeID builder.EdgeID, distM, 
 		edgePtr = &edgeValue
 	}
 	return Step{
-		NodeID:      node.ID,
+		NodeIdx:     nodeIdx,
 		Lat:         node.Lat,
 		Lon:         node.Lon,
 		EdgeID:      edgePtr,
@@ -147,7 +145,7 @@ func dedup(next, prev []Step) []Step {
 	if len(prev) == 0 || len(next) == 0 {
 		return next
 	}
-	if next[0].NodeID == prev[len(prev)-1].NodeID {
+	if next[0].NodeIdx == prev[len(prev)-1].NodeIdx {
 		return next[1:]
 	}
 	return next

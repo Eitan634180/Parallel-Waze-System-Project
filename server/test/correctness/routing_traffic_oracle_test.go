@@ -35,7 +35,8 @@ func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	}
 
 	testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, liveWeight)
-	if len(routes[0].Steps) < 3 || routes[0].Steps[1].NodeID != 3 {
+	nodeIdx := fixture.Graph.BuildNodeIdxMap()
+	if len(routes[0].Steps) < 3 || routes[0].Steps[1].NodeIdx != nodeIdx[3] {
 		t.Fatalf("expected congestion to divert route through node 3, got %+v", routes[0].Steps)
 	}
 }

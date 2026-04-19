@@ -349,17 +349,20 @@ func DetectBoundaryNodes(g *Graph) {
 		}
 	}
 
-	g.BoundaryNodes = make([]NodeID, 0, boundaryNodeCapacityHint)
-	g.BoundaryNodeIdx = make(map[NodeID]uint32)
+	g.BoundaryBaseIdxs = make([]uint32, 0, boundaryNodeCapacityHint)
+	g.BoundaryNodeIdx = make([]int32, len(g.Nodes))
+	for i := range g.BoundaryNodeIdx {
+		g.BoundaryNodeIdx[i] = -1
+	}
 	cellBoundary := make(map[CellID][]uint32)
 
 	for i, node := range g.Nodes {
 		if !isBoundary[i] {
 			continue
 		}
-		bIdx := uint32(len(g.BoundaryNodes))
-		g.BoundaryNodes = append(g.BoundaryNodes, node.ID)
-		g.BoundaryNodeIdx[node.ID] = bIdx
+		bIdx := uint32(len(g.BoundaryBaseIdxs))
+		g.BoundaryBaseIdxs = append(g.BoundaryBaseIdxs, uint32(i))
+		g.BoundaryNodeIdx[i] = int32(bIdx)
 		cellBoundary[node.CellID] = append(cellBoundary[node.CellID], uint32(i))
 	}
 
@@ -367,7 +370,7 @@ func DetectBoundaryNodes(g *Graph) {
 		g.Cells[i].BoundaryNodeIdxs = cellBoundary[g.Cells[i].ID]
 	}
 
-	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, len(g.BoundaryNodes))
+	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, len(g.BoundaryBaseIdxs))
 }
 
 // BuildOverlayGraph constructs the overlay adjacency list for all boundary
@@ -409,12 +412,12 @@ func BuildOverlayGraph(g *Graph, numWorkers int) time.Duration {
 		close(results)
 	}()
 
-	adjFrom := make([][]OverlayEdge, len(g.BoundaryNodes))
+	adjFrom := make([][]OverlayEdge, len(g.BoundaryBaseIdxs))
 	totalEdges := 0
 	for result := range results {
 		for _, edge := range result.edges {
-			fromIdx, ok := g.BoundaryNodeIdx[edge.FromNodeID]
-			if !ok {
+			fromIdx := g.BoundaryNodeIdx[edge.FromNodeIdx]
+			if fromIdx == -1 {
 				continue
 			}
 			adjFrom[fromIdx] = append(adjFrom[fromIdx], edge)
@@ -422,13 +425,13 @@ func BuildOverlayGraph(g *Graph, numWorkers int) time.Duration {
 		}
 	}
 
-	offsets := make([]uint32, len(g.BoundaryNodes)+1)
+	offsets := make([]uint32, len(g.BoundaryBaseIdxs)+1)
 	edges := make([]OverlayEdge, 0, totalEdges)
 	for i, neighbours := range adjFrom {
 		offsets[i] = uint32(len(edges))
 		edges = append(edges, neighbours...)
 	}
-	offsets[len(g.BoundaryNodes)] = uint32(len(edges))
+	offsets[len(g.BoundaryBaseIdxs)] = uint32(len(edges))
 
 	g.OverlayAdj = OverlayAdjList{Mu: &sync.RWMutex{}, Offsets: offsets, OverlayEdges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
@@ -459,7 +462,7 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 		if g.Nodes[fromIdx].CellID != cell.ID {
 			continue
 		}
-		if _, fromIsBoundary := g.BoundaryNodeIdx[g.Nodes[fromIdx].ID]; !fromIsBoundary {
+		if g.BoundaryNodeIdx[fromIdx] == -1 {
 			continue
 		}
 
@@ -470,12 +473,11 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 			if g.Nodes[toIdx].CellID == cell.ID {
 				continue
 			}
-			if _, toIsBoundary := g.BoundaryNodeIdx[e.ToNodeID]; !toIsBoundary {
+			if g.BoundaryNodeIdx[toIdx] == -1 {
 				continue
 			}
 			result = append(result, OverlayEdge{
-				FromNodeID:  g.Nodes[fromIdx].ID,
-				ToNodeID:    e.ToNodeID,
+				FromNodeIdx: fromIdx,
 				ToNodeIdx:   toIdx,
 				Weight:      e.Weight,
 				DistanceM:   e.DistanceM,
@@ -504,8 +506,7 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 				continue
 			}
 			result = append(result, OverlayEdge{
-				FromNodeID:  g.Nodes[srcIdx].ID,
-				ToNodeID:    g.Nodes[dstIdx].ID,
+				FromNodeIdx: srcIdx,
 				ToNodeIdx:   dstIdx,
 				Weight:      d.weight,
 				DistanceM:   d.distM,

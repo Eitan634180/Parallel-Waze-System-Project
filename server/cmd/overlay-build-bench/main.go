@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
-	log.Printf("%s graph ready (%d cells, %d boundary nodes)", overlayBenchLogPrefix, len(g.Cells), len(g.BoundaryNodes))
+	log.Printf("%s graph ready (%d cells, %d boundary nodes)", overlayBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs))
 
 	for _, workers := range workerCounts {
 		var total time.Duration
