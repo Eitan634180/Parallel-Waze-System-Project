@@ -6,13 +6,13 @@ import (
 )
 
 type predEntry struct {
-	prevNodeID builder.NodeID
-	edgeID     builder.EdgeID
+	prevNodeIdx uint32
+	edgeID      builder.EdgeID
 }
 
 type overlayPredEntry struct {
-	prevNodeID builder.NodeID
-	edgeIdx    uint32
+	prevNodeIdx uint32
+	edgeIdx     uint32
 }
 
 type seedE struct {
@@ -27,42 +27,44 @@ func cellDijkstra(
 	cellID builder.CellID,
 	wf WeightFunc,
 	stats *SearchStats,
-) (costs map[builder.NodeID]float32, pred map[builder.NodeID]predEntry) {
-	costs = make(map[builder.NodeID]float32, len(targetNodeIDs)+1)
-	pred = make(map[builder.NodeID]predEntry, len(targetNodeIDs))
+) (costs map[uint32]float32, pred map[uint32]predEntry) {
+	costs = make(map[uint32]float32, len(targetNodeIDs)+1)
+	pred = make(map[uint32]predEntry, len(targetNodeIDs))
 
-	targetSet := make(map[builder.NodeID]struct{}, len(targetNodeIDs))
+	targetSet := make(map[uint32]struct{}, len(targetNodeIDs))
 	for _, nodeID := range targetNodeIDs {
-		targetSet[nodeID] = struct{}{}
+		if idx, ok := g.NodeIdx[nodeID]; ok {
+			targetSet[idx] = struct{}{}
+		}
 	}
 	remaining := len(targetSet)
 
-	sourceID := g.Nodes[srcInternalIdx].ID
-	costs[sourceID] = 0
+	costs[srcInternalIdx] = 0
 
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
-	pq.Push(ijItem{id: sourceID, idx: srcInternalIdx, cost: 0})
+	pq.Push(ijItem{idx: srcInternalIdx, cost: 0})
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
-		if best, ok := costs[current.id]; ok && current.cost > best {
+		if best, ok := costs[current.idx]; ok && current.cost > best {
 			continue
 		}
-		stats.recordVisitedNode()
+		if stats != nil {
+			stats.recordVisitedNode()
+		}
 
-		if _, isTarget := targetSet[current.id]; isTarget {
+		if _, isTarget := targetSet[current.idx]; isTarget {
 			remaining--
-			delete(targetSet, current.id)
+			delete(targetSet, current.idx)
 			if remaining == 0 {
 				break
 			}
 		}
 
-		currentIdx := current.idx
-		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
+		for _, edgeID := range g.BaseAdj.Neighbours(current.idx) {
 			edge := &g.Edges[edgeID]
 			nextIdx := edge.ToNodeIdx
 			if g.Nodes[nextIdx].CellID != cellID {
@@ -70,10 +72,10 @@ func cellDijkstra(
 			}
 
 			nextCost := current.cost + wf(edge)
-			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
-				costs[edge.ToNodeID] = nextCost
-				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
-				pq.Push(ijItem{id: edge.ToNodeID, idx: nextIdx, cost: nextCost})
+			if best, seen := costs[nextIdx]; !seen || nextCost < best {
+				costs[nextIdx] = nextCost
+				pred[nextIdx] = predEntry{prevNodeIdx: current.idx, edgeID: edgeID}
+				pq.Push(ijItem{idx: nextIdx, cost: nextCost})
 			}
 		}
 	}
@@ -86,7 +88,7 @@ func intraSearch(g *builder.Graph, srcIdx, dstIdx uint32, wf WeightFunc, stats *
 	dstID := g.Nodes[dstIdx].ID
 
 	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf, stats)
-	if _, reached := costs[dstID]; !reached {
+	if _, reached := costs[dstIdx]; !reached {
 		return nil, false
 	}
 
@@ -100,16 +102,14 @@ func multiSourceCellDijkstra(
 	cellID builder.CellID,
 	wf WeightFunc,
 	stats *SearchStats,
-) (costs map[builder.NodeID]float32, pred map[builder.NodeID]predEntry) {
-	costs = make(map[builder.NodeID]float32, len(seeds)+16)
-	pred = make(map[builder.NodeID]predEntry, len(seeds)+16)
-	dstID := g.Nodes[dstInternalIdx].ID
+) (costs map[uint32]float32, pred map[uint32]predEntry) {
+	costs = make(map[uint32]float32, len(seeds)+16)
+	pred = make(map[uint32]predEntry, len(seeds)+16)
 
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
 	for _, seed := range seeds {
-		nodeID := g.Nodes[seed.nodeIdx].ID
-		costs[nodeID] = seed.cost
-		pq.Push(ijItem{id: nodeID, idx: seed.nodeIdx, cost: seed.cost})
+		costs[seed.nodeIdx] = seed.cost
+		pq.Push(ijItem{idx: seed.nodeIdx, cost: seed.cost})
 	}
 
 	for pq.Len() > 0 {
@@ -117,17 +117,18 @@ func multiSourceCellDijkstra(
 
 		// The queue may contain multiple entries for the same node with different costs.
 		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
-		if best, ok := costs[current.id]; ok && current.cost > best {
+		if best, ok := costs[current.idx]; ok && current.cost > best {
 			continue
 		}
-		stats.recordVisitedNode()
+		if stats != nil {
+			stats.recordVisitedNode()
+		}
 
-		if current.id == dstID {
+		if current.idx == dstInternalIdx {
 			break
 		}
 
-		currentIdx := current.idx
-		for _, edgeID := range g.BaseAdj.Neighbours(currentIdx) {
+		for _, edgeID := range g.BaseAdj.Neighbours(current.idx) {
 			edge := &g.Edges[edgeID]
 			nextIdx := edge.ToNodeIdx
 			if g.Nodes[nextIdx].CellID != cellID {
@@ -135,10 +136,10 @@ func multiSourceCellDijkstra(
 			}
 
 			nextCost := current.cost + wf(edge)
-			if best, seen := costs[edge.ToNodeID]; !seen || nextCost < best {
-				costs[edge.ToNodeID] = nextCost
-				pred[edge.ToNodeID] = predEntry{prevNodeID: current.id, edgeID: edgeID}
-				pq.Push(ijItem{id: edge.ToNodeID, idx: nextIdx, cost: nextCost})
+			if best, seen := costs[nextIdx]; !seen || nextCost < best {
+				costs[nextIdx] = nextCost
+				pred[nextIdx] = predEntry{prevNodeIdx: current.idx, edgeID: edgeID}
+				pq.Push(ijItem{idx: nextIdx, cost: nextCost})
 			}
 		}
 	}
@@ -146,19 +147,14 @@ func multiSourceCellDijkstra(
 	return costs, pred
 }
 
-func expandCellShortcut(g *builder.Graph, srcID, dstID builder.NodeID, wf WeightFunc) []Step {
-	srcIdx, srcOK := g.NodeIdx[srcID]
-	_, dstOK := g.NodeIdx[dstID]
-	if !srcOK || !dstOK {
-		return nil
-	}
-
+func expandCellShortcut(g *builder.Graph, srcIdx, dstIdx uint32, wf WeightFunc) []Step {
 	cellID := g.Nodes[srcIdx].CellID
+	dstID := g.Nodes[dstIdx].ID
 	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf, nil)
-	if _, reached := costs[dstID]; !reached {
+	if _, reached := costs[dstIdx]; !reached {
 		return nil
 	}
 
-	steps, _ := walkBaseBack(g, dstID, pred, wf)
+	steps, _ := walkBaseBack(g, dstIdx, pred, wf)
 	return steps
 }

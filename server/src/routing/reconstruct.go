@@ -7,25 +7,25 @@ func reconstructPath(
 	g *builder.Graph,
 	srcIdx, dstIdx uint32,
 	srcCellID, dstCellID builder.CellID,
-	injPred map[builder.NodeID]predEntry,
-	overlayPred map[builder.NodeID]overlayPredEntry,
-	egressPred map[builder.NodeID]predEntry,
+	injPred map[uint32]predEntry,
+	overlayPred map[uint32]overlayPredEntry,
+	egressPred map[uint32]predEntry,
 	wf WeightFunc,
 ) ([]Step, []uint32, bool) {
 	srcID := g.Nodes[srcIdx].ID
 	dstID := g.Nodes[dstIdx].ID
 
-	egressSteps, entryBoundaryID := walkBaseBack(g, dstID, egressPred, wf)
-	if entryBoundaryID == 0 {
+	egressSteps, entryBoundaryIdx := walkBaseBack(g, dstIdx, egressPred, wf)
+	if entryBoundaryIdx == ^uint32(0) {
 		return nil, nil, false
 	}
 
-	overlaySteps, overlayEdgeIDs, exitBoundaryID := walkOverlayBack(g, entryBoundaryID, srcCellID, overlayPred, wf)
-	if exitBoundaryID == 0 {
+	overlaySteps, overlayEdgeIDs, exitBoundaryIdx := walkOverlayBack(g, entryBoundaryIdx, srcCellID, overlayPred, wf)
+	if exitBoundaryIdx == ^uint32(0) {
 		return nil, nil, false
 	}
 
-	srcSteps, _ := walkBaseBack(g, exitBoundaryID, injPred, wf)
+	srcSteps, _ := walkBaseBack(g, exitBoundaryIdx, injPred, wf)
 
 	reverseSteps(srcSteps)
 	reverseSteps(overlaySteps)
@@ -49,79 +49,65 @@ func reconstructPath(
 // walkBaseBack traces backward through a base-graph predecessor map.
 func walkBaseBack(
 	g *builder.Graph,
-	startID builder.NodeID,
-	pred map[builder.NodeID]predEntry,
+	startIdx uint32,
+	pred map[uint32]predEntry,
 	wf WeightFunc,
-) (steps []Step, terminalID builder.NodeID) {
-	current := startID
+) (steps []Step, terminalIdx uint32) {
+	current := startIdx
 	for {
 		predecessor, ok := pred[current]
 		if !ok {
 			return steps, current
 		}
 
-		nodeIdx, ok := g.NodeIdx[current]
-		if !ok {
-			return nil, 0
-		}
-
 		edge := &g.Edges[predecessor.edgeID]
-		steps = append(steps, nodeToStep(g, nodeIdx, predecessor.edgeID, edge.DistanceM, wf(edge)))
-		current = predecessor.prevNodeID
+		steps = append(steps, nodeToStep(g, current, predecessor.edgeID, edge.DistanceM, wf(edge)))
+		current = predecessor.prevNodeIdx
 	}
 }
 
 // walkOverlayBack traces backward through the overlay predecessor map.
 func walkOverlayBack(
 	g *builder.Graph,
-	startID builder.NodeID,
+	startIdx uint32,
 	srcCellID builder.CellID,
-	overlayPred map[builder.NodeID]overlayPredEntry,
+	overlayPred map[uint32]overlayPredEntry,
 	wf WeightFunc,
-) (steps []Step, edgeIDs []uint32, terminalID builder.NodeID) {
-	current := startID
+) (steps []Step, edgeIDs []uint32, terminalIdx uint32) {
+	current := startIdx
 	for {
 		predecessor, ok := overlayPred[current]
 		if !ok {
 			return steps, edgeIDs, current
 		}
 
-		prevNodeID := predecessor.prevNodeID
+		prevIdx := predecessor.prevNodeIdx
 		edgeIDs = append(edgeIDs, predecessor.edgeIdx)
 
 		g.OverlayAdj.Mu.RLock()
 		if int(predecessor.edgeIdx) >= len(g.OverlayAdj.OverlayEdges) {
 			g.OverlayAdj.Mu.RUnlock()
-			return nil, nil, 0
+			return nil, nil, ^uint32(0)
 		}
 		overlayEdge := g.OverlayAdj.OverlayEdges[predecessor.edgeIdx]
 		g.OverlayAdj.Mu.RUnlock()
 
 		if overlayEdge.IsCrossCell {
-			nodeIdx, ok := g.NodeIdx[current]
-			if !ok {
-				return nil, nil, 0
-			}
-
-			prevIdx, ok := g.NodeIdx[prevNodeID]
-			if !ok {
-				return nil, nil, 0
-			}
-
 			edgeID, _, timeSec := baseEdgeBetween(g, prevIdx, current, wf)
-			steps = append(steps, nodeToStep(g, nodeIdx, edgeID, g.Edges[edgeID].DistanceM, timeSec))
+			steps = append(steps, nodeToStep(g, current, edgeID, g.Edges[edgeID].DistanceM, timeSec))
 		} else {
-			steps = append(steps, expandCellShortcut(g, prevNodeID, current, wf)...)
+			steps = append(steps, expandCellShortcut(g, prevIdx, current, wf)...)
 		}
 
-		current = prevNodeID
+		current = prevIdx
 	}
 }
 
-func baseEdgeBetween(g *builder.Graph, fromIdx uint32, toID builder.NodeID, wf WeightFunc) (builder.EdgeID, float32, float32) {
+// baseEdgeBetween finds the base-graph edge from fromIdx to toIdx.
+func baseEdgeBetween(g *builder.Graph, fromIdx, toIdx uint32, wf WeightFunc) (builder.EdgeID, float32, float32) {
 	for _, edgeID := range g.BaseAdj.Neighbours(fromIdx) {
 		edge := &g.Edges[edgeID]
-		if edge.ToNodeID == toID {
+		if edge.ToNodeIdx == toIdx {
 			return edgeID, edge.DistanceM, wf(edge)
 		}
 	}
@@ -168,9 +154,8 @@ func dedup(next, prev []Step) []Step {
 }
 
 // backtrackBase builds a Step slice in forward order from a base predecessor map.
-func backtrackBase(srcIdx, dstIdx uint32, pred map[builder.NodeID]predEntry, g *builder.Graph, wf WeightFunc) []Step {
-	dstID := g.Nodes[dstIdx].ID
-	steps, _ := walkBaseBack(g, dstID, pred, wf)
+func backtrackBase(srcIdx, dstIdx uint32, pred map[uint32]predEntry, g *builder.Graph, wf WeightFunc) []Step {
+	steps, _ := walkBaseBack(g, dstIdx, pred, wf)
 	reverseSteps(steps)
 	srcStep := nodeToStep(g, srcIdx, 0, 0, 0)
 	return append([]Step{srcStep}, steps...)

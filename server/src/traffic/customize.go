@@ -42,6 +42,8 @@ type customizationIndex struct {
 	intraCellAdj               builder.AdjacencyList
 	weightSnapshotMu           sync.Mutex
 	weightMultipliers          []float32
+	boundaryToNodeIdx []uint32
+	cellBoundaryIdxs  [][]uint32
 }
 
 type liveDijkstraScratch struct {
@@ -190,26 +192,22 @@ func computeCellCustomizationUpdates(
 	weights []float32,
 	scratch *liveDijkstraScratch,
 ) []overlayWeightUpdate {
-	if len(cell.BoundaryNodeIDs) < 2 {
+	if int(cell.ID) >= len(index.cellBoundaryIdxs) {
+		return nil
+	}
+	cellBIdxs := index.cellBoundaryIdxs[cell.ID]
+	if len(cellBIdxs) < 2 {
 		return nil
 	}
 
-	updates := make([]overlayWeightUpdate, 0, len(cell.BoundaryNodeIDs))
-	for _, srcID := range cell.BoundaryNodeIDs {
-		srcBIdx, ok := g.BoundaryNodeIdx[srcID]
-		if !ok {
-			continue
-		}
+	updates := make([]overlayWeightUpdate, 0, len(cellBIdxs))
+	for _, srcBIdx := range cellBIdxs {
 		targets := index.shortcutTargetsByBoundary[srcBIdx]
 		if len(targets) == 0 {
 			continue
 		}
 
-		srcIdx, ok := g.NodeIdx[srcID]
-		if !ok {
-			continue
-		}
-
+		srcIdx := index.boundaryToNodeIdx[srcBIdx]
 		liveCellDijkstra(g, index, srcIdx, targets, weights, scratch)
 		for _, target := range targets {
 			weight, ok := scratch.cost(target.toIdx)
@@ -310,6 +308,8 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 			Offsets: make([]uint32, len(g.Nodes)+1),
 			EdgeIDs: make([]builder.EdgeID, 0, len(g.BaseAdj.EdgeIDs)),
 		},
+		boundaryToNodeIdx: make([]uint32, len(g.BoundaryNodes)),
+		cellBoundaryIdxs:  make([][]uint32, len(g.Cells)),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
@@ -324,6 +324,20 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 			}
 		}
 		index.intraCellAdj.Offsets[nodeIdx+1] = uint32(len(index.intraCellAdj.EdgeIDs))
+	}
+
+	for bIdx, nid := range g.BoundaryNodes {
+		if nodeIdx, ok := g.NodeIdx[nid]; ok {
+			index.boundaryToNodeIdx[bIdx] = nodeIdx
+		}
+	}
+
+	for bIdx := range g.BoundaryNodes {
+		nodeIdx := index.boundaryToNodeIdx[bIdx]
+		cellID := g.Nodes[nodeIdx].CellID
+		if int(cellID) < len(index.cellBoundaryIdxs) {
+			index.cellBoundaryIdxs[cellID] = append(index.cellBoundaryIdxs[cellID], uint32(bIdx))
+		}
 	}
 
 	g.OverlayAdj.Mu.RLock()
