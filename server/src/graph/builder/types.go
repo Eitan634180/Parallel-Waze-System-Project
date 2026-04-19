@@ -114,9 +114,9 @@ func (a *AdjacencyList) Neighbours(idx uint32) []EdgeID {
 
 // Cell is one partition region produced by recursive bisection.
 type Cell struct {
-	ID              CellID
-	InternalNodeIDs []NodeID
-	BoundaryNodeIDs []NodeID
+	ID               CellID
+	InternalNodeIdxs []uint32
+	BoundaryNodeIdxs []uint32
 }
 
 // OverlayAdjList stores outgoing overlay edges in CSR form over boundary nodes.

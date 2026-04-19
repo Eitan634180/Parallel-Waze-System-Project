@@ -57,9 +57,9 @@ func PartitionCells(g *Graph, maxCellSize int) {
 			mu.Lock()
 			cid := CellID(len(g.Cells))
 			cell := Cell{ID: cid}
-			cell.InternalNodeIDs = make([]NodeID, len(nodeIdxs))
+			cell.InternalNodeIdxs = make([]uint32, len(nodeIdxs))
 			for i, idx := range nodeIdxs {
-				cell.InternalNodeIDs[i] = g.Nodes[idx].ID
+				cell.InternalNodeIdxs[i] = idx
 				cellAssign[idx] = cid
 			}
 			g.Cells = append(g.Cells, cell)
@@ -351,7 +351,7 @@ func DetectBoundaryNodes(g *Graph) {
 
 	g.BoundaryNodes = make([]NodeID, 0, boundaryNodeCapacityHint)
 	g.BoundaryNodeIdx = make(map[NodeID]uint32)
-	cellBoundary := make(map[CellID][]NodeID)
+	cellBoundary := make(map[CellID][]uint32)
 
 	for i, node := range g.Nodes {
 		if !isBoundary[i] {
@@ -360,11 +360,11 @@ func DetectBoundaryNodes(g *Graph) {
 		bIdx := uint32(len(g.BoundaryNodes))
 		g.BoundaryNodes = append(g.BoundaryNodes, node.ID)
 		g.BoundaryNodeIdx[node.ID] = bIdx
-		cellBoundary[node.CellID] = append(cellBoundary[node.CellID], node.ID)
+		cellBoundary[node.CellID] = append(cellBoundary[node.CellID], uint32(i))
 	}
 
 	for i := range g.Cells {
-		g.Cells[i].BoundaryNodeIDs = cellBoundary[g.Cells[i].ID]
+		g.Cells[i].BoundaryNodeIdxs = cellBoundary[g.Cells[i].ID]
 	}
 
 	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, len(g.BoundaryNodes))
@@ -455,15 +455,11 @@ func countCrossCell(edges []OverlayEdge) int {
 func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 	var result []OverlayEdge
 
-	for _, nid := range cell.InternalNodeIDs {
-		fromIdx, ok := g.NodeIdx[nid]
-		if !ok {
-			continue
-		}
+	for _, fromIdx := range cell.InternalNodeIdxs {
 		if g.Nodes[fromIdx].CellID != cell.ID {
 			continue
 		}
-		if _, fromIsBoundary := g.BoundaryNodeIdx[nid]; !fromIsBoundary {
+		if _, fromIsBoundary := g.BoundaryNodeIdx[g.Nodes[fromIdx].ID]; !fromIsBoundary {
 			continue
 		}
 
@@ -478,7 +474,7 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 				continue
 			}
 			result = append(result, OverlayEdge{
-				FromNodeID:  nid,
+				FromNodeID:  g.Nodes[fromIdx].ID,
 				ToNodeID:    e.ToNodeID,
 				ToNodeIdx:   toIdx,
 				Weight:      e.Weight,
@@ -488,32 +484,28 @@ func computeCellOverlayEdges(g *Graph, cell *Cell) []OverlayEdge {
 		}
 	}
 
-	if len(cell.BoundaryNodeIDs) < 2 {
+	if len(cell.BoundaryNodeIdxs) < 2 {
 		return result
 	}
 
-	inCell := make(map[NodeID]struct{}, len(cell.InternalNodeIDs))
-	for _, nid := range cell.InternalNodeIDs {
-		inCell[nid] = struct{}{}
+	inCell := make([]bool, len(g.Nodes))
+	for _, idx := range cell.InternalNodeIdxs {
+		inCell[idx] = true
 	}
 
-	for _, srcID := range cell.BoundaryNodeIDs {
-		dists := cellDijkstra(g, srcID, cell.BoundaryNodeIDs, inCell)
-		for _, dstID := range cell.BoundaryNodeIDs {
-			if dstID == srcID {
+	for _, srcIdx := range cell.BoundaryNodeIdxs {
+		dists := cellDijkstra(g, srcIdx, cell.BoundaryNodeIdxs, inCell)
+		for _, dstIdx := range cell.BoundaryNodeIdxs {
+			if dstIdx == srcIdx {
 				continue
 			}
-			d, reachable := dists[dstID]
+			d, reachable := dists[dstIdx]
 			if !reachable || d.weight >= math.MaxFloat32 {
 				continue
 			}
-			dstIdx, ok := g.NodeIdx[dstID]
-			if !ok {
-				continue
-			}
 			result = append(result, OverlayEdge{
-				FromNodeID:  srcID,
-				ToNodeID:    dstID,
+				FromNodeID:  g.Nodes[srcIdx].ID,
+				ToNodeID:    g.Nodes[dstIdx].ID,
 				ToNodeIdx:   dstIdx,
 				Weight:      d.weight,
 				DistanceM:   d.distM,
@@ -532,71 +524,62 @@ type distInfo struct {
 
 // cellDijkstra runs Dijkstra inside one cell and returns settled boundary
 // distances from the source boundary node.
-func cellDijkstra(g *Graph, srcID NodeID, boundaryNodes []NodeID, inCell map[NodeID]struct{}) map[NodeID]distInfo {
-	const inf = float32(math.MaxFloat32)
-
-	dist := make(map[NodeID]distInfo)
-	dist[srcID] = distInfo{0, 0}
-	targetSet := make(map[NodeID]struct{}, len(boundaryNodes))
-	for _, nid := range boundaryNodes {
-		targetSet[nid] = struct{}{}
+func cellDijkstra(g *Graph, srcIdx uint32, boundaryNodes []uint32, inCell []bool) map[uint32]distInfo {
+	dist := make(map[uint32]distInfo)
+	dist[srcIdx] = distInfo{0, 0}
+	targetSet := make(map[uint32]struct{}, len(boundaryNodes))
+	for _, idx := range boundaryNodes {
+		targetSet[idx] = struct{}{}
 	}
 
 	pq := utilities.NewHeap(func(a, b dijkstraItem) bool { return a.weight < b.weight })
-	pq.Push(dijkstraItem{id: srcID, weight: 0})
+	pq.Push(dijkstraItem{idx: srcIdx, weight: 0})
 
 	settled := 0
 	totalBoundary := len(boundaryNodes)
 
 	for pq.Len() > 0 {
 		cur := pq.Pop()
-		curID := cur.id
 
 		// Skip stale queue entries after a better path has already been recorded.
-		best, hasBest := dist[curID]
+		best, hasBest := dist[cur.idx]
 		if !hasBest || cur.weight > best.weight {
 			continue
 		}
 
-		if _, isBoundary := targetSet[curID]; isBoundary {
+		if _, isBoundary := targetSet[cur.idx]; isBoundary {
 			settled++
-			delete(targetSet, curID)
+			delete(targetSet, cur.idx)
 			if settled == totalBoundary {
 				break
 			}
 		}
 
-		curIdx, ok := g.NodeIdx[curID]
-		if !ok {
-			continue
-		}
-
-		for _, eid := range g.BaseAdj.Neighbours(curIdx) {
+		for _, eid := range g.BaseAdj.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
-			toID := e.ToNodeID
-			if _, ok := inCell[toID]; !ok {
+			toIdx := e.ToNodeIdx
+			if !inCell[toIdx] {
 				continue
 			}
-
 			newW := best.weight + e.Weight
 			newD := best.distM + e.DistanceM
-			if existing, hasDist := dist[toID]; !hasDist || newW < existing.weight {
-				dist[toID] = distInfo{newW, newD}
-				pq.Push(dijkstraItem{id: toID, weight: newW})
+			if existing, hasDist := dist[toIdx]; !hasDist || newW < existing.weight {
+				dist[toIdx] = distInfo{newW, newD}
+				pq.Push(dijkstraItem{idx: toIdx, weight: newW})
 			}
 		}
 	}
 
-	result := make(map[NodeID]distInfo, len(boundaryNodes))
-	for _, bid := range boundaryNodes {
-		if d, ok := dist[bid]; ok {
-			result[bid] = d
+	result := make(map[uint32]distInfo, len(boundaryNodes))
+	for _, idx := range boundaryNodes {
+		if d, ok := dist[idx]; ok {
+			result[idx] = d
 		}
 	}
 	return result
 }
 
 type dijkstraItem struct {
-	id     NodeID
+	idx    uint32
 	weight float32
 }

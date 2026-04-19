@@ -23,16 +23,12 @@ func (r *Router) twoLevelSearch(
 	}
 
 	// Dijkstra to source cell boundary nodes
-	srcBoundary := g.Cells[srcCellID].BoundaryNodeIDs
+	srcBoundary := g.Cells[srcCellID].BoundaryNodeIdxs
 	injectionCosts, injectionPred := cellDijkstra(g, srcIdx, srcBoundary, srcCellID, wf, stats)
 
 	// Build overlay seeds keyed by base-graph node index.
 	overlaySeeds := make(map[uint32]float32, len(srcBoundary))
-	for _, nodeID := range srcBoundary {
-		idx, ok := g.NodeIdx[nodeID]
-		if !ok {
-			continue
-		}
+	for _, idx := range srcBoundary {
 		if cost, ok := injectionCosts[idx]; ok {
 			overlaySeeds[idx] = cost
 		}
@@ -41,12 +37,10 @@ func (r *Router) twoLevelSearch(
 		return nil, nil, false
 	}
 
-	dstBoundary := g.Cells[dstCellID].BoundaryNodeIDs
+	dstBoundary := g.Cells[dstCellID].BoundaryNodeIdxs
 	dstBoundarySet := make(map[uint32]struct{}, len(dstBoundary))
-	for _, nodeID := range dstBoundary {
-		if idx, ok := g.NodeIdx[nodeID]; ok {
-			dstBoundarySet[idx] = struct{}{}
-		}
+	for _, idx := range dstBoundary {
+		dstBoundarySet[idx] = struct{}{}
 	}
 
 	heuristic := func(idx uint32) float32 {
@@ -59,16 +53,12 @@ func (r *Router) twoLevelSearch(
 
 	// Dijkstra from dest cell boundary nodes
 	seeds := make([]seedE, 0, len(dstBoundary))
-	for _, nodeID := range dstBoundary {
-		nodeIdx, ok := g.NodeIdx[nodeID]
+	for _, idx := range dstBoundary {
+		cost, ok := overlayCosts[idx]
 		if !ok {
 			continue
 		}
-		cost, ok := overlayCosts[nodeIdx]
-		if !ok {
-			continue
-		}
-		seeds = append(seeds, seedE{nodeIdx: nodeIdx, cost: cost})
+		seeds = append(seeds, seedE{nodeIdx: idx, cost: cost})
 	}
 	if len(seeds) == 0 {
 		return nil, nil, false

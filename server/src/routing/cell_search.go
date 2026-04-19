@@ -23,19 +23,17 @@ type seedE struct {
 func cellDijkstra(
 	g *builder.Graph,
 	srcInternalIdx uint32,
-	targetNodeIDs []builder.NodeID,
+	targetIdxs []uint32,
 	cellID builder.CellID,
 	wf WeightFunc,
 	stats *SearchStats,
 ) (costs map[uint32]float32, pred map[uint32]predEntry) {
-	costs = make(map[uint32]float32, len(targetNodeIDs)+1)
-	pred = make(map[uint32]predEntry, len(targetNodeIDs))
+	costs = make(map[uint32]float32, len(targetIdxs)+1)
+	pred = make(map[uint32]predEntry, len(targetIdxs))
 
-	targetSet := make(map[uint32]struct{}, len(targetNodeIDs))
-	for _, nodeID := range targetNodeIDs {
-		if idx, ok := g.NodeIdx[nodeID]; ok {
-			targetSet[idx] = struct{}{}
-		}
+	targetSet := make(map[uint32]struct{}, len(targetIdxs))
+	for _, idx := range targetIdxs {
+		targetSet[idx] = struct{}{}
 	}
 	remaining := len(targetSet)
 
@@ -85,9 +83,8 @@ func cellDijkstra(
 
 func intraSearch(g *builder.Graph, srcIdx, dstIdx uint32, wf WeightFunc, stats *SearchStats) ([]Step, bool) {
 	cellID := g.Nodes[srcIdx].CellID
-	dstID := g.Nodes[dstIdx].ID
 
-	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf, stats)
+	costs, pred := cellDijkstra(g, srcIdx, []uint32{dstIdx}, cellID, wf, stats)
 	if _, reached := costs[dstIdx]; !reached {
 		return nil, false
 	}
@@ -149,8 +146,7 @@ func multiSourceCellDijkstra(
 
 func expandCellShortcut(g *builder.Graph, srcIdx, dstIdx uint32, wf WeightFunc) []Step {
 	cellID := g.Nodes[srcIdx].CellID
-	dstID := g.Nodes[dstIdx].ID
-	costs, pred := cellDijkstra(g, srcIdx, []builder.NodeID{dstID}, cellID, wf, nil)
+	costs, pred := cellDijkstra(g, srcIdx, []uint32{dstIdx}, cellID, wf, nil)
 	if _, reached := costs[dstIdx]; !reached {
 		return nil
 	}

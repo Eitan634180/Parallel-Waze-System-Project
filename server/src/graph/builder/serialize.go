@@ -20,7 +20,7 @@ import (
 
 const (
 	fileMagic   = "NAVI"
-	fileVersion = uint16(1)
+	fileVersion = uint16(2)
 
 	nodesFileName      = "nodes.bin"
 	edgesFileName      = "edges.bin"
@@ -395,19 +395,19 @@ func saveCells(g *Graph, path string) error {
 		if err := writeUint32(bw, c.ID); err != nil {
 			return err
 		}
-		if err := writeUint64(bw, uint64(len(c.InternalNodeIDs))); err != nil {
+		if err := writeUint32(bw, uint32(len(c.InternalNodeIdxs))); err != nil {
 			return err
 		}
-		for _, nid := range c.InternalNodeIDs {
-			if err := writeUint64(bw, nid); err != nil {
+		for _, idx := range c.InternalNodeIdxs {
+			if err := writeUint32(bw, idx); err != nil {
 				return err
 			}
 		}
-		if err := writeUint64(bw, uint64(len(c.BoundaryNodeIDs))); err != nil {
+		if err := writeUint32(bw, uint32(len(c.BoundaryNodeIdxs))); err != nil {
 			return err
 		}
-		for _, nid := range c.BoundaryNodeIDs {
-			if err := writeUint64(bw, nid); err != nil {
+		for _, idx := range c.BoundaryNodeIdxs {
+			if err := writeUint32(bw, idx); err != nil {
 				return err
 			}
 		}
@@ -429,31 +429,31 @@ func loadCells(path string) ([]Cell, error) {
 		if err != nil {
 			return nil, err
 		}
-		ic, err := readUint64(br)
+		ic, err := readUint32(br)
 		if err != nil {
 			return nil, err
 		}
-		internal := make([]NodeID, ic)
+		internal := make([]uint32, ic)
 		for j := range internal {
-			v, err := readUint64(br)
+			v, err := readUint32(br)
 			if err != nil {
 				return nil, err
 			}
 			internal[j] = v
 		}
-		bc, err := readUint64(br)
+		bc, err := readUint32(br)
 		if err != nil {
 			return nil, err
 		}
-		boundary := make([]NodeID, bc)
+		boundary := make([]uint32, bc)
 		for j := range boundary {
-			v, err := readUint64(br)
+			v, err := readUint32(br)
 			if err != nil {
 				return nil, err
 			}
 			boundary[j] = v
 		}
-		cells[i] = Cell{ID: id, InternalNodeIDs: internal, BoundaryNodeIDs: boundary}
+		cells[i] = Cell{ID: id, InternalNodeIdxs: internal, BoundaryNodeIdxs: boundary}
 	}
 	return cells, nil
 }
