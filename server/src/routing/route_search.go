@@ -18,6 +18,10 @@ func (r *Router) twoLevelSearch(
 	srcCellID := srcNode.CellID
 	dstCellID := dstNode.CellID
 	if srcCellID == dstCellID {
+		/*
+		Technically, there could be a shorter path outside the cell, but inter-cell routes
+		are so short that the runtime difference will be negligible.
+		*/
 		steps, ok := intraSearch(g, srcIdx, dstIdx, wf, stats)
 		return steps, nil, ok
 	}
