@@ -19,35 +19,46 @@ The Parallel Waze System is a custom-built, full-stack navigation platform that 
 
 ## 🧠 2. Algorithmic Deep Dive & Traffic Management
 
-The core of the system relies on executing high-speed graph traversals against a continuously shifting data architecture. 
+The core of the system relies on executing high-speed graph traversals against a continuously shifting data architecture. [cite_start]Modern navigation systems like Waze must handle massive amounts of users at the same time, making standard algorithms like Dijkstra's or A* way too slow, which is why modern techniques rely on map preprocessing to enable quick queries at runtime[cite: 60].
 
-### A. Graph Construction & Inertial Flow Partitioning
-Running raw routing queries on millions of OpenStreetMap nodes is too slow for real-time, interactive navigation. We solved this during the pre-processing phase.
-1. The Map Builder parses raw `.osm.pbf` files into a network of Nodes and Edges.
-2. We utilize an algorithm inspired by **Inertial Flow Partitioning** to divide the massive map into manageable geographical "cells".
-3. Any road (Edge) that crosses a cell boundary is promoted to the **Overlay Graph**. 
-4. **The Result:** A highly optimized one-level hierarchical overlay graph. The system can instantly calculate routes across the country by traversing local base-graph cells only at the origin and destination, leaping across the high-speed Overlay Graph for the vast majority of the journey.
+### A. Graph Partitioning: Inertial Flow Recursive Bisection
+[cite_start]To create an optimized map hierarchy, the Map Builder engine uses the Inertial Flow Recursive Bisection algorithm to divide the map into roughly equal sized cells, minimizing the number of cross edges connecting them[cite: 82, 83].
+* [cite_start]The algorithm bisects the graph into two halves with a random-angled line, and projects nodes onto it[cite: 85].
+* [cite_start]We group nodes that fall in the two extremes, set them as super-source and super-sink[cite: 86].
+* [cite_start]It then runs Dinic's Min-cut\Max-flow algorithm (BFS level-graphs + DFS flow augmentations) to partition the graph by the fewest amount of crossing edges[cite: 86].
+* [cite_start]We recursively divide the resulting subgraphs in parallel until the cells match our desired dimensions, resulting in a minimal sized overlay graph[cite: 87].
 
-### B. Customizable Route Planning (Dynamic A* / Dijkstra)
-When a driver requests a path, the `Routing Engine` invokes an A* or Dijkstra-based search algorithms. 
-* The crux of the algorithm is the **Edge Weight Function**: `Estimated Time = Distance / Speed`.
-* The `Speed` is not static. While it starts as the legal speed limit of the road, the algorithm actively requests the *current* speed multiplier from the concurrent `Traffic Store`. 
-* This customizable approach means the algorithm naturally pivots away from congested avenues directly toward faster neighborhood streets, as the literal mathematical cost of using main roads spikes.
+### B. The Overlay Graph Architecture
+[cite_start]The engine solves real-time routing using Customizable Route Planning (CRP), which separates the map structure (topology) and the dynamic costs (metric)[cite: 63]. [cite_start]The system constructs a base graph and a minimal Overlay Graph consisting of these three components[cite: 72, 75]:
+* [cite_start]**Gate Nodes:** Boundary Nodes with at least one edge going outside their cell[cite: 75].
+* [cite_start]**Cross Cell Edges:** Road segments connecting gates of two different cells[cite: 76].
+* [cite_start]**Shortcut Edges:** Logical edges connecting every gate node to every gate node within the same cell, creating a clique[cite: 77, 78]. [cite_start]The weight of the shortcut is set to the weight of the shortest route inside the cell[cite: 78].
+[cite_start]The overlay graph omits all inter cell nodes and edges, making it much smaller[cite: 79].
 
-### C. Live Speed Feedback Loop & Traffic Propagation
-The "Waze" experience comes from our living traffic environment. 
-1. **Feedback Loop:** As a simulated car moves slowly across an edge, the server tracks its velocity. If it drops below the road's current ETA (e.g., 10km/h in a 50km/h zone), the simulation recognizes heavy congestion and lowers the global `Speed` value of that edge in the `Traffic Store`.
-2. **Instant Impact:** Any new route calculation instantly incorporates this penalty, automatically diverting new cars.
-3. **The Decay Loop:** Traffic doesn't last forever. A concurrent `Background Decay Loop` constantly scrubs the `Traffic Store`, slowly increasing the speed of traffic-heavy roads back to their default, empty-road state mathematically over time. This prevents permanent phantom traffic jams.
+### C. Two-Level Routing Algorithm (CRP)
+[cite_start]When finding the shortest route between source (s) and target (t) coordinates, a Two-Level Search is executed on the base and overlay graphs[cite: 89, 90]:
+1. [cite_start]**Initialization:** Find the closest node to s (sign it as s') and the closest node to t (sign it as t')[cite: 91]. [cite_start]Identify the cell containing s' (Cell A) and the cell containing t' (Cell B)[cite: 92].
+2. [cite_start]**Source Cell Search:** Run Dijkstra inside cell A to find the shortest distance from s' to every gate of cell A[cite: 93].
+3. [cite_start]**Overlay Leap:** Once on the gates of Cell A, hop onto the overlay graph[cite: 94]. [cite_start]Using the distances from the first Dijkstra as starting costs, execute A* with the gates of cell B as destinations[cite: 95].
+4. [cite_start]**Target Cell Search:** Once on the bounds of Cell B, hop back into the base graph and run Dijkstra inside cell B to find the shortest path from the gates to t'[cite: 96].
+5. [cite_start]**Path Unpacking:** The naive approach is to store the full path for every shortcut edge, but this is very memory wasteful[cite: 99, 100]. [cite_start]Instead, the engine dynamically unpacks the route by running a quick Dijkstra inside the edge's cell to retrieve the path[cite: 100]. [cite_start]Since the cells are small, it barely affects runtime[cite: 101].
 
-### D. Concurrent Background Rerouting Algorithm
-We don't just route you once; we constantly protect your ETA.
-1. When a user gets a route, their `Session Manager` constantly watches the `Traffic Store`.
-2. If an edge on their pending polyline suffers a traffic hit, the Session recognizes the ETA inflation.
-3. It fires an async request into a **Worker Pool** to check for an alternative route from their exact current coordinate. 
-4. **Hysteresis Threshold:** The worker finds the *new* optimal route. If the new ETA is significantly better than the old affected ETA (beyond a threshold, e.g., saves > 2 minutes), the server accepts it. This threshold prevents volatile "route-flapping" (changing routes constantly for purely minor gains).
-5. The system pushes the new path to the client via WebSockets perfectly seamlessly without disrupting the ongoing drive.
+### D. The Customization Phase (Live Traffic)
+[cite_start]In a dynamic system, the base edge's weight changes all the time[cite: 108]. [cite_start]Since CRP decouples the graph's metric and topology, all we need to do is update the weights of the overlay edges[cite: 110].
+* [cite_start]The system calculates new shortcut edge weights by running a Dijkstra from every gate node inside its cell, and the calculations are all independent and calculated in parallel[cite: 111, 114].
+* [cite_start]As an optimization, the system only recomputes weights for cells with at least one base edge whose weight has changed since the last customization phase[cite: 115]. [cite_start]Since cells are small, calculating the weights of all the edges in the cell is faster than filtering only the edges that have been affected[cite: 116].
+* [cite_start]Shortcut edge weights for a cell are kept in a matrix of size d x d (d is the number of gates in the cell), so updating weights is simply updating the values of this matrix[cite: 117].
 
+### E. Real-Time Optimizations
+* [cite_start]**Admissible Heuristics:** To assist the A* approach natively on the Overlay Graph, the algorithm references an Admissible Heuristic equation calculating Euclidean geometric distance divided by maxSearch SpeedMps[cite: 150]. A safe lower-bound heuristic guides the algorithm towards the target without over-analyzing trailing edge trees[cite: 151].
+* [cite_start]**Local Route Patching:** Recalculating a complete global A* path across the entire overlay graph every time a major highway boundary gets congested can be computationally expensive[cite: 152]. [cite_start]If a crossover edge (Edge A) experiences a large increase in traffic, the system halts the global recalculation and runs a bounded, "mini-Dijkstra" localized search exclusively between the two boundary nodes defining Edge A[cite: 154, 155]. [cite_start]If the newly patched local detour resolves the traffic spike within an acceptable threshold, the system patches the original route without ever triggering an expensive global Overlay Graph sweep[cite: 156].
+
+### F. Data Structures: Compressed Sparse Row (CSR)
+[cite_start]The system utilizes Compressed Sparse Row (CSR) storage for memory efficiency and cache friendly adjacency lookups[cite: 120]. [cite_start]Both the base and the overlay graph are represented in CSR format using two main arrays[cite: 127, 128]:
+* [cite_start]**Nodes Array:** A single array containing all nodes sorted by their source node[cite: 129].
+* [cite_start]**Edges Array:** A single array containing all edges (or IDs) sorted by their source node[cite: 130].
+* [cite_start]**Offsets Array:** An array where Offsets[i] points to the index in the Edges array where Node i's outgoing edges begin[cite: 131].
+* [cite_start]**ID Mapping:** Instant mapping translates OSM ID to Node Index and OSM ID to Gate Index[cite: 133, 135]. [cite_start]This allows the routing engine to "hop" from the base graph directly into the correct entry point of the overlay graph[cite: 136].
 ---
 
 ## 🏗️ 3. System Architecture & Concurrency
