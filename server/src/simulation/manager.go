@@ -38,9 +38,9 @@ type EdgeTravel struct {
 }
 
 type SessionBridge struct {
-	Create     func(route routing.Route, stepIdx int, lat, lon float64) *session.Session
+	Create      func(route routing.Route, stepIdx int, lat, lon float64) *session.Session
 	ProcessPing func(sess *session.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel)
-	Destroy    func(sess *session.Session)
+	Destroy     func(sess *session.Session)
 }
 
 type car struct {
@@ -60,14 +60,14 @@ type car struct {
 }
 
 type Manager struct {
-	mu          sync.RWMutex
-	g           *builder.Graph
-	store       *traffic.Store
-	rng         *rand.Rand
-	nextID      int64
-	cars        map[string]*car
-	subscribers map[int]chan []CarSnapshot
-	nextSubID   int
+	mu            sync.RWMutex
+	g             *builder.Graph
+	store         *traffic.Store
+	rng           *rand.Rand
+	nextID        int64
+	cars          map[string]*car
+	subscribers   map[int]chan []CarSnapshot
+	nextSubID     int
 	sessionBridge SessionBridge
 }
 
@@ -451,13 +451,15 @@ func syncCarWithSession(c *car) {
 
 	c.session.Mu.RLock()
 	sessionRoute := c.session.Route
+	sessionRouteRevision := c.session.RouteRevision
 	sessionStepIdx := c.session.StepIdx
 	sessionLat := c.session.LastLat
 	sessionLon := c.session.LastLon
 	c.session.Mu.RUnlock()
 
-	if sessionRoute.ID != "" && sessionRoute.ID != c.route.ID {
+	if sessionRouteRevision != 0 && sessionRouteRevision != c.routeRevision {
 		c.route = sessionRoute
+		c.routeRevision = sessionRouteRevision
 		c.stepIdx = sessionStepIdx
 		c.progressM = 0
 		c.edgeTimeS = 0

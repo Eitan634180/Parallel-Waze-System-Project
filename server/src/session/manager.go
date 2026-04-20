@@ -99,6 +99,7 @@ func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
 	s.Mu.Lock()
 	oldSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	s.Route = newRoute
+	s.RouteRevision++
 	s.StepIdx = InitialStepIndex(newRoute)
 	s.CurrentEdgeID = CurrentEdgeForStep(newRoute, s.StepIdx)
 	s.CurrentEdgeAt = now()
@@ -177,6 +178,7 @@ func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan OutMsg)
 	session := &Session{
 		ID:            id,
 		Route:         route,
+		RouteRevision: 1,
 		StepIdx:       stepIdx,
 		CurrentEdgeID: CurrentEdgeForStep(route, stepIdx),
 		LastPing:      now(),

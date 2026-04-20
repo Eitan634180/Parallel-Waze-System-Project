@@ -97,8 +97,8 @@ func (m *Manager) flaggedSessions() []*Session {
 // route computation. Used by shouldAcceptOptimizationCandidate to detect if the
 // session has moved or been rerouted while the computation was in progress.
 type sessionVersion struct {
-	stepIdx int
-	routeID string
+	stepIdx       int
+	routeRevision uint64
 }
 
 func optimizationCandidate(
@@ -117,7 +117,7 @@ func optimizationCandidate(
 
 	oldETA := computeETALocked(s, g, store)
 	snapLat, snapLon := s.LastLat, s.LastLon
-	version := sessionVersion{stepIdx: s.StepIdx, routeID: s.Route.ID}
+	version := sessionVersion{stepIdx: s.StepIdx, routeRevision: s.RouteRevision}
 	s.Mu.Unlock()
 
 	start := time.Now()
@@ -136,7 +136,7 @@ func optimizationCandidate(
 func shouldAcceptOptimizationCandidate(s *Session, candidate routing.Route, v sessionVersion, oldETA, newETA float32) bool {
 	s.Mu.RLock()
 	tooSoon := time.Since(s.LastReroute) < rerouteCooldown
-	stale := s.StepIdx != v.stepIdx || s.Route.ID != v.routeID
+	stale := s.StepIdx != v.stepIdx || s.RouteRevision != v.routeRevision
 	s.Mu.RUnlock()
 
 	if tooSoon || stale {

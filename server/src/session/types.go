@@ -54,9 +54,10 @@ type NavigationDebug struct {
 
 // Session stores the mutable state for one active navigation session.
 type Session struct {
-	Mu    sync.RWMutex
-	ID    string
-	Route routing.Route
+	Mu            sync.RWMutex
+	ID            string
+	Route         routing.Route
+	RouteRevision uint64
 
 	StepIdx       int
 	CurrentEdgeID *uint32

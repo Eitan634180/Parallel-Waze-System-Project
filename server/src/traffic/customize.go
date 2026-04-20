@@ -41,7 +41,7 @@ type customizationIndex struct {
 	intraCellAdj               builder.AdjacencyList
 	weightSnapshotMu           sync.Mutex
 	weightMultipliers          []float32
-	cellBoundaryIdxs  [][]uint32
+	cellBoundaryIdxs           [][]uint32
 }
 
 type liveDijkstraScratch struct {
@@ -73,7 +73,7 @@ func RunCustomization(ctx context.Context, g *builder.Graph, store *Store) {
 // current live traffic multipliers in store.
 func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 	start := time.Now()
-	
+
 	pendingEdges := store.SwapPending()
 	if len(pendingEdges) == 0 {
 		return
@@ -91,7 +91,7 @@ func CustomizeOverlayWeights(g *builder.Graph, store *Store) {
 	if len(g.Edges) > 0 {
 		coverage = float64(len(pendingEdges)) / float64(len(g.Edges))
 	}
-	
+
 	isDirty := make([]bool, len(g.Edges))
 	for _, id := range pendingEdges {
 		if int(id) < len(isDirty) {
@@ -306,7 +306,7 @@ func buildCustomizationIndex(g *builder.Graph) *customizationIndex {
 			Offsets: make([]uint32, len(g.Nodes)+1),
 			EdgeIDs: make([]builder.EdgeID, 0, len(g.BaseAdj.EdgeIDs)),
 		},
-		cellBoundaryIdxs:  make([][]uint32, len(g.Cells)),
+		cellBoundaryIdxs: make([][]uint32, len(g.Cells)),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx

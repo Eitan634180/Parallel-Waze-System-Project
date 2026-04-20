@@ -36,10 +36,10 @@ type Store struct {
 	prev        []float32 // multiplier at last propagation snapshot
 	prevDensity []int     // density at last propagation snapshot
 
-	dirtyEdges   []builder.EdgeID // persistent: edges whose multiplier != 1.0 (for decay)
-	isDirty      []bool
-	pendingEdges []builder.EdgeID // consumable: edges whose weights changed recently (for customization)
-	isPending    []bool
+	dirtyEdges    []builder.EdgeID // persistent: edges whose multiplier != 1.0 (for decay)
+	isDirty       []bool
+	pendingEdges  []builder.EdgeID // consumable: edges whose weights changed recently (for customization)
+	isPending     []bool
 	activityEdges []builder.EdgeID // edges whose density changed since last snapshot
 	isActive      []bool
 
@@ -160,12 +160,22 @@ func (s *Store) recordObservedRatio(id builder.EdgeID, ratio, alpha float32) {
 	if ratio <= 0 {
 		return
 	}
+	if ratio < 1.0 {
+		ratio = 1.0
+	}
 	s.mu.Lock()
 	s.ensure(id)
 	cur := s.weight[id]
 	updated := alpha*ratio + (1-alpha)*cur
+	if updated < 1.0 {
+		updated = 1.0
+	}
+	if updated == cur {
+		s.mu.Unlock()
+		return
+	}
 	s.weight[id] = updated
-	
+
 	if !s.isDirty[id] {
 		s.isDirty[id] = true
 		s.dirtyEdges = append(s.dirtyEdges, id)
@@ -317,7 +327,7 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 		s.snapshotDedup[id] = false
 		s.isActive[id] = false
 	}
-	
+
 	s.activityEdges = s.activityEdges[:0]
 
 	return changed
@@ -336,8 +346,8 @@ func (s *Store) SwapPending() []builder.EdgeID {
 	return pending
 }
 
-// RefillPendingForBenchmarks artificially repopulates the pending queue with all 
-// currently dirty edges. This is strictly for synthetic benchmarks where ApplyDecay 
+// RefillPendingForBenchmarks artificially repopulates the pending queue with all
+// currently dirty edges. This is strictly for synthetic benchmarks where ApplyDecay
 // does not naturally run between customization cycles.
 func (s *Store) RefillPendingForBenchmarks() {
 	s.mu.Lock()
@@ -364,7 +374,7 @@ func (s *Store) ApplyDecay(factor, tolerance float32) {
 		if diff < 0 {
 			diff = -diff
 		}
-		
+
 		if diff < tolerance {
 			s.weight[id] = 1.0
 			s.isDirty[id] = false

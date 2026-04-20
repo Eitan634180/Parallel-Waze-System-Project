@@ -25,7 +25,7 @@ func doReroute(
 ) {
 	s.Mu.RLock()
 	destination, ok := routeDestination(s.Route)
-	version := sessionVersion{stepIdx: s.StepIdx, routeID: s.Route.ID}
+	version := sessionVersion{stepIdx: s.StepIdx, routeRevision: s.RouteRevision}
 	s.Mu.RUnlock()
 	if !ok {
 		return
@@ -77,7 +77,7 @@ func sessionVersionChanged(s *Session, expected *sessionVersion) bool {
 
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
-	return s.StepIdx != expected.stepIdx || s.Route.ID != expected.routeID
+	return s.StepIdx != expected.stepIdx || s.RouteRevision != expected.routeRevision
 }
 
 func replaceSessionRoute(s *Session, route routing.Route, store *traffic.Store, mgr *Manager, now time.Time, reason string) {

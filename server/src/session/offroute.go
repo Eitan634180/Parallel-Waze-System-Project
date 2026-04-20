@@ -1,9 +1,9 @@
 package session
 
 import (
-	"nav-system/src/utilities"
 	"nav-system/src/graph/builder"
 	"nav-system/src/routing"
+	"nav-system/src/utilities"
 )
 
 const (
