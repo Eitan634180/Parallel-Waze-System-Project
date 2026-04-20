@@ -1,12 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
 
 type createSessionRequest struct {
-	RouteID string `json:"route_id"`
+	RouteID *string `json:"route_id"`
 }
 type createSessionResponse struct {
 	SessionID string `json:"session_id"`
@@ -48,9 +49,13 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := req.validate(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	start := time.Now()
-	route, ok := s.cachedRoute(req.RouteID)
+	route, ok := s.cachedRoute(*req.RouteID)
 	if !ok {
 		http.Error(w, "route not found", http.StatusNotFound)
 		return
@@ -61,9 +66,16 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		slowSessionCreationLogThreshold,
 		start,
 		"[api] session create route=%s",
-		req.RouteID,
+		*req.RouteID,
 	)
 	writeJSON(w, http.StatusOK, createSessionResponse{SessionID: session.ID})
+}
+
+func (r createSessionRequest) validate() error {
+	if r.RouteID == nil || *r.RouteID == "" {
+		return fmt.Errorf("missing required field route_id")
+	}
+	return nil
 }
 
 func (s *Server) deleteSession(w http.ResponseWriter, id string) {

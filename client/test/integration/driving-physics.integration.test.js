@@ -32,6 +32,16 @@ test('calculateNewPosition advances across edges and records completed edge even
     assert.equal(nextPos.length, 2);
 });
 
+test('calculateNewPosition snaps to the segment endpoint on exact completion', () => {
+    loadDrivingFixture();
+    const nextPos = calculateNewPosition(100, 1000);
+
+    assert.equal(state.drive.currentRoadIndex, 1);
+    assert.deepEqual(nextPos, [32.0000, 34.0010]);
+    assert.equal(state.sim.pendingEdgeEvents.length, 1);
+    assert.equal(state.sim.pendingEdgeEvents[0].edge_id, 11);
+});
+
 test('limitMovementByTraffic reduces movement when a simulated car is ahead on the route', () => {
     loadDrivingFixture();
     state.sim.cars = [{ id: 'sim-1', lat: 32.0000, lon: 34.0002 }];

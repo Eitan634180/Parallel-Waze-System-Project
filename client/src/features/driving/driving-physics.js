@@ -33,6 +33,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
             const observedMs = Math.max(0, state.sim.currentEdgeTimeMs - spilloverMs);
             remainingMeters -= distanceLeftOnStep;
             remainingElapsedMs = spilloverMs;
+            pos = endPos;
 
             if (step.edge_id !== null && step.edge_id !== undefined && observedMs > 0) {
                 state.sim.pendingEdgeEvents.push({ edge_id: step.edge_id, observed_sec: observedMs / MS_PER_SECOND });

@@ -15,6 +15,8 @@ func TestTwoLevelRouterMatchesBaseGraphOracle(t *testing.T) {
 	}{
 		{graph: "diamond_graph.json", cases: "diamond_cases.json", size: 2},
 		{graph: "grid_city.json", cases: "grid_cases.json", size: 3},
+		{graph: "one_way_detour_graph.json", cases: "one_way_detour_cases.json", size: 2},
+		{graph: "disconnected_graph.json", cases: "disconnected_cases.json", size: 2},
 	}
 
 	for _, tc := range testCases {

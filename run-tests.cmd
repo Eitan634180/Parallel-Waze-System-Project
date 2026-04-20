@@ -30,7 +30,7 @@ if not exist "%SERVER_CACHE_DIR%" mkdir "%SERVER_CACHE_DIR%"
 pushd "%SERVER_DIR%"
 set "CGO_ENABLED=0"
 set "GOCACHE=%SERVER_CACHE_DIR%"
-go test ./test/...
+go test ./...
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 exit /b %EXIT_CODE%
@@ -39,7 +39,7 @@ exit /b %EXIT_CODE%
 if not exist "%SERVER_CACHE_DIR%" mkdir "%SERVER_CACHE_DIR%"
 pushd "%SERVER_DIR%"
 set "GOCACHE=%SERVER_CACHE_DIR%"
-go test -race ./test/...
+go test -race ./src/api ./src/graph/builder ./src/mapstore ./src/regionpicker ./src/routing ./src/session ./src/simulation ./src/traffic ./src/utilities ./test/component ./test/correctness ./test/external ./test/integration ./test/unit
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 exit /b %EXIT_CODE%
@@ -119,8 +119,8 @@ echo   run-tests.cmd [target]
 echo.
 echo Targets:
 echo   all          Run server, server-race, client and end2end suites
-echo   server       Run all Go server tests under server\test
-echo   server-race  Run all Go server tests under server\test with -race
+echo   server       Run all Go server package tests under server\...
+echo   server-race  Run race-enabled Go tests for server source, unit, integration, correctness and component packages
 echo   client       Run all client tests under client\test
 echo   end2end      Run Playwright smoke tests
 echo   help         Show this help

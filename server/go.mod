@@ -3,6 +3,7 @@ module nav-system
 go 1.26.1
 
 require (
+	github.com/RoaringBitmap/roaring v1.9.4
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/paulmach/osm v0.9.0
@@ -11,7 +12,6 @@ require (
 
 require (
 	github.com/DataDog/czlib v0.0.0-20240814115052-86a9592b3985 // indirect
-	github.com/RoaringBitmap/roaring v1.9.4 // indirect
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/paulmach/orb v0.12.0 // indirect

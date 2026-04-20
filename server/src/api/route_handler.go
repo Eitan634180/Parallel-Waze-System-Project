@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -9,11 +10,11 @@ import (
 )
 
 type routeRequest struct {
-	SrcLat       float64 `json:"src_lat"`
-	SrcLon       float64 `json:"src_lon"`
-	DstLat       float64 `json:"dst_lat"`
-	DstLon       float64 `json:"dst_lon"`
-	Alternatives int     `json:"alternatives"` // number of alternatives (total = 1 + alternatives)
+	SrcLat       *float64 `json:"src_lat"`
+	SrcLon       *float64 `json:"src_lon"`
+	DstLat       *float64 `json:"dst_lat"`
+	DstLon       *float64 `json:"dst_lon"`
+	Alternatives int      `json:"alternatives"` // number of alternatives (total = 1 + alternatives)
 }
 
 type routeResponse struct {
@@ -35,10 +36,14 @@ func (s *Server) handleRoute(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := req.validate(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	start := time.Now()
 	routeCount := normalizedRouteCount(req.Alternatives)
-	routes := s.router.Compute(req.SrcLat, req.SrcLon, req.DstLat, req.DstLon, routeCount, s.liveWeightFunc())
+	routes := s.router.Compute(*req.SrcLat, *req.SrcLon, *req.DstLat, *req.DstLon, routeCount, s.liveWeightFunc())
 	logSlowOperation(
 		slowRouteRequestLogThreshold,
 		start,
@@ -68,6 +73,28 @@ func normalizedRouteCount(alternatives int) int {
 		return maxRouteCount
 	}
 	return count
+}
+
+func (r routeRequest) validate() error {
+	switch {
+	case r.SrcLat == nil:
+		return fmt.Errorf("missing required field src_lat")
+	case r.SrcLon == nil:
+		return fmt.Errorf("missing required field src_lon")
+	case r.DstLat == nil:
+		return fmt.Errorf("missing required field dst_lat")
+	case r.DstLon == nil:
+		return fmt.Errorf("missing required field dst_lon")
+	}
+
+	if *r.SrcLat < -90 || *r.SrcLat > 90 || *r.DstLat < -90 || *r.DstLat > 90 {
+		return fmt.Errorf("latitude must be between -90 and 90")
+	}
+	if *r.SrcLon < -180 || *r.SrcLon > 180 || *r.DstLon < -180 || *r.DstLon > 180 {
+		return fmt.Errorf("longitude must be between -180 and 180")
+	}
+
+	return nil
 }
 
 func (s *Server) routeResponsePayload(route routing.Route) session.RoutePayload {

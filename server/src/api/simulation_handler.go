@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -67,6 +68,10 @@ func (s *Server) handleSimulationRandom(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	if err := req.validateRandom(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	count := normalizedSimulationCount(req.Count)
 	routes := s.randomSimulationRoutes(count)
@@ -77,6 +82,10 @@ func (s *Server) handleSimulationRandom(w http.ResponseWriter, r *http.Request) 
 func (s *Server) spawnSimulationCars(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeJSON[simulationSpawnRequest](w, r)
 	if !ok {
+		return
+	}
+	if err := req.validate(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -286,4 +295,21 @@ func maxFloat64(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func (r simulationSpawnRequest) validate() error {
+	if len(r.RouteIDs) == 0 {
+		return fmt.Errorf("route_ids must not be empty")
+	}
+	if r.MinStepIndex < 0 {
+		return fmt.Errorf("min_step_index must be non-negative")
+	}
+	return nil
+}
+
+func (r simulationSpawnRequest) validateRandom() error {
+	if r.MinStepIndex < 0 {
+		return fmt.Errorf("min_step_index must be non-negative")
+	}
+	return nil
 }

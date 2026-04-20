@@ -1,0 +1,12 @@
+[
+  {
+    "name": "cluster_a_internal",
+    "src": { "lat": 32.0000, "lon": 34.0000 },
+    "dst": { "lat": 32.0010, "lon": 34.0010 }
+  },
+  {
+    "name": "cluster_b_internal",
+    "src": { "lat": 32.0100, "lon": 34.0100 },
+    "dst": { "lat": 32.0110, "lon": 34.0110 }
+  }
+]

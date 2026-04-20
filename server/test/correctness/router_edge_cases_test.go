@@ -3,6 +3,7 @@ package correctness_test
 import (
 	"testing"
 
+	"nav-system/src/graph/builder"
 	"nav-system/src/routing"
 	"nav-system/src/traffic"
 	"nav-system/test/testutil"
@@ -153,5 +154,77 @@ func TestRouteDistanceIsPositive(t *testing.T) {
 		if routes[0].TotalDistM <= 0 {
 			t.Fatalf("%s: total route distance must be positive, got %.4f", routeCase.Name, routes[0].TotalDistM)
 		}
+	}
+}
+
+func TestRouterRespectsOneWayDetours(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "one_way_detour_graph.json", 2)
+	routeCases := testutil.LoadRouteCases(t, "one_way_detour_cases.json")
+	nodeIdx := fixture.Graph.BuildNodeIdxMap()
+
+	reverseCase := routeCases[1]
+	routes := fixture.Router.Compute(
+		reverseCase.Src.Lat, reverseCase.Src.Lon,
+		reverseCase.Dst.Lat, reverseCase.Dst.Lon,
+		1, routing.BaseWeight,
+	)
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 reverse detour route, got %d", len(routes))
+	}
+	validated := testutil.AssertRouteValid(t, fixture.Graph, routes[0], routing.BaseWeight)
+	if validated.SourceIdx != nodeIdx[3] || validated.TargetIdx != nodeIdx[1] {
+		t.Fatalf("unexpected endpoints for reverse detour route: %+v", validated)
+	}
+
+	expectedNodes := []uint32{nodeIdx[3], nodeIdx[6], nodeIdx[5], nodeIdx[4], nodeIdx[1]}
+	if len(routes[0].Steps) != len(expectedNodes) {
+		t.Fatalf("reverse detour route should have %d steps, got %d", len(expectedNodes), len(routes[0].Steps))
+	}
+	for i, step := range routes[0].Steps {
+		if step.NodeIdx != expectedNodes[i] {
+			t.Fatalf("reverse detour route step %d = %d, want %d", i, step.NodeIdx, expectedNodes[i])
+		}
+	}
+}
+
+func TestRouterReturnsNoRouteAcrossDisconnectedComponents(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "disconnected_graph.json", 2)
+	routes := fixture.Router.Compute(32.0000, 34.0000, 32.0110, 34.0110, 1, routing.BaseWeight)
+	if len(routes) != 0 {
+		t.Fatalf("disconnected graph should not yield a route, got %d", len(routes))
+	}
+}
+
+func TestOneWayGraphRoutesStillMatchOracle(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "one_way_detour_graph.json", 2)
+	for _, routeCase := range testutil.LoadRouteCases(t, "one_way_detour_cases.json") {
+		t.Run(routeCase.Name, func(t *testing.T) {
+			srcIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Src.Lat, routeCase.Src.Lon)
+			dstIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Dst.Lat, routeCase.Dst.Lon)
+			oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, routing.BaseWeight)
+			if !ok {
+				t.Fatalf("oracle could not find path for %s", routeCase.Name)
+			}
+
+			routes := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
+			if len(routes) != 1 {
+				t.Fatalf("expected 1 route, got %d", len(routes))
+			}
+			testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, routing.BaseWeight)
+		})
+	}
+}
+
+func TestTrafficStoreHandlesSparseHighEdgeIDs(t *testing.T) {
+	store := traffic.NewStore()
+	const base = float32(15.0)
+	edgeID := builder.EdgeID(4096)
+
+	store.RecordObservation(edgeID, base*2, base)
+	if multiplier := store.Multiplier(edgeID); multiplier <= 1.0 {
+		t.Fatalf("expected sparse edge %d to record a multiplier, got %.3f", edgeID, multiplier)
+	}
+	if live := store.LiveWeight(edgeID, base); live <= base {
+		t.Fatalf("expected sparse edge %d live weight to exceed base, got %.3f", edgeID, live)
 	}
 }
