@@ -44,19 +44,27 @@ type SessionBridge struct {
 }
 
 type car struct {
-	id         string
-	route      routing.Route
-	stepIdx    int
-	progressM  float32
-	edgeTimeS  float32
+	mu                     sync.Mutex
+	id                     string
+	route                  routing.Route
+	routeRevision          uint64
+	stepIdx                int
+	progressM              float32
+	edgeTimeS              float32
 	lastObservationSampleS float32
-	lat        float64
-	lon        float64
-	paceBias   float32
-	edgeActive bool
-	lastSpeedKmh float32
-	pendingEdgeEvents []EdgeTravel
-	session    *session.Session
+	lat                    float64
+	lon                    float64
+	paceBias               float32
+	edgeActive             bool
+	lastSpeedKmh           float32
+	pendingEdgeEvents      []EdgeTravel
+	session                *session.Session
+	removed                bool
+}
+
+type carRef struct {
+	id  string
+	car *car
 }
 
 type Manager struct {
@@ -132,7 +140,12 @@ func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) in
 
 		if m.sessionBridge.Create != nil && m.sessionBridge.ProcessPing != nil && m.sessionBridge.Destroy != nil {
 			c.session = m.sessionBridge.Create(route, c.stepIdx, c.lat, c.lon)
-			c.edgeActive = c.session != nil && route.Steps[startIndex+1].EdgeID != nil
+			if c.session != nil {
+				c.session.Mu.RLock()
+				c.routeRevision = c.session.RouteRevision
+				c.session.Mu.RUnlock()
+				c.edgeActive = route.Steps[startIndex+1].EdgeID != nil
+			}
 		} else if route.Steps[startIndex+1].EdgeID != nil {
 			m.store.EnterEdge(builder.EdgeID(*route.Steps[startIndex+1].EdgeID))
 			c.edgeActive = true
@@ -144,20 +157,33 @@ func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) in
 }
 
 func (m *Manager) Clear() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, c := range m.cars {
-		if c.session != nil && m.sessionBridge.Destroy != nil {
-			m.sessionBridge.Destroy(c.session)
+	cars := m.detachCars()
+	for _, ref := range cars {
+		c := ref.car
+		c.mu.Lock()
+		if c.removed {
+			c.mu.Unlock()
 			continue
 		}
-		if c.edgeActive && c.stepIdx < len(c.route.Steps) && c.route.Steps[c.stepIdx].EdgeID != nil {
-			m.store.LeaveEdge(builder.EdgeID(*c.route.Steps[c.stepIdx].EdgeID))
+		c.removed = true
+		sessionRef := c.session
+		edgeActive := c.edgeActive
+		stepIdx := c.stepIdx
+		route := c.route
+		c.mu.Unlock()
+
+		if sessionRef != nil && m.sessionBridge.Destroy != nil {
+			m.sessionBridge.Destroy(sessionRef)
+			continue
+		}
+		if edgeActive && stepIdx < len(route.Steps) && route.Steps[stepIdx].EdgeID != nil {
+			m.store.LeaveEdge(builder.EdgeID(*route.Steps[stepIdx].EdgeID))
 		}
 	}
-	clear(m.cars)
+
+	m.mu.Lock()
 	m.broadcastLocked()
+	m.mu.Unlock()
 }
 
 func (m *Manager) Count() int {
@@ -189,28 +215,50 @@ func (m *Manager) Unsubscribe(id int) {
 }
 
 func (m *Manager) tick(dtSec float32) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	refs := m.carRefs()
+	finished := make([]carRef, 0)
 
-	for id, c := range m.cars {
-		if !advanceCar(c, m.g, m.store, dtSec, m.sessionBridge.ProcessPing) {
-			if c.session != nil && m.sessionBridge.Destroy != nil {
-				m.sessionBridge.Destroy(c.session)
-			}
-			delete(m.cars, id)
+	for _, ref := range refs {
+		c := ref.car
+		c.mu.Lock()
+		if c.removed {
+			c.mu.Unlock()
 			continue
 		}
-		if c.session != nil {
+
+		alive := advanceCar(c, m.g, m.store, dtSec, m.sessionBridge.ProcessPing)
+		if alive && c.session != nil {
 			syncCarWithSession(c)
 		}
+		if !alive {
+			c.removed = true
+			finished = append(finished, ref)
+		}
+		c.mu.Unlock()
+	}
+
+	for _, ref := range finished {
+		if ref.car.session != nil && m.sessionBridge.Destroy != nil {
+			m.sessionBridge.Destroy(ref.car.session)
+		}
+	}
+
+	m.mu.Lock()
+	for _, ref := range finished {
+		delete(m.cars, ref.id)
 	}
 	m.broadcastLocked()
+	m.mu.Unlock()
 }
 
 func (m *Manager) snapshotLocked() []CarSnapshot {
 	out := make([]CarSnapshot, 0, len(m.cars))
 	for _, c := range m.cars {
-		out = append(out, CarSnapshot{ID: c.id, Lat: c.lat, Lon: c.lon})
+		c.mu.Lock()
+		if !c.removed {
+			out = append(out, CarSnapshot{ID: c.id, Lat: c.lat, Lon: c.lon})
+		}
+		c.mu.Unlock()
 	}
 	return out
 }
@@ -469,4 +517,27 @@ func syncCarWithSession(c *car) {
 
 	c.lat = sessionLat
 	c.lon = sessionLon
+}
+
+func (m *Manager) carRefs() []carRef {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	refs := make([]carRef, 0, len(m.cars))
+	for id, c := range m.cars {
+		refs = append(refs, carRef{id: id, car: c})
+	}
+	return refs
+}
+
+func (m *Manager) detachCars() []carRef {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	refs := make([]carRef, 0, len(m.cars))
+	for id, c := range m.cars {
+		refs = append(refs, carRef{id: id, car: c})
+	}
+	clear(m.cars)
+	return refs
 }

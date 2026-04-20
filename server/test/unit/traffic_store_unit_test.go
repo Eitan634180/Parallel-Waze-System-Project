@@ -55,6 +55,22 @@ func TestTrafficStoreRecordObservationIgnoresNonPositiveBase(t *testing.T) {
 	}
 }
 
+func TestTrafficStoreRecordSpeedSampleDoesNotDropBelowFreeFlow(t *testing.T) {
+	store := traffic.NewStore()
+	const edgeID = builder.EdgeID(8)
+
+	store.RecordSpeedSample(edgeID, 120, 10, 100)
+
+	if got := store.Multiplier(edgeID); got != 1.0 {
+		t.Fatalf("expected multiplier floor at 1.0, got %.4f", got)
+	}
+	for _, changed := range store.DirtySnapshot() {
+		if changed.EdgeID == edgeID {
+			t.Fatalf("free-flow sample should not produce a dirty snapshot entry: %+v", changed)
+		}
+	}
+}
+
 func TestTrafficStoreMultipleObservationsConverge(t *testing.T) {
 	store := traffic.NewStore()
 	const edgeID = builder.EdgeID(1)
