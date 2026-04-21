@@ -4,9 +4,10 @@ import (
 	"slices"
 	"testing"
 
-	"nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
 	"nav-system/src/routing"
-	"nav-system/src/traffic"
+	trafficcustomization "nav-system/src/traffic/customization"
+	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
 )
 
@@ -238,7 +239,7 @@ func assertGeneratedFixtureMatchesOracle(
 	}
 }
 
-func crossCellQueries(g *builder.Graph, queries []testutil.GeneratedQuery) []testutil.GeneratedQuery {
+func crossCellQueries(g *model.Graph, queries []testutil.GeneratedQuery) []testutil.GeneratedQuery {
 	nodeIdx := g.BuildNodeIdxMap()
 	filtered := make([]testutil.GeneratedQuery, 0, len(queries))
 	for _, query := range queries {
@@ -253,8 +254,8 @@ func crossCellQueries(g *builder.Graph, queries []testutil.GeneratedQuery) []tes
 }
 
 func longCrossCellQueries(
-	g *builder.Graph,
-	nodeIDs []builder.NodeID,
+	g *model.Graph,
+	nodeIDs []model.NodeRawID,
 	wf routing.WeightFunc,
 	minEdges int,
 	limit int,
@@ -317,10 +318,10 @@ func longPathModes(name string) []routing.RoutingMode {
 	return []routing.RoutingMode{routing.RoutingModeHierarchical}
 }
 
-func applyGeneratedTraffic(t testing.TB, g *builder.Graph) routing.WeightFunc {
+func applyGeneratedTraffic(t testing.TB, g *model.Graph) routing.WeightFunc {
 	t.Helper()
 
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 	for edgeID := range g.Edges {
 		edge := &g.Edges[edgeID]
 		switch edgeID % 4 {
@@ -333,8 +334,8 @@ func applyGeneratedTraffic(t testing.TB, g *builder.Graph) routing.WeightFunc {
 		}
 	}
 
-	traffic.CustomizeOverlayWeights(g, store)
-	return func(edge *builder.Edge) float32 {
+	trafficcustomization.CustomizeOverlayWeights(g, store)
+	return func(edge *model.Edge) float32 {
 		return store.LiveWeight(edge.ID, edge.Weight)
 	}
 }

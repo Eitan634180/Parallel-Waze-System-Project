@@ -9,9 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
+	"nav-system/src/graph/store"
 	"nav-system/src/routing"
-	"nav-system/src/utilities"
+	"nav-system/src/core/utilities"
 )
 
 type CorpusSpec struct {
@@ -36,7 +37,7 @@ type CorpusCase struct {
 
 type Fixture struct {
 	Region string
-	Graph  *builder.Graph
+	Graph  *model.Graph
 	Snap   *routing.SnapIndex
 	Corpus []CorpusCase
 }
@@ -47,7 +48,7 @@ func LoadFixture(corpusName string) (*Fixture, error) {
 		return nil, err
 	}
 
-	graph, err := builder.LoadGraph(filepath.Join(moduleRoot(), "data", "map", corpusSpec.Region))
+	graph, err := store.LoadGraph(filepath.Join(moduleRoot(), "data", "map", corpusSpec.Region))
 	if err != nil {
 		return nil, fmt.Errorf("load graph %q: %w", corpusSpec.Region, err)
 	}
@@ -65,7 +66,7 @@ func LoadFixture(corpusName string) (*Fixture, error) {
 	}, nil
 }
 
-func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
+func BuildCorpus(g *model.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 	if spec.Count <= 0 {
 		return nil, fmt.Errorf("corpus count must be positive")
 	}

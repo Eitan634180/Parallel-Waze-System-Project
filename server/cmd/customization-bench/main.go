@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"nav-system/src/graph/builder"
-	"nav-system/src/traffic"
+	"nav-system/src/graph/model"
+	graphstore "nav-system/src/graph/store"
+	trafficcustomization "nav-system/src/traffic/customization"
+	trafficstore "nav-system/src/traffic/store"
 )
 
 const customizationBenchLogPrefix = "customization-bench:"
@@ -31,17 +33,17 @@ func main() {
 	defer runtime.GOMAXPROCS(originalGOMAXPROCS)
 
 	log.Printf("%s loading graph from %s", customizationBenchLogPrefix, *dataDir)
-	g, err := builder.LoadGraph(*dataDir)
+	g, err := graphstore.LoadGraph(*dataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
 	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs), len(g.Edges))
 
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 	dirtyEdges := seedDirtyStore(g, store)
 	log.Printf("%s store ready (%d dirty edges)", customizationBenchLogPrefix, dirtyEdges)
 
-	traffic.CustomizeOverlayWeights(g, store)
+	trafficcustomization.CustomizeOverlayWeights(g, store)
 	log.Printf("%s finished initial customization", customizationBenchLogPrefix)
 
 	for _, workers := range workerCounts {
@@ -51,7 +53,7 @@ func main() {
 		for run := 1; run <= *runs; run++ {
 			store.RefillPendingForBenchmarks()
 			start := time.Now()
-			traffic.CustomizeOverlayWeights(g, store)
+			trafficcustomization.CustomizeOverlayWeights(g, store)
 			elapsed := time.Since(start)
 			total += elapsed
 			log.Printf("%s workers=%d run=%d duration=%s", customizationBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))
@@ -62,7 +64,7 @@ func main() {
 	}
 }
 
-func seedDirtyStore(g *builder.Graph, store *traffic.Store) int {
+func seedDirtyStore(g *model.Graph, store *trafficstore.Store) int {
 	dirtyEdges := 0
 	for _, edge := range g.Edges {
 		if edge.Weight <= 0 {

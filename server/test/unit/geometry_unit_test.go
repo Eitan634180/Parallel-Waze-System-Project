@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"nav-system/src/utilities"
+	"nav-system/src/core/utilities"
 )
 
 // ──────────────────────────────────────────────

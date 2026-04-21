@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"nav-system/src/graph/builder"
+	"nav-system/src/graph/store"
 	"nav-system/src/routing"
 	"nav-system/test/testutil"
 )
@@ -29,7 +29,7 @@ func TestGraphHopperSanity(t *testing.T) {
 		t.Skip("set GRAPHHOPPER_BASE_URL and GRAPHHOPPER_GRAPH_DIR to enable external sanity checks")
 	}
 
-	g, err := builder.LoadGraph(dataDir)
+	g, err := store.LoadGraph(dataDir)
 	if err != nil {
 		t.Fatalf("LoadGraph(%s): %v", dataDir, err)
 	}

@@ -3,9 +3,9 @@ package correctness_test
 import (
 	"testing"
 
-	"nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
 	"nav-system/src/routing"
-	"nav-system/src/traffic"
+	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
 )
 
@@ -86,7 +86,7 @@ func TestAlternativeRoutesBothValid(t *testing.T) {
 // recorded the live weight on that edge is higher than the base weight.
 func TestTrafficCongestedEdgeRaisesLiveWeight(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 
 	edgeID := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
 	baseWeight := fixture.Graph.Edges[edgeID].Weight
@@ -216,9 +216,9 @@ func TestOneWayGraphRoutesStillMatchOracle(t *testing.T) {
 }
 
 func TestTrafficStoreHandlesSparseHighEdgeIDs(t *testing.T) {
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 	const base = float32(15.0)
-	edgeID := builder.EdgeID(4096)
+	edgeID := model.EdgeID(4096)
 
 	store.RecordObservation(edgeID, base*2, base)
 	if multiplier := store.Multiplier(edgeID); multiplier <= 1.0 {

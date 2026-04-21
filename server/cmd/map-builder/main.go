@@ -1,4 +1,3 @@
-// build-map serializes graph data structures to disk for fast startup.
 package main
 
 import (
@@ -10,7 +9,7 @@ import (
 	"time"
 
 	"nav-system/src/graph/builder"
-	"nav-system/src/graph/importer"
+	"nav-system/src/graph/store"
 )
 
 const builderLogPrefix = "builder:"
@@ -42,7 +41,7 @@ func main() {
 
 	log.Printf("%s parsing %s", builderLogPrefix, *pbfPath)
 	t := time.Now()
-	pr, err := importer.ParsePBF(*pbfPath)
+	pr, err := builder.ParsePBF(*pbfPath)
 	if err != nil {
 		log.Fatalf("ParsePBF: %v", err)
 	}
@@ -51,7 +50,7 @@ func main() {
 
 	log.Printf("%s building base graph", builderLogPrefix)
 	t = time.Now()
-	g, err := builder.BuildGraph(pr)
+	g, err := builder.BuildBaseGraph(pr)
 	if err != nil {
 		log.Fatalf("BuildGraph: %v", err)
 	}
@@ -79,7 +78,7 @@ func main() {
 
 	log.Printf("%s writing graph to %s", builderLogPrefix, *outDir)
 	t = time.Now()
-	if err := builder.SaveGraph(g, *outDir); err != nil {
+	if err := store.SaveGraph(g, *outDir); err != nil {
 		log.Fatalf("SaveGraph: %v", err)
 	}
 	log.Printf("%s graph written in %s", builderLogPrefix, time.Since(t).Round(time.Millisecond))

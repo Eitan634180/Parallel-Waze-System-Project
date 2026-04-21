@@ -1,10 +1,14 @@
 package session
 
-import "context"
+import (
+	"context"
+
+	coreconfig "nav-system/src/core/config"
+)
 
 // RunExpiry removes sessions whose last ping is too old.
 func (m *Manager) RunExpiry(ctx context.Context) {
-	ticker := newTicker(expiryCheckInterval)
+	ticker := newTicker(coreconfig.SessionExpiryCheckInterval)
 	defer ticker.Stop()
 
 	for {
@@ -18,7 +22,7 @@ func (m *Manager) RunExpiry(ctx context.Context) {
 }
 
 func (m *Manager) expireSessions() {
-	cutoff := now().Add(-sessionExpiry)
+	cutoff := now().Add(-coreconfig.SessionExpiry)
 
 	m.mu.RLock()
 	sessions := make([]*Session, 0, len(m.sessions))

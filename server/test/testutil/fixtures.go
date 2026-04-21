@@ -9,10 +9,11 @@ import (
 
 	"nav-system/src/api"
 	"nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
 	"nav-system/src/routing"
 	"nav-system/src/session"
 	"nav-system/src/simulation"
-	"nav-system/src/traffic"
+	trafficstore "nav-system/src/traffic/store"
 )
 
 type graphFixture struct {
@@ -42,16 +43,16 @@ type RouteCase struct {
 }
 
 type BuiltGraphFixture struct {
-	Graph  *builder.Graph
+	Graph  *model.Graph
 	Snap   *routing.SnapIndex
 	Router *routing.Router
 }
 
 type ServerFixture struct {
-	Graph      *builder.Graph
+	Graph      *model.Graph
 	Snap       *routing.SnapIndex
 	Router     *routing.Router
-	Store      *traffic.Store
+	Store      *trafficstore.Store
 	Manager    *session.Manager
 	Simulation *simulation.Manager
 	Server     *api.Server
@@ -117,7 +118,7 @@ func BuildGraphFixture(tb testing.TB, graphName string, maxCellSize int) *BuiltG
 	tb.Helper()
 
 	parseResult := LoadParseResultFixture(tb, graphName)
-	g, err := builder.BuildGraph(parseResult)
+	g, err := builder.BuildBaseGraph(parseResult)
 	if err != nil {
 		tb.Fatalf("BuildGraph(%s): %v", graphName, err)
 	}
@@ -138,9 +139,13 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 	tb.Helper()
 
 	built := BuildGraphFixture(tb, graphName, maxCellSize)
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 	manager := session.NewManager()
-	simManager := simulation.NewManager(built.Graph, store)
+	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routing.WeightFunc {
+		return func(e *model.Edge) float32 {
+			return store.LiveWeight(e.ID, e.Weight)
+		}
+	})
 	srv := api.NewServer(built.Graph, store, manager, built.Router, simManager)
 
 	return &ServerFixture{
@@ -154,7 +159,7 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 	}
 }
 
-func FindEdgeID(tb testing.TB, g *builder.Graph, fromID, toID builder.NodeID) builder.EdgeID {
+func FindEdgeID(tb testing.TB, g *model.Graph, fromID, toID model.NodeRawID) model.EdgeID {
 	tb.Helper()
 
 	nodeIdx := g.BuildNodeIdxMap()

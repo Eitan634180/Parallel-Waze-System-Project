@@ -3,8 +3,9 @@ package session
 import (
 	"sync"
 
-	"nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
 	"nav-system/src/routing"
+	"nav-system/src/routing/engine"
 
 	"github.com/google/uuid"
 )
@@ -13,20 +14,20 @@ import (
 type Manager struct {
 	mu              sync.RWMutex
 	sessions        map[string]*Session
-	edgeSubscribers map[builder.EdgeID]map[string]struct{}
+	edgeSubscribers map[model.EdgeID]map[string]struct{}
 }
 
 // NewManager creates an empty Manager.
 func NewManager() *Manager {
 	return &Manager{
 		sessions:        make(map[string]*Session),
-		edgeSubscribers: make(map[builder.EdgeID]map[string]struct{}),
+		edgeSubscribers: make(map[model.EdgeID]map[string]struct{}),
 	}
 }
 
 // Create registers a new session for the given route and returns it.
 func (m *Manager) Create(route routing.Route) *Session {
-	return m.create(route, InitialStepIndex(route), make(chan OutMsg, 256))
+	return m.create(route, engine.InitialStepIndex(route), make(chan OutMsg, 256))
 }
 
 // CreateHeadless registers a session without an attached outbound message queue.
@@ -90,7 +91,7 @@ func (m *Manager) AdvanceStep(sessionID string, route routing.Route, oldIdx, new
 			continue
 		}
 
-		m.unsubscribeEdge(sessionID, builder.EdgeID(*edgeID))
+		m.unsubscribeEdge(sessionID, model.EdgeID(*edgeID))
 	}
 }
 
@@ -100,8 +101,8 @@ func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
 	oldSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	s.Route = newRoute
 	s.RouteRevision++
-	s.StepIdx = InitialStepIndex(newRoute)
-	s.CurrentEdgeID = CurrentEdgeForStep(newRoute, s.StepIdx)
+	s.StepIdx = engine.InitialStepIndex(newRoute)
+	s.CurrentEdgeID = engine.CurrentEdgeForStep(newRoute, s.StepIdx)
 	s.CurrentEdgeAt = now()
 	newSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	sessionID := s.ID
@@ -115,7 +116,7 @@ func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
 }
 
 // SubscribersOf returns a snapshot of session IDs subscribed to edgeID.
-func (m *Manager) SubscribersOf(edgeID builder.EdgeID) []string {
+func (m *Manager) SubscribersOf(edgeID model.EdgeID) []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -127,13 +128,24 @@ func (m *Manager) SubscribersOf(edgeID builder.EdgeID) []string {
 	return ids
 }
 
+func (m *Manager) ActiveSessions() []*Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	sessions := make([]*Session, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		sessions = append(sessions, session)
+	}
+	return sessions
+}
+
 func (m *Manager) subscribeEdges(sessionID string, steps []routing.Step) {
 	for _, step := range steps {
 		if step.EdgeID == nil {
 			continue
 		}
 
-		edgeID := builder.EdgeID(*step.EdgeID)
+		edgeID := model.EdgeID(*step.EdgeID)
 		if m.edgeSubscribers[edgeID] == nil {
 			m.edgeSubscribers[edgeID] = make(map[string]struct{})
 		}
@@ -147,11 +159,11 @@ func (m *Manager) unsubscribeEdges(sessionID string, steps []routing.Step) {
 			continue
 		}
 
-		m.unsubscribeEdge(sessionID, builder.EdgeID(*step.EdgeID))
+		m.unsubscribeEdge(sessionID, model.EdgeID(*step.EdgeID))
 	}
 }
 
-func (m *Manager) unsubscribeEdge(sessionID string, edgeID builder.EdgeID) {
+func (m *Manager) unsubscribeEdge(sessionID string, edgeID model.EdgeID) {
 	subscribers, ok := m.edgeSubscribers[edgeID]
 	if !ok {
 		return
@@ -180,7 +192,7 @@ func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan OutMsg)
 		Route:         route,
 		RouteRevision: 1,
 		StepIdx:       stepIdx,
-		CurrentEdgeID: CurrentEdgeForStep(route, stepIdx),
+		CurrentEdgeID: engine.CurrentEdgeForStep(route, stepIdx),
 		LastPing:      now(),
 		LastReroute:   now(),
 		SendChan:      sendChan,

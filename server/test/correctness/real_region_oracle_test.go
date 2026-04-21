@@ -10,9 +10,10 @@ import (
 	"runtime"
 	"testing"
 
-	"nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
+	"nav-system/src/graph/store"
 	"nav-system/src/routing"
-	"nav-system/src/utilities"
+	"nav-system/src/core/utilities"
 	"nav-system/test/testutil"
 )
 
@@ -70,7 +71,7 @@ func TestRealRegionCrossCellRoutesMatchOracle(t *testing.T) {
 	}
 }
 
-func assertRealRegionRouteMatchesOracleCost(t *testing.T, g *builder.Graph, route routing.Route, oracle testutil.OraclePath) {
+func assertRealRegionRouteMatchesOracleCost(t *testing.T, g *model.Graph, route routing.Route, oracle testutil.OraclePath) {
 	t.Helper()
 
 	validated := testutil.AssertRouteValid(t, g, route, routing.BaseWeight)
@@ -93,7 +94,7 @@ func assertApprox32Local(t *testing.T, actual, expected float32, message string)
 	}
 }
 
-func buildRealRegionCrossCellCorpus(tb testing.TB, g *builder.Graph, spec realRegionCorpusSpec) []realRegionQuery {
+func buildRealRegionCrossCellCorpus(tb testing.TB, g *model.Graph, spec realRegionCorpusSpec) []realRegionQuery {
 	tb.Helper()
 
 	if spec.Count <= 0 {
@@ -182,10 +183,10 @@ func loadRealRegionCorpusSpec(tb testing.TB, corpusName string) realRegionCorpus
 	return spec
 }
 
-func loadRealRegionGraph(tb testing.TB, region string) *builder.Graph {
+func loadRealRegionGraph(tb testing.TB, region string) *model.Graph {
 	tb.Helper()
 
-	graph, err := builder.LoadGraph(filepath.Join(realRegionModuleRoot(), "data", "map", region))
+	graph, err := store.LoadGraph(filepath.Join(realRegionModuleRoot(), "data", "map", region))
 	if err != nil {
 		tb.Fatalf("LoadGraph(%s): %v", region, err)
 	}

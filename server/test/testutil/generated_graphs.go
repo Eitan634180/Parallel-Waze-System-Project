@@ -6,21 +6,22 @@ import (
 	"testing"
 
 	"nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
 	"nav-system/src/routing"
 )
 
 type GeneratedQuery struct {
 	Name      string
-	SrcNodeID builder.NodeID
-	DstNodeID builder.NodeID
+	SrcNodeID model.NodeRawID
+	DstNodeID model.NodeRawID
 }
 
 type GeneratedWeightedFixture struct {
-	Graph      *builder.Graph
+	Graph      *model.Graph
 	Snap       *routing.SnapIndex
 	Router     *routing.Router
 	WeightFunc routing.WeightFunc
-	NodeIDs    []builder.NodeID
+	NodeIDs    []model.NodeRawID
 	Queries    []GeneratedQuery
 }
 
@@ -38,13 +39,13 @@ func BuildGeneratedWeightedFixture(tb testing.TB, seed int64, width, height, que
 	tb.Helper()
 
 	spec := generatedCorridorSpec{
-		seed:         seed,
-		width:        width,
-		height:       height,
-		nodeSpacing:  0.001,
-		queryCount:   queryCount,
-		maxCellSize:  maxCellSize,
-		allowOneWay:  false,
+		seed:        seed,
+		width:       width,
+		height:      height,
+		nodeSpacing: 0.001,
+		queryCount:  queryCount,
+		maxCellSize: maxCellSize,
+		allowOneWay: false,
 	}
 	return buildGeneratedCorridorFixture(tb, spec)
 }
@@ -53,13 +54,13 @@ func BuildGeneratedDirectedFixture(tb testing.TB, seed int64, width, height, que
 	tb.Helper()
 
 	spec := generatedCorridorSpec{
-		seed:         seed,
-		width:        width,
-		height:       height,
-		nodeSpacing:  0.001,
-		queryCount:   queryCount,
-		maxCellSize:  maxCellSize,
-		allowOneWay:  true,
+		seed:        seed,
+		width:       width,
+		height:      height,
+		nodeSpacing: 0.001,
+		queryCount:  queryCount,
+		maxCellSize: maxCellSize,
+		allowOneWay: true,
 	}
 	return buildGeneratedCorridorFixture(tb, spec)
 }
@@ -76,7 +77,7 @@ func buildGeneratedCorridorFixture(tb testing.TB, spec generatedCorridorSpec) *G
 
 	rng := rand.New(rand.NewSource(spec.seed))
 	parseResult, nodeIDs := generatedGridParseResult(spec, rng)
-	g, err := builder.BuildGraph(parseResult)
+	g, err := builder.BuildBaseGraph(parseResult)
 	if err != nil {
 		tb.Fatalf("BuildGraph(seed=%d): %v", spec.seed, err)
 	}
@@ -100,9 +101,9 @@ func buildGeneratedCorridorFixture(tb testing.TB, spec generatedCorridorSpec) *G
 	}
 }
 
-func generatedGridParseResult(spec generatedCorridorSpec, rng *rand.Rand) (*builder.ParseResult, []builder.NodeID) {
+func generatedGridParseResult(spec generatedCorridorSpec, rng *rand.Rand) (*builder.ParseResult, []model.NodeRawID) {
 	nodes := make(map[uint64]*builder.RawNode, spec.width*spec.height)
-	nodeIDs := make([]builder.NodeID, 0, spec.width*spec.height)
+	nodeIDs := make([]model.NodeRawID, 0, spec.width*spec.height)
 
 	const (
 		baseLat = 32.0
@@ -175,7 +176,7 @@ func generatedGridParseResult(spec generatedCorridorSpec, rng *rand.Rand) (*buil
 	}, nodeIDs
 }
 
-func generatedQueries(seed int64, nodeIDs []builder.NodeID, queryCount int, rng *rand.Rand) []GeneratedQuery {
+func generatedQueries(seed int64, nodeIDs []model.NodeRawID, queryCount int, rng *rand.Rand) []GeneratedQuery {
 	queries := make([]GeneratedQuery, 0, queryCount)
 	for i := 0; i < queryCount; i++ {
 		srcNode := nodeIDs[rng.Intn(len(nodeIDs))]
@@ -194,7 +195,7 @@ func generatedQueries(seed int64, nodeIDs []builder.NodeID, queryCount int, rng 
 	return queries
 }
 
-func ExhaustiveGeneratedQueries(nodeIDs []builder.NodeID) []GeneratedQuery {
+func ExhaustiveGeneratedQueries(nodeIDs []model.NodeRawID) []GeneratedQuery {
 	queries := make([]GeneratedQuery, 0, len(nodeIDs)*(len(nodeIDs)-1))
 	for _, srcNodeID := range nodeIDs {
 		for _, dstNodeID := range nodeIDs {
@@ -211,7 +212,7 @@ func ExhaustiveGeneratedQueries(nodeIDs []builder.NodeID) []GeneratedQuery {
 	return queries
 }
 
-func generatedMultipliers(g *builder.Graph, rng *rand.Rand) []float32 {
+func generatedMultipliers(g *model.Graph, rng *rand.Rand) []float32 {
 	multipliers := make([]float32, len(g.Edges))
 	for i := range multipliers {
 		bucket := i % 5
@@ -223,7 +224,7 @@ func generatedMultipliers(g *builder.Graph, rng *rand.Rand) []float32 {
 }
 
 func generatedWeightFunc(multipliers []float32) routing.WeightFunc {
-	return func(edge *builder.Edge) float32 {
+	return func(edge *model.Edge) float32 {
 		weight := edge.Weight
 		if int(edge.ID) < len(multipliers) {
 			weight *= multipliers[int(edge.ID)]
@@ -234,16 +235,16 @@ func generatedWeightFunc(multipliers []float32) routing.WeightFunc {
 
 func horizontalRoadClass(row, col int) uint8 {
 	if (row+col)%3 == 0 {
-		return builder.RoadPrimary
+		return model.RoadPrimary
 	}
-	return builder.RoadSecondary
+	return model.RoadSecondary
 }
 
 func verticalRoadClass(row, col int) uint8 {
 	if (row+col)%2 == 0 {
-		return builder.RoadResidential
+		return model.RoadResidential
 	}
-	return builder.RoadTertiary
+	return model.RoadTertiary
 }
 
 func horizontalSpeedKmh(row, col int) float32 {

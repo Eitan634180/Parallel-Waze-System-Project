@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"nav-system/src/graph/builder"
+	graphbuilder "nav-system/src/graph/builder"
+	graphstore "nav-system/src/graph/store"
 )
 
 const overlayBenchLogPrefix = "overlay-bench:"
@@ -29,7 +30,7 @@ func main() {
 	defer runtime.GOMAXPROCS(originalGOMAXPROCS)
 
 	log.Printf("%s loading graph from %s", overlayBenchLogPrefix, *dataDir)
-	g, err := builder.LoadGraph(*dataDir)
+	g, err := graphstore.LoadGraph(*dataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
@@ -39,7 +40,7 @@ func main() {
 		var total time.Duration
 		for run := 1; run <= *runs; run++ {
 			runtime.GOMAXPROCS(workers)
-			elapsed := builder.BuildOverlayGraph(g, workers)
+			elapsed := graphbuilder.BuildOverlayGraph(g, workers)
 			total += elapsed
 			log.Printf("%s workers=%d run=%d duration=%s", overlayBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))
 		}

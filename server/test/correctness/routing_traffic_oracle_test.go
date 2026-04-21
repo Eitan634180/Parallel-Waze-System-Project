@@ -3,21 +3,22 @@ package correctness_test
 import (
 	"testing"
 
-	"nav-system/src/graph/builder"
-	"nav-system/src/traffic"
+	"nav-system/src/graph/model"
+	trafficcustomization "nav-system/src/traffic/customization"
+	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
 )
 
 func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 
 	congestedEdge := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
 	baseWeight := fixture.Graph.Edges[congestedEdge].Weight
 	store.RecordObservation(congestedEdge, baseWeight*40, baseWeight)
-	traffic.CustomizeOverlayWeights(fixture.Graph, store)
+	trafficcustomization.CustomizeOverlayWeights(fixture.Graph, store)
 
-	liveWeight := func(edge *builder.Edge) float32 {
+	liveWeight := func(edge *model.Edge) float32 {
 		return store.LiveWeight(edge.ID, edge.Weight)
 	}
 

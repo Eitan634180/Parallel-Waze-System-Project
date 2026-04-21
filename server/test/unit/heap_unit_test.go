@@ -3,7 +3,7 @@ package unit_test
 import (
 	"testing"
 
-	"nav-system/src/utilities"
+	"nav-system/src/core/utilities"
 )
 
 func TestHeapMaintainsAscendingOrder(t *testing.T) {

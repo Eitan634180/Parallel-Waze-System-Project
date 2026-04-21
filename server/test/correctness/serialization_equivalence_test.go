@@ -3,7 +3,7 @@ package correctness_test
 import (
 	"testing"
 
-	"nav-system/src/graph/builder"
+	"nav-system/src/graph/store"
 	"nav-system/src/routing"
 	"nav-system/test/testutil"
 )
@@ -31,11 +31,11 @@ func TestSerializationRoundTripPreservesRoutingResults(t *testing.T) {
 			}
 
 			dir := t.TempDir()
-			if err := builder.SaveGraph(fixture.Graph, dir); err != nil {
+			if err := store.SaveGraph(fixture.Graph, dir); err != nil {
 				t.Fatalf("SaveGraph: %v", err)
 			}
 
-			reloadedGraph, err := builder.LoadGraph(dir)
+			reloadedGraph, err := store.LoadGraph(dir)
 			if err != nil {
 				t.Fatalf("LoadGraph: %v", err)
 			}

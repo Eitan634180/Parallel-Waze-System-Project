@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nav-system/src/mapstore"
+	"nav-system/src/regions"
 )
 
 // ──────────────────────────────────────────────
@@ -13,14 +13,14 @@ import (
 // ──────────────────────────────────────────────
 
 func TestMapstoreIsReadyReturnsFalseForNonExistentDir(t *testing.T) {
-	if mapstore.IsReady(filepath.Join(t.TempDir(), "does-not-exist")) {
+	if regions.IsReady(filepath.Join(t.TempDir(), "does-not-exist")) {
 		t.Fatal("non-existent directory should not be ready")
 	}
 }
 
 func TestMapstoreIsReadyReturnsFalseWhenEmptyDir(t *testing.T) {
 	dir := t.TempDir()
-	if mapstore.IsReady(dir) {
+	if regions.IsReady(dir) {
 		t.Fatal("empty directory should not be ready")
 	}
 }
@@ -37,7 +37,7 @@ func TestMapstoreIsReadyReturnsFalseWhenOneFileMissing(t *testing.T) {
 			t.Fatalf("write %s: %v", f, err)
 		}
 	}
-	if mapstore.IsReady(dir) {
+	if regions.IsReady(dir) {
 		t.Fatal("directory missing one file should not be ready")
 	}
 }
@@ -47,23 +47,23 @@ func TestMapstoreIsReadyReturnsFalseWhenOneFileMissing(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestMapstoreListReadyReturnsNilForNonExistentRoot(t *testing.T) {
-	regions, err := mapstore.ListReady(filepath.Join(t.TempDir(), "nonexistent"))
+	readyRegions, err := regions.ListReady(filepath.Join(t.TempDir(), "nonexistent"))
 	if err != nil {
 		t.Fatalf("ListReady on missing root should not error, got: %v", err)
 	}
-	if regions != nil {
-		t.Fatalf("ListReady on missing root should return nil, got %v", regions)
+	if readyRegions != nil {
+		t.Fatalf("ListReady on missing root should return nil, got %v", readyRegions)
 	}
 }
 
 func TestMapstoreListReadyReturnsNilForEmptyRoot(t *testing.T) {
 	root := t.TempDir()
-	regions, err := mapstore.ListReady(root)
+	readyRegions, err := regions.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady on empty root should not error: %v", err)
 	}
-	if len(regions) != 0 {
-		t.Fatalf("empty root should produce no regions, got %d", len(regions))
+	if len(readyRegions) != 0 {
+		t.Fatalf("empty root should produce no regions, got %d", len(readyRegions))
 	}
 }
 
@@ -85,17 +85,17 @@ func TestMapstoreListReadyIsAlphabeticallySorted(t *testing.T) {
 		}
 	}
 
-	regions, err := mapstore.ListReady(root)
+	readyRegions, err := regions.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady: %v", err)
 	}
-	if len(regions) != 3 {
-		t.Fatalf("expected 3 regions, got %d", len(regions))
+	if len(readyRegions) != 3 {
+		t.Fatalf("expected 3 regions, got %d", len(readyRegions))
 	}
 	expected := []string{"region-a", "region-m", "region-z"}
 	for i, want := range expected {
-		if regions[i].ID != want {
-			t.Fatalf("region[%d].ID = %q want %q", i, regions[i].ID, want)
+		if readyRegions[i].ID != want {
+			t.Fatalf("region[%d].ID = %q want %q", i, readyRegions[i].ID, want)
 		}
 	}
 }
@@ -112,14 +112,14 @@ func TestMapstoreListReadyDirFieldMatchesPath(t *testing.T) {
 		}
 	}
 
-	regions, err := mapstore.ListReady(root)
+	readyRegions, err := regions.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady: %v", err)
 	}
-	if len(regions) != 1 {
-		t.Fatalf("expected 1 region, got %d", len(regions))
+	if len(readyRegions) != 1 {
+		t.Fatalf("expected 1 region, got %d", len(readyRegions))
 	}
-	if regions[0].Dir != regionDir {
-		t.Fatalf("Dir field mismatch: got %q want %q", regions[0].Dir, regionDir)
+	if readyRegions[0].Dir != regionDir {
+		t.Fatalf("Dir field mismatch: got %q want %q", readyRegions[0].Dir, regionDir)
 	}
 }

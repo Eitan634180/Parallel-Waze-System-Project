@@ -13,12 +13,15 @@ import (
 	"time"
 
 	"nav-system/src/api"
-	"nav-system/src/graph/builder"
-	"nav-system/src/mapstore"
+	"nav-system/src/graph/model"
+	graphstore "nav-system/src/graph/store"
+	"nav-system/src/regions"
 	"nav-system/src/routing"
+	routingmonitor "nav-system/src/routing/monitor"
 	"nav-system/src/session"
 	"nav-system/src/simulation"
-	"nav-system/src/traffic"
+	trafficcustomization "nav-system/src/traffic/customization"
+	trafficstore "nav-system/src/traffic/store"
 )
 
 const serverLogPrefix = "server:"
@@ -36,19 +39,19 @@ func main() {
 
 	if *dataDir == "" {
 		mapRoot := filepath.Join(".", "data", "map")
-		regions, err := mapstore.ListReady(mapRoot)
+		availableRegions, err := regions.ListReady(mapRoot)
 		if err != nil {
 			log.Fatalf("scanning map directory: %v", err)
 		}
-		switch len(regions) {
+		switch len(availableRegions) {
 		case 0:
 			log.Fatalf("%s no preprocessed regions found in %s. Run region-picker first.", serverLogPrefix, mapRoot)
 		case 1:
-			*dataDir = regions[0].Dir
-			log.Printf("%s auto-selected region: %s", serverLogPrefix, regions[0].ID)
+			*dataDir = availableRegions[0].Dir
+			log.Printf("%s auto-selected region: %s", serverLogPrefix, availableRegions[0].ID)
 		default:
 			log.Printf("%s multiple regions available in %s:", serverLogPrefix, mapRoot)
-			for _, r := range regions {
+			for _, r := range availableRegions {
 				log.Printf("%s   %s", serverLogPrefix, r.ID)
 			}
 			log.Fatalf("%s specify --data <dir> to choose a region", serverLogPrefix)
@@ -57,7 +60,7 @@ func main() {
 
 	log.Printf("%s loading graph from %s", serverLogPrefix, *dataDir)
 	t := time.Now()
-	g, err := builder.LoadGraph(*dataDir)
+	g, err := graphstore.LoadGraph(*dataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
@@ -72,12 +75,16 @@ func main() {
 	si := routing.BuildSnapIndex(g)
 	log.Printf("%s snap index ready in %s", serverLogPrefix, time.Since(t).Round(time.Millisecond))
 
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 	mgr := session.NewManager()
-	sim := simulation.NewManager(g, store)
 	router := routing.NewRouterWithMode(g, si, routingMode)
+	sim := simulation.NewManager(g, store, router, func() routing.WeightFunc {
+		return func(e *model.Edge) float32 {
+			return store.LiveWeight(e.ID, e.Weight)
+		}
+	})
 	log.Printf("%s routing mode: %s", serverLogPrefix, routingMode)
-	traffic.CustomizeOverlayWeights(g, store)
+	trafficcustomization.CustomizeOverlayWeights(g, store)
 	srv := api.NewServer(g, store, mgr, router, sim)
 
 	warmCtx, warmCancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -91,10 +98,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go traffic.Worker(ctx, store)
-	go traffic.RunCustomization(ctx, g, store)
+	go trafficstore.Worker(ctx, store)
+	go trafficcustomization.RunCustomization(ctx, g, store)
 	go mgr.RunExpiry(ctx)
-	go mgr.RunPropagation(ctx, store, g)
+	go routingmonitor.RunPropagation(ctx, mgr, store, g)
 	go srv.RunOptimizationSweep(ctx)
 	go srv.RunRouteCacheGC(ctx)
 	go sim.Run(ctx)

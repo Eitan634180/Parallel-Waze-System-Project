@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nav-system/src/mapstore"
+	"nav-system/src/regions"
 )
 
 func TestMapstoreReadyAndListReady(t *testing.T) {
@@ -37,21 +37,21 @@ func TestMapstoreReadyAndListReady(t *testing.T) {
 		t.Fatalf("write partial fixture: %v", err)
 	}
 
-	if !mapstore.IsReady(ready) {
+	if !regions.IsReady(ready) {
 		t.Fatal("ready directory should be considered ready")
 	}
-	if mapstore.IsReady(notReady) {
+	if regions.IsReady(notReady) {
 		t.Fatal("partial directory should not be considered ready")
 	}
 
-	regions, err := mapstore.ListReady(root)
+	readyRegions, err := regions.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady: %v", err)
 	}
-	if len(regions) != 1 {
-		t.Fatalf("ListReady returned %d regions, want 1", len(regions))
+	if len(readyRegions) != 1 {
+		t.Fatalf("ListReady returned %d regions, want 1", len(readyRegions))
 	}
-	if regions[0].ID != "region-a" {
-		t.Fatalf("ready region id = %q, want region-a", regions[0].ID)
+	if readyRegions[0].ID != "region-a" {
+		t.Fatalf("ready region id = %q, want region-a", readyRegions[0].ID)
 	}
 }
