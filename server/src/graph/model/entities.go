@@ -43,7 +43,6 @@ type OverlayEdge struct {
 // Cell is one partition region produced by recursive bisection.
 type Cell struct {
 	ID               CellID
-	InternalNodeIdxs []uint32
 	BoundaryNodeIdxs []uint32
 }
 

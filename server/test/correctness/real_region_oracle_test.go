@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"nav-system/src/graph/model"
@@ -188,6 +189,9 @@ func loadRealRegionGraph(tb testing.TB, region string) *model.Graph {
 
 	graph, err := store.LoadGraph(filepath.Join(realRegionModuleRoot(), "data", "map", region))
 	if err != nil {
+		if strings.Contains(err.Error(), "unsupported graph format version") {
+			tb.Skipf("real-region map data for %s must be rebuilt: %v", region, err)
+		}
 		tb.Fatalf("LoadGraph(%s): %v", region, err)
 	}
 	return graph

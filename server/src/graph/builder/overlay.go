@@ -18,6 +18,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		numWorkers = max(runtime.GOMAXPROCS(0), 1)
 	}
 	log.Printf("%s building overlay graph with %d workers", cellBuilderLogPrefix, numWorkers)
+	cellNodes := groupNodesByCell(g)
 
 	type cellResult struct {
 		edges []model.OverlayEdge
@@ -34,7 +35,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		go func() {
 			defer wg.Done()
 			for ci := range jobs {
-				results <- cellResult{edges: computeCellOverlayEdges(g, &g.Cells[ci])}
+				results <- cellResult{edges: computeCellOverlayEdges(g, &g.Cells[ci], cellNodes[ci])}
 			}
 		}()
 	}
@@ -80,6 +81,18 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	)
 
 	return elapsed
+}
+
+func groupNodesByCell(g *model.Graph) [][]uint32 {
+	nodesByCell := make([][]uint32, len(g.Cells))
+	for idx := range g.Nodes {
+		cellID := g.Nodes[idx].CellID
+		if int(cellID) >= len(nodesByCell) {
+			continue
+		}
+		nodesByCell[cellID] = append(nodesByCell[cellID], uint32(idx))
+	}
+	return nodesByCell
 }
 
 // DetectBoundaryNodes marks nodes that touch edges crossing a cell boundary.
@@ -134,13 +147,10 @@ func countCrossCell(edges []model.OverlayEdge) int {
 }
 
 // computeCellOverlayEdges emits cross-cell edges and intra-cell shortcuts for one cell.
-func computeCellOverlayEdges(g *model.Graph, cell *model.Cell) []model.OverlayEdge {
+func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []uint32) []model.OverlayEdge {
 	var result []model.OverlayEdge
 
-	for _, fromIdx := range cell.InternalNodeIdxs {
-		if g.Nodes[fromIdx].CellID != cell.ID {
-			continue
-		}
+	for _, fromIdx := range cell.BoundaryNodeIdxs {
 		if g.BoundaryNodeIdx[fromIdx] == -1 {
 			continue
 		}
@@ -170,7 +180,7 @@ func computeCellOverlayEdges(g *model.Graph, cell *model.Cell) []model.OverlayEd
 	}
 
 	inCell := make([]bool, len(g.Nodes))
-	for _, idx := range cell.InternalNodeIdxs {
+	for _, idx := range cellNodeIdxs {
 		inCell[idx] = true
 	}
 

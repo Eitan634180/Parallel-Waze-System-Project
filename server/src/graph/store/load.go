@@ -163,7 +163,7 @@ func loadEdges(path string) ([]model.Edge, error) {
 }
 
 func loadBaseAdj(path string) (model.AdjacencyList, error) {
-	f, offsetCount, _, err := openSequenceFile(path)
+	f, offsetCount, err := openSequenceFile(path)
 	if err != nil {
 		return model.AdjacencyList{}, err
 	}
@@ -208,18 +208,6 @@ func loadCells(path string) ([]model.Cell, error) {
 		if err != nil {
 			return nil, err
 		}
-		ic, err := readUint32(br)
-		if err != nil {
-			return nil, err
-		}
-		internal := make([]uint32, ic)
-		for j := range internal {
-			v, err := readUint32(br)
-			if err != nil {
-				return nil, err
-			}
-			internal[j] = v
-		}
 		bc, err := readUint32(br)
 		if err != nil {
 			return nil, err
@@ -232,7 +220,7 @@ func loadCells(path string) ([]model.Cell, error) {
 			}
 			boundary[j] = v
 		}
-		cells[i] = model.Cell{ID: id, InternalNodeIdxs: internal, BoundaryNodeIdxs: boundary}
+		cells[i] = model.Cell{ID: id, BoundaryNodeIdxs: boundary}
 	}
 	return cells, nil
 }
@@ -257,7 +245,7 @@ func loadBoundary(path string) ([]uint32, error) {
 }
 
 func loadOverlayAdj(path string) (model.OverlayAdjList, error) {
-	f, offsetCount, _, err := openSequenceFile(path)
+	f, offsetCount, err := openSequenceFile(path)
 	if err != nil {
 		return model.OverlayAdjList{}, err
 	}

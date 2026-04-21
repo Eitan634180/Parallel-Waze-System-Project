@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,9 @@ func TestGraphHopperSanity(t *testing.T) {
 
 	g, err := store.LoadGraph(dataDir)
 	if err != nil {
+		if strings.Contains(err.Error(), "unsupported graph format version") {
+			t.Skipf("graph data must be rebuilt before external sanity checks: %v", err)
+		}
 		t.Fatalf("LoadGraph(%s): %v", dataDir, err)
 	}
 	router := routing.NewRouter(g, routing.BuildSnapIndex(g))

@@ -166,14 +166,6 @@ func saveCells(g *model.Graph, path string) error {
 		if err := writeUint32(bw, c.ID); err != nil {
 			return err
 		}
-		if err := writeUint32(bw, uint32(len(c.InternalNodeIdxs))); err != nil {
-			return err
-		}
-		for _, idx := range c.InternalNodeIdxs {
-			if err := writeUint32(bw, idx); err != nil {
-				return err
-			}
-		}
 		if err := writeUint32(bw, uint32(len(c.BoundaryNodeIdxs))); err != nil {
 			return err
 		}

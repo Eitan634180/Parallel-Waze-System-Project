@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +11,7 @@ import (
 
 const (
 	fileMagic   = "NAVI"
-	fileVersion = uint16(3)
+	fileVersion = uint16(4)
 
 	nodesFileName      = "nodes.bin"
 	edgesFileName      = "edges.bin"
@@ -100,6 +99,10 @@ func openFile(path string) (*os.File, uint64, error) {
 		f.Close()
 		return nil, 0, err
 	}
+	if ver != fileVersion {
+		f.Close()
+		return nil, 0, fmt.Errorf("unsupported graph format version %d in %s (expected %d)", ver, path, fileVersion)
+	}
 
 	var count uint64
 	if err := binary.Read(f, le, &count); err != nil {
@@ -109,46 +112,38 @@ func openFile(path string) (*os.File, uint64, error) {
 	return f, count, nil
 }
 
-func openSequenceFile(path string) (*os.File, uint64, bool, error) {
+func openSequenceFile(path string) (*os.File, uint64, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, err
 	}
 
 	hdr := make([]byte, headerMagicSize)
-	n, err := io.ReadFull(f, hdr)
-	switch {
-	case err == nil && string(hdr) == fileMagic:
-		var ver uint16
-		if err := binary.Read(f, le, &ver); err != nil {
-			f.Close()
-			return nil, 0, false, err
-		}
-
-		var count uint64
-		if err := binary.Read(f, le, &count); err != nil {
-			f.Close()
-			return nil, 0, false, err
-		}
-		return f, count, true, nil
-	case err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF):
+	if _, err := io.ReadFull(f, hdr); err != nil {
 		f.Close()
-		return nil, 0, false, err
+		return nil, 0, err
+	}
+	if string(hdr) != fileMagic {
+		f.Close()
+		return nil, 0, fmt.Errorf("bad magic in %s", path)
 	}
 
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	var ver uint16
+	if err := binary.Read(f, le, &ver); err != nil {
 		f.Close()
-		return nil, 0, false, err
+		return nil, 0, err
 	}
-	count, err := readUint64(f)
-	if err != nil {
+	if ver != fileVersion {
 		f.Close()
-		if errors.Is(err, io.EOF) && n == 0 {
-			return nil, 0, false, io.ErrUnexpectedEOF
-		}
-		return nil, 0, false, err
+		return nil, 0, fmt.Errorf("unsupported graph format version %d in %s (expected %d)", ver, path, fileVersion)
 	}
-	return f, count, false, nil
+
+	var count uint64
+	if err := binary.Read(f, le, &count); err != nil {
+		f.Close()
+		return nil, 0, err
+	}
+	return f, count, nil
 }
 
 func writeFixed(w io.Writer, v interface{}) error { return binary.Write(w, le, v) }
