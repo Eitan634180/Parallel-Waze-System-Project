@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	routingmonitor "nav-system/src/routing/monitor"
+	navigationmonitor "nav-system/src/navigation/monitor"
 	"nav-system/test/testutil"
 )
 
@@ -15,7 +15,7 @@ func TestActiveSessionsPropagateSpeedUpdateToSubscribedSession(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go routingmonitor.RunPropagation(ctx, fixture.Manager, fixture.Store, fixture.Graph)
+	go navigationmonitor.RunPropagation(ctx, fixture.Manager, fixture.Store, fixture.Graph)
 
 	routeCase := testutil.LoadRouteCases(t, "diamond_cases.json")[0]
 	routes := requestRoutes(t, server.URL, routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1)

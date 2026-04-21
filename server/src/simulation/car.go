@@ -5,9 +5,9 @@ import (
 
 	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
+	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
-	"nav-system/src/session"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -26,7 +26,7 @@ type car struct {
 	edgeActive             bool
 	lastSpeedKmh           float32
 	pendingEdgeEvents      []EdgeTravel
-	session                *session.Session
+	session                *navigationsession.Session
 	removed                bool
 }
 
@@ -35,7 +35,7 @@ type carRef struct {
 	car *car
 }
 
-func advanceCar(c *car, g *model.Graph, store *trafficstore.Store, dtSec float32, processPing func(sess *session.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel)) bool {
+func advanceCar(c *car, g *model.Graph, store *trafficstore.Store, dtSec float32, processPing func(sess *navigationsession.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel)) bool {
 	remainingSec := dtSec
 
 	for remainingSec > 0 {

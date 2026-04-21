@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/core/utilities"
+	"nav-system/src/utilities"
 )
 
 // BuildOverlayGraph constructs the overlay adjacency list for all boundary

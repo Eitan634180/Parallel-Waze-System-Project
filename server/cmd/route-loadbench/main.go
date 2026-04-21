@@ -152,7 +152,7 @@ func runWarmup(client *http.Client, serverURL string, warmup int) error {
 		return err
 	}
 
-	resp, err := client.Post(serverURL + "/simulation/random", "application/json", bytes.NewReader(body))
+	resp, err := client.Post(serverURL+"/simulation/random", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func runWarmup(client *http.Client, serverURL string, warmup int) error {
 }
 
 func clearWarmup(client *http.Client, serverURL string) error {
-	req, err := http.NewRequest(http.MethodDelete, serverURL + "/simulation", nil)
+	req, err := http.NewRequest(http.MethodDelete, serverURL+"/simulation", nil)
 	if err != nil {
 		return err
 	}

@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/core/utilities"
+	"nav-system/src/utilities"
 )
 
 const cellBuilderLogPrefix = "cell-builder:"

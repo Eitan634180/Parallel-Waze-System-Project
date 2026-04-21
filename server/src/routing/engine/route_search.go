@@ -2,8 +2,8 @@ package engine
 
 import (
 	coreconfig "nav-system/src/core/config"
-	"nav-system/src/core/utilities"
 	"nav-system/src/graph/model"
+	"nav-system/src/utilities"
 )
 
 func (r *Router) twoLevelSearch(

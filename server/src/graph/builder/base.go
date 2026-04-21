@@ -5,8 +5,8 @@ import (
 	"math"
 	"runtime"
 
-	"nav-system/src/core/utilities"
 	"nav-system/src/graph/model"
+	"nav-system/src/utilities"
 
 	"golang.org/x/sync/errgroup"
 )

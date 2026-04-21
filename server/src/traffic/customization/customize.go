@@ -10,8 +10,8 @@ import (
 
 	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
-	"nav-system/src/core/utilities"
 	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/utilities"
 )
 
 const noOverlayEdgeIdx = ^uint32(0)

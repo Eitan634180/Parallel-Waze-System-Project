@@ -1,15 +1,15 @@
 package routing
 
 import (
+	"nav-system/src/graph/geography"
 	"nav-system/src/graph/model"
 	"nav-system/src/routing/engine"
-	"nav-system/src/routing/geometry"
 )
 
 type (
 	WeightFunc  = engine.WeightFunc
 	Router      = engine.Router
-	SnapIndex   = geometry.SnapIndex
+	SnapIndex   = geography.SnapIndex
 	Step        = engine.Step
 	Route       = engine.Route
 	RoutingMode = engine.RoutingMode
@@ -37,5 +37,5 @@ func NewRouterWithMode(g *model.Graph, si *SnapIndex, mode RoutingMode) *Router 
 }
 
 func BuildSnapIndex(g *model.Graph) *SnapIndex {
-	return geometry.BuildSnapIndex(g)
+	return geography.BuildSnapIndex(g)
 }

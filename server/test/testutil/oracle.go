@@ -6,7 +6,7 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/routing"
-	"nav-system/src/core/utilities"
+	"nav-system/src/utilities"
 )
 
 type OraclePath struct {

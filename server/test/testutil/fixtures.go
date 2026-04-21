@@ -7,12 +7,12 @@ import (
 	"runtime"
 	"testing"
 
-	"nav-system/src/api"
 	"nav-system/src/graph/builder"
 	"nav-system/src/graph/model"
+	navigationmanager "nav-system/src/navigation/manager"
 	"nav-system/src/routing"
-	"nav-system/src/session"
 	"nav-system/src/simulation"
+	"nav-system/src/transport"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -53,9 +53,9 @@ type ServerFixture struct {
 	Snap       *routing.SnapIndex
 	Router     *routing.Router
 	Store      *trafficstore.Store
-	Manager    *session.Manager
+	Manager    *navigationmanager.Manager
 	Simulation *simulation.Manager
-	Server     *api.Server
+	Server     *transport.Server
 }
 
 func testdataRoot() string {
@@ -140,13 +140,13 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 
 	built := BuildGraphFixture(tb, graphName, maxCellSize)
 	store := trafficstore.NewStore()
-	manager := session.NewManager()
+	manager := navigationmanager.NewManager()
 	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routing.WeightFunc {
 		return func(e *model.Edge) float32 {
 			return store.LiveWeight(e.ID, e.Weight)
 		}
 	})
-	srv := api.NewServer(built.Graph, store, manager, built.Router, simManager)
+	srv := transport.NewServer(built.Graph, store, manager, built.Router, simManager)
 
 	return &ServerFixture{
 		Graph:      built.Graph,

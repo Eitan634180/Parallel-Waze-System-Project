@@ -2,7 +2,7 @@ package engine
 
 import (
 	"nav-system/src/graph/model"
-	"nav-system/src/core/utilities"
+	"nav-system/src/utilities"
 )
 
 type predEntry struct {

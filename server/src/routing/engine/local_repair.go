@@ -2,7 +2,7 @@ package engine
 
 import (
 	coreconfig "nav-system/src/core/config"
-	"nav-system/src/core/utilities"
+	"nav-system/src/utilities"
 )
 
 // LocalRepairOverlay searches for a short overlay detour around a congested cross-cell edge.

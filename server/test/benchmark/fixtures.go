@@ -12,7 +12,7 @@ import (
 	"nav-system/src/graph/model"
 	"nav-system/src/graph/store"
 	"nav-system/src/routing"
-	"nav-system/src/core/utilities"
+	"nav-system/src/utilities"
 )
 
 type CorpusSpec struct {

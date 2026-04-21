@@ -1,32 +1,32 @@
 package simulation
 
 import (
+	navigationsession "nav-system/src/navigation/session"
+	navigationtracker "nav-system/src/navigation/tracker"
 	"nav-system/src/routing"
-	"nav-system/src/session"
-	sessionruntime "nav-system/src/session/runtime"
 )
 
 type SessionBridge struct {
-	Create      func(route routing.Route, stepIdx int, lat, lon float64) *session.Session
-	ProcessPing func(sess *session.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel)
-	Destroy     func(sess *session.Session)
+	Create      func(route routing.Route, stepIdx int, lat, lon float64) *navigationsession.Session
+	ProcessPing func(sess *navigationsession.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel)
+	Destroy     func(sess *navigationsession.Session)
 }
 
-func NewSessionBridge(runtime *sessionruntime.Runtime) SessionBridge {
+func NewSessionBridge(tracker *navigationtracker.Tracker) SessionBridge {
 	return SessionBridge{
-		Create: func(route routing.Route, stepIdx int, lat, lon float64) *session.Session {
-			return runtime.CreateHeadless(route, stepIdx, lat, lon)
+		Create: func(route routing.Route, stepIdx int, lat, lon float64) *navigationsession.Session {
+			return tracker.CreateHeadless(route, stepIdx, lat, lon)
 		},
-		ProcessPing: func(sess *session.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel) {
-			observations := make([]sessionruntime.EdgeObservation, len(edgeEvents))
+		ProcessPing: func(sess *navigationsession.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeTravel) {
+			observations := make([]navigationtracker.EdgeObservation, len(edgeEvents))
 			for i, event := range edgeEvents {
-				observations[i] = sessionruntime.EdgeObservation{
+				observations[i] = navigationtracker.EdgeObservation{
 					EdgeID:      event.EdgeID,
 					ObservedSec: event.ObservedSec,
 				}
 			}
-			runtime.Advance(sess, lat, lon, speedKmh, stepIdx, observations)
+			tracker.Advance(sess, lat, lon, speedKmh, stepIdx, observations)
 		},
-		Destroy: runtime.Destroy,
+		Destroy: tracker.Destroy,
 	}
 }
