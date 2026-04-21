@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nav-system/src/regions"
+	"nav-system/src/mapdata"
 )
 
 // ──────────────────────────────────────────────
@@ -13,14 +13,14 @@ import (
 // ──────────────────────────────────────────────
 
 func TestMapstoreIsReadyReturnsFalseForNonExistentDir(t *testing.T) {
-	if regions.IsReady(filepath.Join(t.TempDir(), "does-not-exist")) {
+	if mapdata.IsReady(filepath.Join(t.TempDir(), "does-not-exist")) {
 		t.Fatal("non-existent directory should not be ready")
 	}
 }
 
 func TestMapstoreIsReadyReturnsFalseWhenEmptyDir(t *testing.T) {
 	dir := t.TempDir()
-	if regions.IsReady(dir) {
+	if mapdata.IsReady(dir) {
 		t.Fatal("empty directory should not be ready")
 	}
 }
@@ -37,7 +37,7 @@ func TestMapstoreIsReadyReturnsFalseWhenOneFileMissing(t *testing.T) {
 			t.Fatalf("write %s: %v", f, err)
 		}
 	}
-	if regions.IsReady(dir) {
+	if mapdata.IsReady(dir) {
 		t.Fatal("directory missing one file should not be ready")
 	}
 }
@@ -47,7 +47,7 @@ func TestMapstoreIsReadyReturnsFalseWhenOneFileMissing(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestMapstoreListReadyReturnsNilForNonExistentRoot(t *testing.T) {
-	readyRegions, err := regions.ListReady(filepath.Join(t.TempDir(), "nonexistent"))
+	readyRegions, err := mapdata.ListReady(filepath.Join(t.TempDir(), "nonexistent"))
 	if err != nil {
 		t.Fatalf("ListReady on missing root should not error, got: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestMapstoreListReadyReturnsNilForNonExistentRoot(t *testing.T) {
 
 func TestMapstoreListReadyReturnsNilForEmptyRoot(t *testing.T) {
 	root := t.TempDir()
-	readyRegions, err := regions.ListReady(root)
+	readyRegions, err := mapdata.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady on empty root should not error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestMapstoreListReadyIsAlphabeticallySorted(t *testing.T) {
 		}
 	}
 
-	readyRegions, err := regions.ListReady(root)
+	readyRegions, err := mapdata.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestMapstoreListReadyDirFieldMatchesPath(t *testing.T) {
 		}
 	}
 
-	readyRegions, err := regions.ListReady(root)
+	readyRegions, err := mapdata.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady: %v", err)
 	}

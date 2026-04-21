@@ -1,4 +1,6 @@
-let tickMs = 100;
+const DEFAULT_TICK_MS = 100;
+
+let tickMs = DEFAULT_TICK_MS;
 let timer = null;
 
 const MESSAGE_TYPES = {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nav-system/src/regions"
+	"nav-system/src/mapdata"
 )
 
 func TestMapstoreReadyAndListReady(t *testing.T) {
@@ -37,14 +37,14 @@ func TestMapstoreReadyAndListReady(t *testing.T) {
 		t.Fatalf("write partial fixture: %v", err)
 	}
 
-	if !regions.IsReady(ready) {
+	if !mapdata.IsReady(ready) {
 		t.Fatal("ready directory should be considered ready")
 	}
-	if regions.IsReady(notReady) {
+	if mapdata.IsReady(notReady) {
 		t.Fatal("partial directory should not be considered ready")
 	}
 
-	readyRegions, err := regions.ListReady(root)
+	readyRegions, err := mapdata.ListReady(root)
 	if err != nil {
 		t.Fatalf("ListReady: %v", err)
 	}

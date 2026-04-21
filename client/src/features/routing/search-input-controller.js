@@ -1,5 +1,6 @@
 import { searchLocationByName } from '../../services/rest/navigation-api.js';
-import { SEARCH_DELAY } from '../../app/app-config.js';
+import { APP_TIMINGS } from '../../app/app-config.js';
+import { SEARCH_RESULTS_UI } from './config.js';
 
 export function setupSearchInput(inputId, suggestionsId, onSelect, onInvalidate = null) {
     const input = document.getElementById(inputId);
@@ -35,7 +36,7 @@ export function setupSearchInput(inputId, suggestionsId, onSelect, onInvalidate 
                     const span = document.createElement('span');
                     span.textContent = r.displayName;
                     div.appendChild(span);
-                    div.style.animationDelay = `${idx * 0.05}s`;
+                    div.style.animationDelay = `${idx * SEARCH_RESULTS_UI.animationStaggerSec}s`;
                     div.addEventListener('click', () => {
                         input.value = r.displayName;
                         dropdown.classList.remove('active');
@@ -46,7 +47,7 @@ export function setupSearchInput(inputId, suggestionsId, onSelect, onInvalidate 
             } else {
                 dropdown.classList.remove('active');
             }
-        }, SEARCH_DELAY);
+        }, APP_TIMINGS.searchDebounceMs);
     });
 
     document.addEventListener('click', (e) => {

@@ -1,6 +1,5 @@
-// Package regions manages local built regions, remote region catalogs, and
-// interactive/non-interactive region selection flows.
-package regions
+// Package mapdata manages local built map directories that are ready to load.
+package mapdata
 
 import (
 	"errors"

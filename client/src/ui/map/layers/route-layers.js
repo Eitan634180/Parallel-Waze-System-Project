@@ -13,7 +13,7 @@ export function drawRoute(manager, coordinates, source, dest) {
     manager.layers.route = L.polyline(latLngs, {
         color: MAP_COLORS.primaryRoute,
         weight: MAP_LAYER_STYLE.primaryRouteWeight,
-        opacity: manager.routeInspector.enabled ? 0 : MAP_LAYER_STYLE.primaryRouteOpacity,
+        opacity: manager.routeInspector.enabled ? MAP_LAYER_STYLE.hiddenRouteOpacity : MAP_LAYER_STYLE.primaryRouteOpacity,
         lineCap: 'round',
         lineJoin: 'round',
     }).addTo(manager.map);
@@ -45,7 +45,7 @@ export function drawEndpointMarkers(manager, source, dest) {
         manager.layers.source = L.circleMarker([source.lat, source.lng], {
             radius: MAP_LAYER_STYLE.endpointRadius,
             fillColor: MAP_COLORS.primaryRoute,
-            fillOpacity: 1,
+            fillOpacity: MAP_LAYER_STYLE.endpointFillOpacity,
             color: MAP_COLORS.endpointBorder,
             weight: MAP_LAYER_STYLE.endpointWeight,
         }).addTo(manager.map).bindPopup(`<b>${SOURCE_LABEL}</b> ${source.name.split(',')[0]}`);
@@ -55,7 +55,7 @@ export function drawEndpointMarkers(manager, source, dest) {
         manager.layers.dest = L.circleMarker([dest.lat, dest.lng], {
             radius: MAP_LAYER_STYLE.endpointRadius,
             fillColor: MAP_COLORS.destination,
-            fillOpacity: 1,
+            fillOpacity: MAP_LAYER_STYLE.endpointFillOpacity,
             color: MAP_COLORS.endpointBorder,
             weight: MAP_LAYER_STYLE.endpointWeight,
         }).addTo(manager.map).bindPopup(`<b>${DESTINATION_LABEL}</b> ${dest.name.split(',')[0]}`);

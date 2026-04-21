@@ -1,5 +1,17 @@
 package utilities
 
+const (
+	DegreesToRadians       = 3.141592653589793 / 180.0
+	EarthRadiusMeters      = 6_371_000.0
+	KilometersPerMeter     = 1000.0
+	KilometersPerHourToMps = 3.6
+	MinLatitude            = -90.0
+	MaxLatitude            = 90.0
+	MinLongitude           = -180.0
+	MaxLongitude           = 180.0
+	DefaultReferenceLat    = 31.5
+)
+
 func Abs(value int) int {
 	if value < 0 {
 		return -value

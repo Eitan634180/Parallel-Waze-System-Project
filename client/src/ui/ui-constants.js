@@ -81,14 +81,24 @@ export const PANEL_TEXT = {
 };
 
 export const PANEL_NUMBERS = {
+    arrivalDistancePrecision: 1,
     distancePrecisionKm: 1,
     edgeInfoDistancePrecision: 1,
     edgeInfoCoordinatePrecision: 5,
     edgeInfoDurationPrecision: 1,
+    hudDistancePrecision: 1,
+    hudTurnDistancePrecision: 0,
     offRouteDistancePrecision: 1,
     offRouteThresholdPrecision: 0,
     routeOptionDistancePrecision: 1,
     speedDisplayPrecision: 0,
+};
+
+export const HUD_TURN_ANGLES = {
+    regular: 120,
+    sharp: 160,
+    slight: 45,
+    straight: 20,
 };
 
 export const UI_KEYS = {

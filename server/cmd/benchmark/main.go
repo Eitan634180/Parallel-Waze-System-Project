@@ -6,20 +6,39 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	benchmarkfixture "nav-system/test/benchmark"
+	graphbuilder "nav-system/src/graph/builder"
+	"nav-system/src/graph/model"
+	graphstore "nav-system/src/graph/store"
+	trafficcustomization "nav-system/src/traffic/customization"
+	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/utilities"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf16"
 )
 
-type goBenchmarkReport struct {
-	GoOS       string
-	GoArch     string
-	CPU        string
-	Benchmarks map[string]map[string]float64
+type routeRequest struct {
+	SrcLat       float64 `json:"src_lat"`
+	SrcLon       float64 `json:"src_lon"`
+	DstLat       float64 `json:"dst_lat"`
+	DstLon       float64 `json:"dst_lon"`
+	Alternatives int     `json:"alternatives"`
+}
+
+type simulationWarmupRequest struct {
+	Count int `json:"count"`
 }
 
 type loadbenchSummary struct {
@@ -40,6 +59,13 @@ type loadbenchSummary struct {
 	P95Ms         float64 `json:"p95_ms"`
 	P99Ms         float64 `json:"p99_ms"`
 	ErrorCount    int64   `json:"error_count"`
+}
+
+type goBenchmarkReport struct {
+	GoOS       string
+	GoArch     string
+	CPU        string
+	Benchmarks map[string]map[string]float64
 }
 
 type buildSummary struct {
@@ -66,9 +92,241 @@ type compareRow struct {
 	VisitedNodes float64
 }
 
+const (
+	routeLoadCommand            = "route-load"
+	overlayBuildCommand         = "overlay-build"
+	overlayCustomizationCommand = "overlay-customization"
+	reportCommand               = "report"
+
+	overlayBenchLogPrefix       = "overlay-bench:"
+	customizationBenchLogPrefix = "customization-bench:"
+
+	loadbenchHTTPTimeout       = 30 * time.Second
+	loadbenchDefaultWaitSec    = 5
+	loadbenchP50               = 50
+	loadbenchP95               = 95
+	loadbenchP99               = 99
+	loadbenchPercentDivisor    = 100
+	microsecondsPerMillisecond = 1000.0
+	nanosecondsPerMillisecond  = 1_000_000.0
+
+	customizationObservedRatio = float32(2.0)
+
+	goBenchmarkMinimumFields    = 4
+	goBenchmarkMetricStartIndex = 2
+	goBenchmarkMetricFieldStep  = 2
+	digitZero                   = '0'
+	digitNine                   = '9'
+	utf16BOMSize                = 2
+	utf16CodeUnitSize           = 2
+
+	reportFilePerm = 0o644
+	reportDirPerm  = 0o755
+)
+
 func main() {
-	dir := flag.String("dir", "", "Benchmark output directory")
-	flag.Parse()
+	if len(os.Args) < 2 {
+		printUsage(os.Stderr)
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case routeLoadCommand:
+		runRouteLoad(os.Args[2:])
+	case overlayBuildCommand:
+		runOverlayBuild(os.Args[2:])
+	case overlayCustomizationCommand:
+		runOverlayCustomization(os.Args[2:])
+	case reportCommand:
+		runReport(os.Args[2:])
+	case "help", "-h", "--help":
+		printUsage(os.Stdout)
+	default:
+		failf("unknown subcommand %q", os.Args[1])
+	}
+}
+
+func runRouteLoad(args []string) {
+	flags := flag.NewFlagSet(routeLoadCommand, flag.ExitOnError)
+	serverURL := flags.String("server", "", "Base server URL")
+	casesName := flags.String("cases", "", "Benchmark corpus file name under server/test/testdata/benchmark-cases")
+	concurrency := flags.Int("concurrency", 0, "Concurrent request workers")
+	requests := flags.Int("requests", 0, "Measured request count")
+	warmup := flags.Int("warmup", -1, "Warmup request count")
+	outPrefix := flags.String("out", "", "Output file prefix (writes <prefix>.json)")
+	routingMode := flags.String("routing-mode", "", "Routing mode label for metadata")
+	targetGOMAXPROCS := flags.Int("target-gomaxprocs", 0, "Target server GOMAXPROCS for benchmark metadata")
+	flags.Parse(args)
+
+	if strings.TrimSpace(*serverURL) == "" {
+		fail("server must be provided")
+	}
+	if *concurrency <= 0 {
+		fail("concurrency must be positive")
+	}
+	if *requests <= 0 {
+		fail("requests must be positive")
+	}
+	if *warmup < 0 {
+		fail("warmup must be non-negative")
+	}
+	if strings.TrimSpace(*casesName) == "" {
+		fail("cases must be provided")
+	}
+	if strings.TrimSpace(*routingMode) == "" {
+		fail("routing-mode must be provided")
+	}
+
+	fixture, err := benchmarkfixture.LoadFixture(*casesName)
+	if err != nil {
+		failf("LoadFixture: %v", err)
+	}
+
+	client := &http.Client{Timeout: loadbenchHTTPTimeout}
+	if *warmup > 0 {
+		if err := runWarmup(client, *serverURL, *warmup); err != nil {
+			failf("warmup failed: %v", err)
+		}
+		defer func() {
+			if err := clearWarmup(client, *serverURL); err != nil {
+				failf("cleanup failed: %v", err)
+			}
+		}()
+	}
+
+	start := time.Now()
+	latencies, errorCount, err := runMeasured(client, *serverURL, fixture.Corpus, *requests, *concurrency)
+	if err != nil {
+		failf("runMeasured: %v", err)
+	}
+	total := time.Since(start)
+
+	report := loadbenchSummary{
+		Server:        *serverURL,
+		RoutingMode:   *routingMode,
+		Corpus:        *casesName,
+		Region:        fixture.Region,
+		QueryCount:    len(fixture.Corpus),
+		Concurrency:   *concurrency,
+		Requests:      *requests,
+		Warmup:        *warmup,
+		GOMAXPROCS:    benchmarkGOMAXPROCS(*targetGOMAXPROCS),
+		GoVersion:     runtime.Version(),
+		CommitHash:    readCommitHash(),
+		TotalSec:      total.Seconds(),
+		ThroughputRPS: float64(*requests) / total.Seconds(),
+		P50Ms:         percentileMs(latencies, loadbenchP50),
+		P95Ms:         percentileMs(latencies, loadbenchP95),
+		P99Ms:         percentileMs(latencies, loadbenchP99),
+		ErrorCount:    errorCount,
+	}
+
+	if *outPrefix != "" {
+		if err := writeLoadbenchOutputs(*outPrefix, report); err != nil {
+			failf("write outputs: %v", err)
+		}
+	}
+
+	encoded, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		failf("marshal summary: %v", err)
+	}
+	fmt.Println(string(encoded))
+}
+
+func runOverlayBuild(args []string) {
+	flags := flag.NewFlagSet(overlayBuildCommand, flag.ExitOnError)
+	dataDir := flags.String("data", "", "Path to saved graph directory")
+	workersFlag := flags.String("workers", "1", "Comma-separated worker counts")
+	runs := flags.Int("runs", 5, "Timed runs per worker count")
+	flags.Parse(args)
+
+	if *runs <= 0 {
+		log.Fatalf("runs must be > 0")
+	}
+	if *dataDir == "" {
+		*dataDir = utilities.RequireEnv("NAV_MAP_ROOT")
+	}
+
+	workerCounts := parseWorkerCounts(*workersFlag)
+	originalGOMAXPROCS := runtime.GOMAXPROCS(0)
+	defer runtime.GOMAXPROCS(originalGOMAXPROCS)
+
+	log.Printf("%s loading graph from %s", overlayBenchLogPrefix, *dataDir)
+	g, err := graphstore.LoadGraph(*dataDir)
+	if err != nil {
+		log.Fatalf("LoadGraph: %v", err)
+	}
+	log.Printf("%s graph ready (%d cells, %d boundary nodes)", overlayBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs))
+
+	for _, workers := range workerCounts {
+		var total time.Duration
+		for run := 1; run <= *runs; run++ {
+			runtime.GOMAXPROCS(workers)
+			elapsed := graphbuilder.BuildOverlayGraph(g, workers)
+			total += elapsed
+			log.Printf("%s workers=%d run=%d duration=%s", overlayBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))
+		}
+
+		avg := total / time.Duration(*runs)
+		fmt.Printf("%s workers=%d avg=%s runs=%d\n", overlayBenchLogPrefix, workers, avg.Round(time.Millisecond), *runs)
+	}
+}
+
+func runOverlayCustomization(args []string) {
+	flags := flag.NewFlagSet(overlayCustomizationCommand, flag.ExitOnError)
+	dataDir := flags.String("data", "", "Path to saved graph directory")
+	workersFlag := flags.String("workers", "1", "Comma-separated worker counts")
+	runs := flags.Int("runs", 5, "Timed runs per worker count")
+	flags.Parse(args)
+
+	if *runs <= 0 {
+		log.Fatalf("runs must be > 0")
+	}
+	if *dataDir == "" {
+		*dataDir = utilities.RequireEnv("NAV_MAP_ROOT")
+	}
+
+	workerCounts := parseWorkerCounts(*workersFlag)
+	originalGOMAXPROCS := runtime.GOMAXPROCS(0)
+	defer runtime.GOMAXPROCS(originalGOMAXPROCS)
+
+	log.Printf("%s loading graph from %s", customizationBenchLogPrefix, *dataDir)
+	g, err := graphstore.LoadGraph(*dataDir)
+	if err != nil {
+		log.Fatalf("LoadGraph: %v", err)
+	}
+	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs), len(g.Edges))
+
+	store := trafficstore.NewStore()
+	dirtyEdges := seedDirtyStore(g, store)
+	log.Printf("%s store ready (%d dirty edges)", customizationBenchLogPrefix, dirtyEdges)
+
+	trafficcustomization.CustomizeOverlayWeights(g, store)
+	log.Printf("%s finished initial customization", customizationBenchLogPrefix)
+
+	for _, workers := range workerCounts {
+		runtime.GOMAXPROCS(workers)
+
+		var total time.Duration
+		for run := 1; run <= *runs; run++ {
+			store.RefillPendingForBenchmarks()
+			start := time.Now()
+			trafficcustomization.CustomizeOverlayWeights(g, store)
+			elapsed := time.Since(start)
+			total += elapsed
+			log.Printf("%s workers=%d run=%d duration=%s", customizationBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))
+		}
+
+		avg := total / time.Duration(*runs)
+		fmt.Printf("%s workers=%d avg=%s runs=%d\n", customizationBenchLogPrefix, workers, avg.Round(time.Millisecond), *runs)
+	}
+}
+
+func runReport(args []string) {
+	flags := flag.NewFlagSet(reportCommand, flag.ExitOnError)
+	dir := flags.String("dir", "", "Benchmark output directory")
+	flags.Parse(args)
 
 	if *dir == "" {
 		fail("missing --dir")
@@ -83,27 +341,214 @@ func main() {
 	builder.WriteString("# Benchmark Report\n\n")
 	builder.WriteString(fmt.Sprintf("Generated: `%s`\n\n", time.Now().Format(time.RFC3339)))
 
-	if writeGoBenchmarkSection(&builder, "Single-Query Static Comparison", filepath.Join(reportDir, "compare-static.txt"), "BenchmarkRouterCompareStatic"); err != nil {
+	if err := writeGoBenchmarkSection(&builder, "Single-Query Static Comparison", filepath.Join(reportDir, "compare-static.txt"), "BenchmarkRouterCompareStatic"); err != nil {
 		builder.WriteString(fmt.Sprintf("_Static comparison unavailable: %v_\n\n", err))
 	}
-	if writeServerScaleSection(&builder, filepath.Join(reportDir, "server-scale")); err != nil {
+	if err := writeServerScaleSection(&builder, filepath.Join(reportDir, "server-scale")); err != nil {
 		builder.WriteString(fmt.Sprintf("_Server-scale results unavailable: %v_\n\n", err))
 	}
-	if writeBuildScaleSection(&builder, filepath.Join(reportDir, "build-scale")); err != nil {
+	if err := writeBuildScaleSection(&builder, filepath.Join(reportDir, "build-scale")); err != nil {
 		builder.WriteString(fmt.Sprintf("_Build-scale results unavailable: %v_\n\n", err))
 	}
-	if writeOverlayScaleSection(&builder, filepath.Join(reportDir, "overlay-scale")); err != nil {
+	if err := writeOverlayScaleSection(&builder, filepath.Join(reportDir, "overlay-scale")); err != nil {
 		builder.WriteString(fmt.Sprintf("_Overlay-scale results unavailable: %v_\n\n", err))
 	}
-	if writeCustomizationScaleSection(&builder, filepath.Join(reportDir, "customization-scale")); err != nil {
+	if err := writeCustomizationScaleSection(&builder, filepath.Join(reportDir, "customization-scale")); err != nil {
 		builder.WriteString(fmt.Sprintf("_Customization-scale results unavailable: %v_\n\n", err))
 	}
 
 	summaryPath := filepath.Join(reportDir, "summary.md")
-	if err := os.WriteFile(summaryPath, []byte(builder.String()), 0o644); err != nil {
+	if err := os.WriteFile(summaryPath, []byte(builder.String()), reportFilePerm); err != nil {
 		failf("write summary: %v", err)
 	}
+}
 
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  benchmark <subcommand> [flags]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintf(w, "  %-22s Run HTTP route-load benchmark against a server\n", routeLoadCommand)
+	fmt.Fprintf(w, "  %-22s Benchmark overlay graph build throughput\n", overlayBuildCommand)
+	fmt.Fprintf(w, "  %-22s Benchmark overlay customization throughput\n", overlayCustomizationCommand)
+	fmt.Fprintf(w, "  %-22s Generate a markdown report from benchmark outputs\n", reportCommand)
+}
+
+func benchmarkGOMAXPROCS(target int) int {
+	if target > 0 {
+		return target
+	}
+	return runtime.GOMAXPROCS(0)
+}
+
+func runWarmup(client *http.Client, serverURL string, warmup int) error {
+	body, err := json.Marshal(simulationWarmupRequest{Count: warmup})
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Post(serverURL+"/simulation/random", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	time.Sleep(warmupWaitDuration())
+	return nil
+}
+
+func clearWarmup(client *http.Client, serverURL string) error {
+	req, err := http.NewRequest(http.MethodDelete, serverURL+"/simulation", nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func warmupWaitDuration() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("TEST_BENCH_WARMUP_WAIT_SEC"))
+	if raw == "" {
+		return loadbenchDefaultWaitSec * time.Second
+	}
+
+	waitSec, err := strconv.Atoi(raw)
+	if err != nil || waitSec < 0 {
+		return loadbenchDefaultWaitSec * time.Second
+	}
+	return time.Duration(waitSec) * time.Second
+}
+
+func runMeasured(client *http.Client, serverURL string, corpus []benchmarkfixture.CorpusCase, requests, concurrency int) ([]float64, int64, error) {
+	latencies := make([]float64, requests)
+	jobs := make(chan int, requests)
+	var errorCount atomic.Int64
+
+	var wg sync.WaitGroup
+	for worker := 0; worker < concurrency; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobs {
+				start := time.Now()
+				if err := postRoute(client, serverURL, corpus[idx%len(corpus)]); err != nil {
+					errorCount.Add(1)
+				}
+				latencies[idx] = float64(time.Since(start).Microseconds()) / microsecondsPerMillisecond
+			}
+		}()
+	}
+
+	for i := 0; i < requests; i++ {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+	return latencies, errorCount.Load(), nil
+}
+
+func postRoute(client *http.Client, serverURL string, query benchmarkfixture.CorpusCase) error {
+	body, err := json.Marshal(routeRequest{
+		SrcLat:       query.SrcLat,
+		SrcLon:       query.SrcLon,
+		DstLat:       query.DstLat,
+		DstLon:       query.DstLon,
+		Alternatives: 0,
+	})
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Post(serverURL+"/route", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func percentileMs(values []float64, pct int) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	copyValues := append([]float64(nil), values...)
+	sort.Float64s(copyValues)
+	index := (len(copyValues) - 1) * pct / loadbenchPercentDivisor
+	return copyValues[index]
+}
+
+func writeLoadbenchOutputs(prefix string, report loadbenchSummary) error {
+	dir := filepath.Dir(prefix)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, reportDirPerm); err != nil {
+			return err
+		}
+	}
+
+	jsonPath := prefix + ".json"
+	encoded, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(jsonPath, encoded, reportFilePerm); err != nil {
+		return err
+	}
+	return nil
+}
+
+func readCommitHash() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" {
+			return setting.Value
+		}
+	}
+	return ""
+}
+
+func parseWorkerCounts(raw string) []int {
+	parts := strings.Split(raw, ",")
+	workers := make([]int, 0, len(parts))
+	for _, part := range parts {
+		value, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || value <= 0 {
+			log.Fatalf("invalid worker count %q", part)
+		}
+		workers = append(workers, value)
+	}
+	return workers
+}
+
+func seedDirtyStore(g *model.Graph, store *trafficstore.Store) int {
+	dirtyEdges := 0
+	for _, edge := range g.Edges {
+		if edge.Weight <= 0 {
+			continue
+		}
+		store.RecordObservation(edge.ID, edge.Weight*customizationObservedRatio, edge.Weight)
+		dirtyEdges++
+	}
+	return dirtyEdges
 }
 
 func writeGoBenchmarkSection(builder *strings.Builder, title, path, prefix string) error {
@@ -145,7 +590,7 @@ func writeGoBenchmarkSection(builder *strings.Builder, title, path, prefix strin
 		builder.WriteString(fmt.Sprintf(
 			"| `%s` | %.3f | %.0f | %s | %s |\n",
 			row.Mode,
-			row.NsPerOp/1_000_000.0,
+			row.NsPerOp/nanosecondsPerMillisecond,
 			row.VisitedNodes,
 			speedupString(astarNs, row.NsPerOp),
 			speedupString(dijkstraNs, row.NsPerOp),
@@ -351,11 +796,11 @@ func parseGoBenchmarkFile(path string) (*goBenchmarkReport, error) {
 			report.CPU = strings.TrimSpace(strings.TrimPrefix(line, "cpu:"))
 		case strings.HasPrefix(line, "Benchmark"):
 			fields := strings.Fields(line)
-			if len(fields) < 4 {
+			if len(fields) < goBenchmarkMinimumFields {
 				continue
 			}
 			metrics := make(map[string]float64)
-			for i := 2; i+1 < len(fields); i += 2 {
+			for i := goBenchmarkMetricStartIndex; i+1 < len(fields); i += goBenchmarkMetricFieldStep {
 				value, err := strconv.ParseFloat(fields[i], 64)
 				if err != nil {
 					continue
@@ -400,8 +845,8 @@ func parseBuildLog(path string) (buildSummary, error) {
 	}
 	return buildSummary{
 		GOMAXPROCS:    gomaxprocs,
-		OverlayTimeMs: float64(overlay.Microseconds()) / 1000.0,
-		TotalTimeMs:   float64(total.Microseconds()) / 1000.0,
+		OverlayTimeMs: float64(overlay.Microseconds()) / microsecondsPerMillisecond,
+		TotalTimeMs:   float64(total.Microseconds()) / microsecondsPerMillisecond,
 	}, nil
 }
 
@@ -415,7 +860,7 @@ func parseOverlayLog(path string) ([]overlaySummary, error) {
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "overlay-bench: workers=") || !strings.Contains(line, " avg=") {
+		if !strings.HasPrefix(line, overlayBenchLogPrefix+" workers=") || !strings.Contains(line, " avg=") {
 			continue
 		}
 
@@ -436,7 +881,7 @@ func parseOverlayLog(path string) ([]overlaySummary, error) {
 		if err != nil {
 			return nil, err
 		}
-		summary.AvgTimeMs = float64(avg.Microseconds()) / 1000.0
+		summary.AvgTimeMs = float64(avg.Microseconds()) / microsecondsPerMillisecond
 
 		if runsText, ok := fieldValue(line, "runs="); ok {
 			runs, err := strconv.Atoi(runsText)
@@ -466,7 +911,7 @@ func parseCustomizationLog(path string) ([]customizationSummary, error) {
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "customization-bench: workers=") || !strings.Contains(line, " avg=") {
+		if !strings.HasPrefix(line, customizationBenchLogPrefix+" workers=") || !strings.Contains(line, " avg=") {
 			continue
 		}
 
@@ -487,7 +932,7 @@ func parseCustomizationLog(path string) ([]customizationSummary, error) {
 		if err != nil {
 			return nil, err
 		}
-		summary.AvgTimeMs = float64(avg.Microseconds()) / 1000.0
+		summary.AvgTimeMs = float64(avg.Microseconds()) / microsecondsPerMillisecond
 
 		if runsText, ok := fieldValue(line, "runs="); ok {
 			runs, err := strconv.Atoi(runsText)
@@ -524,7 +969,7 @@ func gomaxprocsFromPath(path string) int {
 	base := filepath.Base(path)
 	digits := ""
 	for _, ch := range base {
-		if ch >= '0' && ch <= '9' {
+		if ch >= digitZero && ch <= digitNine {
 			digits += string(ch)
 		}
 	}
@@ -576,12 +1021,12 @@ func readTextFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(data) >= 2 {
+	if len(data) >= utf16BOMSize {
 		switch {
 		case data[0] == 0xff && data[1] == 0xfe:
-			return decodeUTF16(data[2:], true), nil
+			return decodeUTF16(data[utf16BOMSize:], true), nil
 		case data[0] == 0xfe && data[1] == 0xff:
-			return decodeUTF16(data[2:], false), nil
+			return decodeUTF16(data[utf16BOMSize:], false), nil
 		}
 	}
 	if bytes.IndexByte(data, 0x00) >= 0 {
@@ -591,11 +1036,11 @@ func readTextFile(path string) (string, error) {
 }
 
 func decodeUTF16(data []byte, littleEndian bool) string {
-	if len(data)%2 == 1 {
+	if len(data)%utf16CodeUnitSize == 1 {
 		data = data[:len(data)-1]
 	}
-	values := make([]uint16, 0, len(data)/2)
-	for i := 0; i+1 < len(data); i += 2 {
+	values := make([]uint16, 0, len(data)/utf16CodeUnitSize)
+	for i := 0; i+1 < len(data); i += utf16CodeUnitSize {
 		if littleEndian {
 			values = append(values, uint16(data[i])|uint16(data[i+1])<<8)
 		} else {

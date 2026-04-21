@@ -1,18 +1,11 @@
 import { state } from '../../app/app-state.js';
 import { projectPositionOntoRoute } from '../routing/route-utils.js';
+import { DEGREES_PER_RADIAN, KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND } from '../../utils/math.js';
+import { MILLISECONDS_PER_SECOND } from '../../utils/time.js';
+import { DRIVING_PHYSICS, DRIVING_SPEED } from './config.js';
 
-const FOLLOWING_TIME_SEC = 1.8;
-const MIN_GAP_M = 7;
-const MAX_TRACKED_GAP_M = 80;
-const ROUTE_CAPTURE_M = 18;
-const MIN_STEP_DISTANCE_M = 0.1;
-const MS_PER_SECOND = 1000;
-const DEGREES_PER_RADIAN = 180 / Math.PI;
 const HALF_TURN_DEG = 180;
 const FULL_TURN_DEG = 360;
-const SHARP_TURN_THRESHOLD_DEG = 25;
-const TURN_SPEED_CAP_KMH = 20;
-const OFF_ROUTE_DRIFT_PER_MS = 0.0000006;
 
 export function calculateNewPosition(metersToMove, elapsedMs) {
     let remainingMeters = metersToMove;
@@ -21,7 +14,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
 
     while (remainingMeters > 0 && state.drive.currentRoadIndex < state.routing.activeLegs.length) {
         const step = state.routing.activeLegs[state.drive.currentRoadIndex];
-        const stepDist = step.base_length || MIN_STEP_DISTANCE_M;
+        const stepDist = step.base_length || DRIVING_PHYSICS.minStepDistanceM;
         const distanceLeftOnStep = stepDist - state.drive.stepProgress;
         state.drive.distanceLeftOnStep = distanceLeftOnStep;
 
@@ -36,7 +29,7 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
             pos = endPos;
 
             if (step.edge_id !== null && step.edge_id !== undefined && observedMs > 0) {
-                state.sim.pendingEdgeEvents.push({ edge_id: step.edge_id, observed_sec: observedMs / MS_PER_SECOND });
+                state.sim.pendingEdgeEvents.push({ edge_id: step.edge_id, observed_sec: observedMs / MILLISECONDS_PER_SECOND });
             }
             state.sim.currentEdgeTimeMs = spilloverMs;
             state.drive.currentRoadIndex++;
@@ -51,8 +44,8 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
                 let diff = Math.abs(nextBearing - prevBearing);
                 if (diff > HALF_TURN_DEG) diff = FULL_TURN_DEG - diff;
 
-                if (diff > SHARP_TURN_THRESHOLD_DEG && state.sim.motionState) {
-                    state.sim.motionState.speedKmh = Math.min(state.sim.motionState.speedKmh, TURN_SPEED_CAP_KMH);
+                if (diff > DRIVING_PHYSICS.sharpTurnThresholdDeg && state.sim.motionState) {
+                    state.sim.motionState.speedKmh = Math.min(state.sim.motionState.speedKmh, DRIVING_SPEED.turnSpeedCapKmh);
                 }
             }
         } else {
@@ -65,8 +58,8 @@ export function calculateNewPosition(metersToMove, elapsedMs) {
     }
 
     if (state.drive.isDrifting) {
-        state.drive.offRouteOffset[0] += OFF_ROUTE_DRIFT_PER_MS * elapsedMs;
-        state.drive.offRouteOffset[1] += OFF_ROUTE_DRIFT_PER_MS * elapsedMs;
+        state.drive.offRouteOffset[0] += DRIVING_PHYSICS.offRouteDriftPerMs * elapsedMs;
+        state.drive.offRouteOffset[1] += DRIVING_PHYSICS.offRouteDriftPerMs * elapsedMs;
     }
 
     return [pos[0] + state.drive.offRouteOffset[0], pos[1] + state.drive.offRouteOffset[1]];
@@ -76,17 +69,20 @@ export function limitMovementByTraffic(metersToMove, speedKmh) {
     if (!state.routing.activeObj || !state.drive.carPos) return metersToMove;
 
     const myProgressM = Math.max(0, (state.routing.activeObj.distance || 0) - (state.drive.distanceLeft || 0));
-    const safetyGapM = Math.max(MIN_GAP_M, (speedKmh / 3.6) * FOLLOWING_TIME_SEC);
+    const safetyGapM = Math.max(
+        DRIVING_PHYSICS.minGapM,
+        (speedKmh / KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND) * DRIVING_PHYSICS.followingTimeSec,
+    );
     let allowedMoveM = metersToMove;
 
     for (const car of state.sim.cars) {
         const projected = projectPositionOntoRoute(state.routing.activeObj, car.lat, car.lon);
-        if (!projected || projected.offsetM > ROUTE_CAPTURE_M) continue;
+        if (!projected || projected.offsetM > DRIVING_PHYSICS.routeCaptureM) continue;
 
         const otherProgressM = Math.max(0, (state.routing.activeObj.distance || 0) - projected.distanceLeft);
         const gapM = otherProgressM - myProgressM;
 
-        if (gapM > 0 && gapM <= MAX_TRACKED_GAP_M) {
+        if (gapM > 0 && gapM <= DRIVING_PHYSICS.maxTrackedGapM) {
             allowedMoveM = Math.min(allowedMoveM, Math.max(0, gapM - safetyGapM));
         }
     }

@@ -17,8 +17,6 @@ import (
 )
 
 const (
-	nominatimSearchURL           = "https://nominatim.openstreetmap.org/search"
-	searchUserAgent              = "navigation-prototype/1.0"
 	searchUpstreamUnavailableMsg = "search upstream unavailable"
 	searchUpstreamFailedMsg      = "search upstream failed"
 	searchDecodeFailedMsg        = "failed to decode search results"
@@ -33,6 +31,8 @@ type Handler struct {
 	Language                string
 	CountryCodes            string
 	ViewBox                 string
+	UpstreamURL             string
+	UserAgent               string
 	SlowRequestLogThreshold time.Duration
 }
 
@@ -153,11 +153,11 @@ func (h *Handler) newRequest(ctx context.Context, query string, limit int) (*htt
 		values.Set("bounded", "1")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, nominatimSearchURL+"?"+values.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.UpstreamURL+"?"+values.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", searchUserAgent)
+	req.Header.Set("User-Agent", h.UserAgent)
 	if h.Language != "" {
 		req.Header.Set("Accept-Language", h.Language)
 	}

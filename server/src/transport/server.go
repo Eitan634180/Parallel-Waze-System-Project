@@ -76,6 +76,8 @@ func NewServer(
 		Language:                searchConfig.Language,
 		CountryCodes:            searchConfig.CountryCodes,
 		ViewBox:                 searchConfig.ViewBox,
+		UpstreamURL:             searchConfig.UpstreamURL,
+		UserAgent:               searchConfig.UserAgent,
 		SlowRequestLogThreshold: SlowSearchRequestLogThreshold,
 	}
 	s.sessions = &sessionhandler.Handler{

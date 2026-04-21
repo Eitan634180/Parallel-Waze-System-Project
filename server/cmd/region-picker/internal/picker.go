@@ -1,4 +1,4 @@
-package regions
+package picker
 
 import (
 	"flag"
@@ -8,13 +8,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"nav-system/src/mapdata"
 )
 
 var pickerUI = os.Stderr
 
 func Run() {
-	mapRoot := flag.String("map-root", defaultMapRoot, "Directory containing region subdirectories")
-	cacheFile := flag.String("cache", defaultCacheFile, "Local cache file for the Geofabrik index")
+	mapRoot := flag.String("map-root", mapdata.DefaultMapRoot(), "Directory containing region subdirectories")
+	cacheFile := flag.String("cache", DefaultGeofabrikCacheFile(), "Local cache file for the Geofabrik index")
 	regionID := flag.String("region", "", "Non-interactive: download and build this Geofabrik region ID")
 	prompt := flag.Bool("prompt", false, "Always show the selection menu even if a last region is remembered")
 	keepPBF := flag.Bool("keep-pbf", true, "Keep the downloaded .pbf file after building")
@@ -90,7 +92,7 @@ func runNonInteractive(regionID, mapRoot, cacheFile, lastRegionPath string, keep
 
 	feature, ok := idx.ByID[regionID]
 	if !ok {
-		log.Fatalf("%s unknown region ID %q. Check https://download.geofabrik.de/", pickerLogPrefix, regionID)
+		log.Fatalf("%s unknown region ID %q. Check %s", pickerLogPrefix, regionID, GeofabrikIndexURL())
 	}
 	if feature.PBFUrl == "" {
 		log.Fatalf("%s region %q has no PBF download URL", pickerLogPrefix, regionID)

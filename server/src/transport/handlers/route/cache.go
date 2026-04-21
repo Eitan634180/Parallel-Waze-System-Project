@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const routeCacheTTL = 30 * time.Minute
-
 type Cache struct {
 	mu      sync.RWMutex
 	entries map[string]cacheEntry

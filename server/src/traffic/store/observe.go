@@ -1,6 +1,9 @@
 package store
 
-import "nav-system/src/graph/model"
+import (
+	"nav-system/src/graph/model"
+	"nav-system/src/utilities"
+)
 
 // RecordObservation updates the edge multiplier using an EWMA of observed/base time.
 func (s *Store) RecordObservation(id model.EdgeID, observedSec, baseSec float32) {
@@ -15,7 +18,7 @@ func (s *Store) RecordSpeedSample(id model.EdgeID, speedKmh, baseSec, distanceM 
 	if speedKmh <= 0 || baseSec <= 0 || distanceM <= 0 {
 		return
 	}
-	observedSec := distanceM / (speedKmh / 3.6)
+	observedSec := distanceM / (speedKmh / utilities.KilometersPerHourToMps)
 	if observedSec <= 0 {
 		return
 	}

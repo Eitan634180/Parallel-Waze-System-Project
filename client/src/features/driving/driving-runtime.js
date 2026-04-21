@@ -1,4 +1,4 @@
-import { tick, pingRate } from '../../app/app-config.js';
+import { APP_TIMINGS } from '../../app/app-config.js';
 import { sendLocationPing } from '../../services/ws/socket-client.js';
 
 let drivingWorker = null;
@@ -14,7 +14,7 @@ const WORKER_MESSAGE_TYPES = {
 
 export function startDrivingRuntime(onTick, onError) {
     const worker = ensureDrivingWorker(onTick, onError);
-    worker.postMessage({ type: WORKER_MESSAGE_TYPES.start, tickMs: tick });
+    worker.postMessage({ type: WORKER_MESSAGE_TYPES.start, tickMs: APP_TIMINGS.simulationTickMs });
 }
 
 export function stopDrivingRuntime() {
@@ -30,19 +30,21 @@ export function resetDrivingRuntime() {
 }
 
 export function trackElapsedMs(now) {
-    const elapsedMs = lastTickAt === 0 ? tick : Math.max(tick, now - lastTickAt);
+    const elapsedMs = lastTickAt === 0
+        ? APP_TIMINGS.simulationTickMs
+        : Math.max(APP_TIMINGS.simulationTickMs, now - lastTickAt);
     lastTickAt = now;
     return elapsedMs;
 }
 
 export function flushLocationPing(route, currentRoadIndex, carPos, speedKmh, edgeEvents) {
-    if (!route?.steps?.length || pingElapsedMs < pingRate) {
+    if (!route?.steps?.length || pingElapsedMs < APP_TIMINGS.websocketPingIntervalMs) {
         return edgeEvents;
     }
 
     const stepIndex = Math.min(currentRoadIndex + NEXT_STEP_OFFSET, route.steps.length - NEXT_STEP_OFFSET);
     sendLocationPing(carPos[0], carPos[1], speedKmh, stepIndex, edgeEvents);
-    pingElapsedMs %= pingRate;
+    pingElapsedMs %= APP_TIMINGS.websocketPingIntervalMs;
     return [];
 }
 

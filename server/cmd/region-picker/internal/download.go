@@ -1,4 +1,4 @@
-package regions
+package picker
 
 import (
 	"fmt"
@@ -22,7 +22,6 @@ const (
 	downloadExistsFormat      = downloadIndent + "File already exists: %s\n"
 	downloadFinishedFormat    = downloadIndent + "%s downloaded\n"
 	httpByteUnit              = 1024
-	serverSearchMaxDepth      = 6
 	goCommandName             = "go"
 	goRunCommand              = "./cmd/map-builder"
 	mapBuilderArgPBF          = "--pbf"

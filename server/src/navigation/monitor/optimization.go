@@ -24,7 +24,7 @@ func RunOptimizationSweep(
 	wf routing.WeightFunc,
 	prepareRoute func(routing.Route) routing.Route,
 ) {
-	jobs := make(chan *navigationsession.Session, 256)
+	jobs := make(chan *navigationsession.Session, optimizationJobBufferSize)
 
 	for i := 0; i < navigation.OptimizationWorkerLimit; i++ {
 		go optimizationWorker(ctx, jobs, mgr, g, store, router, wf, prepareRoute)

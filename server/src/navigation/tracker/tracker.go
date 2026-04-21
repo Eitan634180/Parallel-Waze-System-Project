@@ -12,8 +12,6 @@ import (
 	trafficstore "nav-system/src/traffic/store"
 )
 
-const partialObservationMinEdgeAge = 2 * time.Second
-
 type EdgeObservation struct {
 	EdgeID      uint32
 	ObservedSec float32

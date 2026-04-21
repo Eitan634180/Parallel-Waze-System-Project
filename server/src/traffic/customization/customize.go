@@ -15,7 +15,6 @@ import (
 )
 
 const noOverlayEdgeIdx = ^uint32(0)
-const fullAffectedCellsDirtyCoverage = 0.25
 
 type overlayWeightUpdate struct {
 	edgeIdx uint32

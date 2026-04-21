@@ -14,16 +14,6 @@ import (
 
 const cellBuilderLogPrefix = "cell-builder:"
 
-const (
-	minInertialFlowQuartile  = 1
-	partitionSeed            = 42
-	inertialFlowQuartileDiv  = 4
-	flowTerminalNodeCount    = 2
-	flowSinkNodeOffset       = 1
-	unitFlowCapacity         = 1
-	boundaryNodeCapacityHint = 32768
-)
-
 // PartitionCells recursively bisects the graph with Inertial Flow and fills g.Cells.
 func PartitionCells(g *model.Graph, maxCellSize int) {
 	log.Printf("%s partitioning %d nodes (max size %d)", cellBuilderLogPrefix, len(g.Nodes), maxCellSize)

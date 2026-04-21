@@ -34,7 +34,7 @@ func NewManager() *Manager {
 
 // Create registers a new session for the given route and returns it.
 func (m *Manager) Create(route routing.Route) *navigationsession.Session {
-	return m.create(route, engine.InitialStepIndex(route), make(chan navigationsession.OutMsg, 256))
+	return m.create(route, engine.InitialStepIndex(route), make(chan navigationsession.OutMsg, sessionSendBufferSize))
 }
 
 // CreateHeadless registers a session without an attached outbound message queue.

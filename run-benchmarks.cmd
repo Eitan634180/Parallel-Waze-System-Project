@@ -15,11 +15,8 @@ set "BENCH_CASES_DIR=%SERVER_DIR%\test\testdata\benchmark-cases"
 set "MAP_ROOT=%SERVER_DIR%\data\map"
 set "TARGET=%~1"
 set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
-set "LOADBENCH_EXE=%BIN_DIR%\route-loadbench.exe"
+set "BENCHMARK_EXE=%BIN_DIR%\benchmark.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder-bench.exe"
-set "OVERLAYBENCH_EXE=%BIN_DIR%\overlay-build-bench.exe"
-set "CUSTOMBENCH_EXE=%BIN_DIR%\customization-bench.exe"
-set "REPORT_EXE=%BIN_DIR%\benchmark-report.exe"
 set "SERVER_SCALE_SCRIPT=%ROOT%server-scale.ps1"
 set "SERVER_ADDR=%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
 set "SERVER_URL=http://%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
@@ -141,33 +138,18 @@ if errorlevel 1 (
   popd
   exit /b %ERRORLEVEL%
 )
-go build -buildvcs=false -o "%LOADBENCH_EXE%" .\cmd\route-loadbench
-if errorlevel 1 (
-  popd
-  exit /b %ERRORLEVEL%
-)
 go build -buildvcs=false -o "%BUILDER_EXE%" .\cmd\map-builder
 if errorlevel 1 (
   popd
   exit /b %ERRORLEVEL%
 )
-go build -buildvcs=false -o "%OVERLAYBENCH_EXE%" .\cmd\overlay-build-bench
-if errorlevel 1 (
-  popd
-  exit /b %ERRORLEVEL%
-)
-go build -buildvcs=false -o "%CUSTOMBENCH_EXE%" .\cmd\customization-bench
-if errorlevel 1 (
-  popd
-  exit /b %ERRORLEVEL%
-)
-go build -buildvcs=false -o "%REPORT_EXE%" .\cmd\benchmark-report
+go build -buildvcs=false -o "%BENCHMARK_EXE%" .\cmd\benchmark
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 exit /b %EXIT_CODE%
 
 :write_report
-"%REPORT_EXE%" --dir "%OUT_DIR%"
+"%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
 exit /b %ERRORLEVEL%
 
 :cmp
@@ -196,7 +178,7 @@ call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
 for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
   echo Running server-scale for mode=%TEST_BENCH_ROUTING_MODE% GOMAXPROCS=%%P
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%SERVER_SCALE_SCRIPT%" -ServerExe "%SERVER_EXE%" -ServerWorkdir "%SERVER_DIR%" -ServerAddr "%SERVER_ADDR%" -ServerData "%SERVER_DATA%" -RoutingMode "%TEST_BENCH_ROUTING_MODE%" -GOMAXPROCS %%P -StartupWaitSec %TEST_BENCH_SERVER_STARTUP_WAIT_SEC% -LoadbenchExe "%LOADBENCH_EXE%" -ServerURL "%SERVER_URL%" -Cases "%TEST_BENCH_CORPUS%" -Concurrency %TEST_BENCH_CONCURRENCY% -Requests %TEST_BENCH_REQUESTS% -Warmup %TEST_BENCH_WARMUP% -Out "%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P"
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%SERVER_SCALE_SCRIPT%" -ServerExe "%SERVER_EXE%" -ServerWorkdir "%SERVER_DIR%" -ServerAddr "%SERVER_ADDR%" -ServerData "%SERVER_DATA%" -RoutingMode "%TEST_BENCH_ROUTING_MODE%" -GOMAXPROCS %%P -StartupWaitSec %TEST_BENCH_SERVER_STARTUP_WAIT_SEC% -BenchmarkExe "%BENCHMARK_EXE%" -ServerURL "%SERVER_URL%" -Cases "%TEST_BENCH_CORPUS%" -Concurrency %TEST_BENCH_CONCURRENCY% -Requests %TEST_BENCH_REQUESTS% -Warmup %TEST_BENCH_WARMUP% -Out "%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P"
   if errorlevel 1 exit /b !ERRORLEVEL!
 )
 call :write_report
@@ -235,7 +217,7 @@ echo Running overlay-scale for workers=%OVERLAY_WORKERS%
 pushd "%SERVER_DIR%"
 set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
-"%OVERLAYBENCH_EXE%" --data "%SERVER_DATA%" --workers "%OVERLAY_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\overlay-scale\summary.log" 2>&1
+"%BENCHMARK_EXE%" overlay-build --data "%SERVER_DATA%" --workers "%OVERLAY_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\overlay-scale\summary.log" 2>&1
 set "EXIT_CODE=!ERRORLEVEL!"
 popd
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
@@ -256,7 +238,7 @@ echo Running customization-scale for workers=%CUSTOMIZATION_WORKERS%
 pushd "%SERVER_DIR%"
 set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
-"%CUSTOMBENCH_EXE%" --data "%SERVER_DATA%" --workers "%CUSTOMIZATION_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\customization-scale\summary.log" 2>&1
+"%BENCHMARK_EXE%" overlay-customization --data "%SERVER_DATA%" --workers "%CUSTOMIZATION_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\customization-scale\summary.log" 2>&1
 set "EXIT_CODE=!ERRORLEVEL!"
 popd
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%

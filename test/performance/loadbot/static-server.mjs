@@ -11,19 +11,20 @@ const mimeTypes = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
-const entryPath = '/public/index.html';
+const defaultEntryPath = '/public/index.html';
 
-export async function startStaticServer(rootDir, host, port) {
+export async function startStaticServer(rootDir, host, port, options = {}) {
+  const entryPath = options.entryPath || defaultEntryPath;
   await access(rootDir);
 
   const server = http.createServer(async (req, res) => {
     try {
       if (shouldRedirectToEntry(req.url)) {
-        sendRedirect(res, req.url || '/');
+        sendRedirect(res, req.url || '/', entryPath);
         return;
       }
 
-      const requestPath = sanitizePath(req.url || '/');
+      const requestPath = sanitizePath(req.url || '/', entryPath);
       const filePath = path.join(rootDir, requestPath);
       const fileInfo = await stat(filePath);
       if (!fileInfo.isFile()) {
@@ -47,7 +48,7 @@ export async function startStaticServer(rootDir, host, port) {
   return server;
 }
 
-export function sanitizePath(rawUrl) {
+export function sanitizePath(rawUrl, entryPath = defaultEntryPath) {
   const rawPath = String(rawUrl || '/').split('?')[0].split('#')[0];
   const pathname = decodeURIComponent(rawPath.startsWith('/') ? rawPath : `/${rawPath}`);
   const pathSegments = pathname.split('/');
@@ -72,7 +73,7 @@ function shouldRedirectToEntry(rawUrl) {
   return rawPath === '/' || rawPath === '/index.html';
 }
 
-function sendRedirect(res, rawUrl) {
+function sendRedirect(res, rawUrl, entryPath) {
   const query = String(rawUrl || '').includes('?') ? `?${String(rawUrl).split('?')[1].split('#')[0]}` : '';
   res.writeHead(302, { Location: `${entryPath}${query}` });
   res.end();

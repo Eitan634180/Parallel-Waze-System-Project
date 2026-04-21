@@ -9,8 +9,14 @@ set "SERVER_DIR=%ROOT%server"
 set "CLIENT_DIR=%ROOT%client"
 set "TESTS_DIR=%ROOT%test"
 set "SERVER_CACHE_DIR=%SERVER_DIR%\.gocache"
-set "MAP_ROOT=%SERVER_DIR%\data\map"
 set "TARGET=%~1"
+
+if not defined NAV_MAP_ROOT (
+  echo NAV_MAP_ROOT must be set in project.env.test.
+  exit /b 1
+)
+call :resolve_server_path "%NAV_MAP_ROOT%" MAP_ROOT
+if errorlevel 1 exit /b %ERRORLEVEL%
 
 if "%TARGET%"=="" set "TARGET=all"
 
@@ -64,15 +70,15 @@ exit /b %EXIT_CODE%
 if "%~1"=="" exit /b 1
 set "REL_PATH=%~1"
 if not "%REL_PATH::=%"=="%REL_PATH%" (
-  echo %~2 in project.env.test must be relative to server\data\map.
+  echo %~2 in project.env.test must be relative to NAV_MAP_ROOT.
   exit /b 1
 )
 if "%REL_PATH:~0,1%"=="\" (
-  echo %~2 in project.env.test must be relative to server\data\map.
+  echo %~2 in project.env.test must be relative to NAV_MAP_ROOT.
   exit /b 1
 )
 if "%REL_PATH:~0,1%"=="/" (
-  echo %~2 in project.env.test must be relative to server\data\map.
+  echo %~2 in project.env.test must be relative to NAV_MAP_ROOT.
   exit /b 1
 )
 set "%~3=%MAP_ROOT%\%REL_PATH%"
@@ -125,3 +131,18 @@ echo   client       Run all client tests under client\test
 echo   end2end      Run Playwright smoke tests
 echo   help         Show this help
 exit /b 1
+
+:resolve_server_path
+if "%~1"=="" exit /b 1
+set "RAW_PATH=%~1"
+if not "%RAW_PATH::=%"=="%RAW_PATH%" (
+  set "%~2=%RAW_PATH%"
+) else if "%RAW_PATH:~0,1%"=="\" (
+  set "%~2=%RAW_PATH%"
+) else if "%RAW_PATH:~0,1%"=="/" (
+  set "%~2=%RAW_PATH%"
+) else (
+  set "%~2=%SERVER_DIR%\%RAW_PATH%"
+)
+set "RAW_PATH="
+exit /b 0

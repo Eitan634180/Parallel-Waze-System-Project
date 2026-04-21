@@ -8,6 +8,7 @@ import (
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/utilities"
 )
 
 type car struct {
@@ -55,7 +56,7 @@ func advanceCar(c *car, g *model.Graph, store *trafficstore.Store, dtSec float32
 			}
 			return true
 		}
-		c.lastSpeedKmh = speedMps * 3.6
+		c.lastSpeedKmh = speedMps * utilities.KilometersPerHourToMps
 
 		prev := c.route.Steps[c.stepIdx-1]
 		cur := c.route.Steps[c.stepIdx]
@@ -145,7 +146,7 @@ func recordSimSpeedSample(c *car, step routing.Step, speedMps float32, g *model.
 		return
 	}
 
-	store.RecordSpeedSample(eid, speedMps*3.6, edge.Weight, edge.DistanceM)
+	store.RecordSpeedSample(eid, speedMps*utilities.KilometersPerHourToMps, edge.Weight, edge.DistanceM)
 	c.lastObservationSampleS = c.edgeTimeS
 }
 
@@ -168,7 +169,7 @@ func currentSpeedMps(c *car, g *model.Graph, store *trafficstore.Store) float32 
 
 	baseKmh := DefaultLegSpeedKmh
 	if legDist > 0 && legTime > 0 {
-		baseKmh = (legDist / legTime) * 3.6
+		baseKmh = (legDist / legTime) * utilities.KilometersPerHourToMps
 	}
 	if cur.EdgeID != nil {
 		eid := model.EdgeID(*cur.EdgeID)
@@ -190,7 +191,7 @@ func currentSpeedMps(c *car, g *model.Graph, store *trafficstore.Store) float32 
 	if speedKmh > baseKmh*MaxSpeedMultiplier {
 		speedKmh = baseKmh * MaxSpeedMultiplier
 	}
-	return speedKmh / 3.6
+	return speedKmh / utilities.KilometersPerHourToMps
 }
 
 func updateInterpolatedPosition(c *car, prev, cur routing.Step, legDist float32) {

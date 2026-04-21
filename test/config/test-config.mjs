@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const testDir = path.resolve(__dirname, '..');
 const rootDir = path.resolve(testDir, '..');
+const serverDir = path.join(rootDir, 'server');
 const envFilePath = path.join(rootDir, 'project.env.test');
 
 loadEnvFile(envFilePath);
@@ -57,9 +58,17 @@ function resolveMapRelativePath(name, fallback = '') {
     return fallback;
   }
   if (isAbsolutePath(raw)) {
-    throw new Error(`${name} in ${envFilePath} must be relative to server/data/map.`);
+    throw new Error(`${name} in ${envFilePath} must be relative to NAV_MAP_ROOT.`);
   }
-  return path.join(rootDir, 'server', 'data', 'map', raw);
+  return path.join(mapRootDir, raw);
+}
+
+function resolveServerPath(name) {
+  const raw = requireString(name);
+  if (isAbsolutePath(raw)) {
+    return raw;
+  }
+  return path.resolve(serverDir, raw);
 }
 
 function requireString(name) {
@@ -127,15 +136,30 @@ function buildHttpUrl(host, port) {
   return `http://${host}:${port}`;
 }
 
+function buildPathWithQuery(pathname, query) {
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 const host = requireString('TEST_HOST');
 const routingMode = requireString('TEST_ROUTING_MODE');
 const serverPort = requireInteger('TEST_SERVER_PORT', 1);
 const clientPort = requireInteger('TEST_CLIENT_PORT', 1);
 const loadbotClientPort = requireInteger('TEST_LOADBOT_CLIENT_PORT', 1);
-const mapRootDir = path.join(rootDir, 'server', 'data', 'map');
+const clientServerUrl = requireString('NAV_CLIENT_SERVER_URL');
+const mapRootDir = resolveServerPath('NAV_MAP_ROOT');
+const clientEntryPath = requireString('TEST_CLIENT_ENTRY_PATH');
+const loadbotEntryPath = buildPathWithQuery(clientEntryPath, requireString('TEST_LOADBOT_ENTRY_QUERY'));
+const expectedServerUrl = buildHttpUrl(host, serverPort);
+
+if (clientServerUrl !== expectedServerUrl) {
+  throw new Error(
+    `NAV_CLIENT_SERVER_URL in ${envFilePath} must match TEST_HOST/TEST_SERVER_PORT (${expectedServerUrl}).`,
+  );
+}
 
 export const testConfig = {
   rootDir,
+  serverDir,
   testDir,
   envFilePath,
   mapRootDir,
@@ -152,6 +176,8 @@ export const testConfig = {
     host,
     port: clientPort,
     url: buildHttpUrl(host, clientPort),
+    entryPath: clientEntryPath,
+    entryURL: `${buildHttpUrl(host, clientPort)}${clientEntryPath}`,
   },
   e2e: {
     timeoutMs: requireInteger('TEST_E2E_TIMEOUT_MS', 1),
@@ -162,7 +188,7 @@ export const testConfig = {
     candidateAttempts: requireInteger('TEST_E2E_CANDIDATE_ATTEMPTS', 1),
     tripInsetFraction: requireFloat('TEST_E2E_TRIP_INSET_FRACTION', 0, 0.49),
     tripCommuteDegrees: requireFloat('TEST_E2E_TRIP_COMMUTE_DEGREES', 0.001),
-    loadbotPath: '/public/index.html?loadbot=1',
+    loadbotPath: loadbotEntryPath,
   },
   tripGeneration: {
     minDistanceSq: requireFloat('TEST_TRIP_MIN_DISTANCE_SQ', 0),
@@ -170,7 +196,8 @@ export const testConfig = {
   },
   loadbot: {
     clientPort: loadbotClientPort,
-    clientURL: `${buildHttpUrl(host, loadbotClientPort)}/public/index.html?loadbot=1`,
+    entryPath: loadbotEntryPath,
+    clientURL: `${buildHttpUrl(host, loadbotClientPort)}${loadbotEntryPath}`,
     clients: requireInteger('TEST_LOADBOT_CLIENTS', 1),
     headless: requireBoolean('TEST_LOADBOT_HEADLESS'),
     commuteDegrees: requireFloat('TEST_LOADBOT_COMMUTE_DEGREES', 0.01),

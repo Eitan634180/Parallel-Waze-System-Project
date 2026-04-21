@@ -2,6 +2,8 @@ module nav-system
 
 go 1.26.1
 
+replace github.com/DataDog/czlib => ./third_party/czlib
+
 require (
 	github.com/RoaringBitmap/roaring v1.9.4
 	github.com/google/uuid v1.6.0

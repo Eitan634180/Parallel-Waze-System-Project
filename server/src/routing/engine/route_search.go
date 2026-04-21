@@ -77,8 +77,8 @@ func (r *Router) fullGraphAStar(srcIdx, dstIdx uint32, wf WeightFunc, stats *Sea
 	g := r.g
 	dstNode := &g.Nodes[dstIdx]
 
-	costs := make(map[uint32]float32, 256)
-	pred := make(map[uint32]predEntry, 256)
+	costs := make(map[uint32]float32, fullGraphSearchMapCapacity)
+	pred := make(map[uint32]predEntry, fullGraphSearchMapCapacity)
 	costs[srcIdx] = 0
 
 	heuristic := func(idx uint32) float32 {
@@ -126,8 +126,8 @@ func (r *Router) fullGraphAStar(srcIdx, dstIdx uint32, wf WeightFunc, stats *Sea
 func (r *Router) fullGraphDijkstra(srcIdx, dstIdx uint32, wf WeightFunc, stats *SearchStats) ([]Step, bool) {
 	g := r.g
 
-	costs := make(map[uint32]float32, 256)
-	pred := make(map[uint32]predEntry, 256)
+	costs := make(map[uint32]float32, fullGraphSearchMapCapacity)
+	pred := make(map[uint32]predEntry, fullGraphSearchMapCapacity)
 	costs[srcIdx] = 0
 
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })

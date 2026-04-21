@@ -7,17 +7,6 @@ import (
 	"nav-system/src/utilities"
 )
 
-const (
-	OffRouteDistM      = float32(50)
-	OffRouteSanityMaxM = float32(5_000)
-	OffRouteWindow     = 2
-
-	minLatitude  = -90
-	maxLatitude  = 90
-	minLongitude = -180
-	maxLongitude = 180
-)
-
 func DistanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64, g *model.Graph) float32 {
 	if len(route.Steps) == 0 {
 		return 0
@@ -26,7 +15,7 @@ func DistanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64,
 	px, py := utilities.ProjectAtReferenceLat(lat, lon, g.ProjectionRefLat)
 	best := distanceFromExpectedProjection(route, stepIdx, g, px, py)
 
-	if lat < minLatitude || lat > maxLatitude {
+	if lat < utilities.MinLatitude || lat > utilities.MaxLatitude {
 		swappedX, swappedY := utilities.ProjectAtReferenceLat(lon, lat, g.ProjectionRefLat)
 		swappedBest := distanceFromExpectedProjection(route, stepIdx, g, swappedX, swappedY)
 		if swappedBest < best {

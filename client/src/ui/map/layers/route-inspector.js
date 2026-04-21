@@ -51,9 +51,9 @@ export function refreshRouteInspector(manager) {
         layers.push(L.circleMarker([step.lat, step.lon], {
             radius: index === 0 || index === routeObj.steps.length - 1 ? MAP_LAYER_STYLE.inspectorTerminalNodeRadius : MAP_LAYER_STYLE.inspectorNodeRadius,
             fillColor: index === 0 ? MAP_COLORS.primaryRoute : index === routeObj.steps.length - 1 ? MAP_COLORS.destination : MAP_COLORS.waypoint,
-            fillOpacity: 1,
+            fillOpacity: MAP_LAYER_STYLE.inspectorNodeFillOpacity,
             color: MAP_COLORS.endpointText,
-            weight: 1.5,
+            weight: MAP_LAYER_STYLE.inspectorNodeWeight,
         }));
     });
 

@@ -100,8 +100,8 @@ func multiSourceCellDijkstra(
 	wf WeightFunc,
 	stats *SearchStats,
 ) (costs map[uint32]float32, pred map[uint32]predEntry) {
-	costs = make(map[uint32]float32, len(seeds)+16)
-	pred = make(map[uint32]predEntry, len(seeds)+16)
+	costs = make(map[uint32]float32, len(seeds)+multiSourceSearchCapacitySlack)
+	pred = make(map[uint32]predEntry, len(seeds)+multiSourceSearchCapacitySlack)
 
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
 	for _, seed := range seeds {

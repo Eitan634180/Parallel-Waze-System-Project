@@ -8,29 +8,33 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	"nav-system/src/graph/model"
 	graphstore "nav-system/src/graph/store"
+	"nav-system/src/mapdata"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationmonitor "nav-system/src/navigation/monitor"
-	"nav-system/src/regions"
 	"nav-system/src/routing"
 	"nav-system/src/simulation"
 	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/transport"
+	"nav-system/src/utilities"
 )
 
 const serverLogPrefix = "server:"
 
 func main() {
 	dataDir := flag.String("data", "", "Directory containing binary graph files")
-	addr := flag.String("addr", ":8080", "HTTP listen address")
+	addr := flag.String("addr", "", "HTTP listen address")
 	routingModeFlag := flag.String("routing-mode", string(routing.RoutingModeHierarchical), "Routing mode: hierarchical|base-astar|base-dijkstra")
 	flag.Parse()
+
+	if *addr == "" {
+		*addr = utilities.RequireEnv("NAV_SERVER_ADDR")
+	}
 
 	routingMode, err := routing.ParseRoutingMode(*routingModeFlag)
 	if err != nil {
@@ -38,8 +42,14 @@ func main() {
 	}
 
 	if *dataDir == "" {
-		mapRoot := filepath.Join(".", "data", "map")
-		availableRegions, err := regions.ListReady(mapRoot)
+		if configuredDataDir, ok := utilities.LookupEnvTrimmed("NAV_SERVER_DATA_DIR"); ok {
+			*dataDir = configuredDataDir
+		}
+	}
+
+	if *dataDir == "" {
+		mapRoot := mapdata.DefaultMapRoot()
+		availableRegions, err := mapdata.ListReady(mapRoot)
 		if err != nil {
 			log.Fatalf("scanning map directory: %v", err)
 		}

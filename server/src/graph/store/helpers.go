@@ -27,7 +27,6 @@ const (
 	headerMagicSize     = 4
 	crossCellFalse      = uint8(0)
 	crossCellTrue       = uint8(1)
-	fileBufferSize      = 1 << 20
 )
 
 var le = binary.LittleEndian

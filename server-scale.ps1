@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory = $true)][string]$RoutingMode,
     [Parameter(Mandatory = $true)][int]$GOMAXPROCS,
     [Parameter(Mandatory = $true)][int]$StartupWaitSec,
-    [Parameter(Mandatory = $true)][string]$LoadbenchExe,
+    [Parameter(Mandatory = $true)][string]$BenchmarkExe,
     [Parameter(Mandatory = $true)][string]$ServerURL,
     [Parameter(Mandatory = $true)][string]$Cases,
     [Parameter(Mandatory = $true)][int]$Concurrency,
@@ -36,7 +36,8 @@ if ($serverProc.HasExited) {
 
 $benchExit = 0
 try {
-    & $LoadbenchExe `
+    & $BenchmarkExe `
+        route-load `
         --server $ServerURL `
         --cases $Cases `
         --concurrency $Concurrency `

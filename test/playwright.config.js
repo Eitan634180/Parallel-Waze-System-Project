@@ -31,7 +31,7 @@ export default defineConfig({
     {
       command: 'node scripts/serve-client.mjs',
       cwd: __dirname,
-      url: `${testConfig.client.url}/public/index.html`,
+      url: testConfig.client.entryURL,
       reuseExistingServer: !process.env.CI,
       timeout: testConfig.e2e.clientReadyTimeoutMs,
     },

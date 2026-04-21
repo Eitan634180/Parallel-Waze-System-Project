@@ -16,8 +16,8 @@ import {
     syncStoredDebugCars,
 } from './debug-cars-service.js';
 import { DOM_IDS, PANEL_TEXT } from '../../ui/ui-constants.js';
+import { DEBUG_CARS } from './config.js';
 
-const DEFAULT_DEBUG_CAR_COUNT = 1;
 const ZERO_OFFSET = Object.freeze([0, 0]);
 const DEBUG_LOG_MESSAGES = {
     addCarsFailed: 'Adding debug cars failed',
@@ -26,6 +26,14 @@ const DEBUG_LOG_MESSAGES = {
 
 function createZeroOffset() {
     return [...ZERO_OFFSET];
+}
+
+function readDebugCarCount(input) {
+    const requestedCount = Number(input.value);
+    if (!Number.isFinite(requestedCount)) {
+        return DEBUG_CARS.defaultCount;
+    }
+    return Math.min(DEBUG_CARS.maximumCount, Math.max(DEBUG_CARS.minimumCount, requestedCount));
 }
 
 export function setupDebugTools() {
@@ -78,9 +86,14 @@ export function setupDebugTools() {
     setDebugCarCallback(renderDebugCarStatus);
     renderMainCarDebug(null);
 
+    const debugCarCountInput = document.getElementById(DOM_IDS.debugCarCount);
+    debugCarCountInput.min = String(DEBUG_CARS.minimumCount);
+    debugCarCountInput.max = String(DEBUG_CARS.maximumCount);
+    debugCarCountInput.value = String(DEBUG_CARS.defaultCount);
+
     document.getElementById(DOM_IDS.debugAddCarButton).addEventListener('click', async () => {
         try {
-            const count = Math.max(DEFAULT_DEBUG_CAR_COUNT, Number(document.getElementById(DOM_IDS.debugCarCount).value) || DEFAULT_DEBUG_CAR_COUNT);
+            const count = readDebugCarCount(debugCarCountInput);
             await spawnDebugCars(state.routing.activeObj, count, state.drive.currentRoadIndex || 0);
         } catch (err) {
             console.error(DEBUG_LOG_MESSAGES.addCarsFailed, err);
@@ -90,7 +103,7 @@ export function setupDebugTools() {
 
     document.getElementById(DOM_IDS.debugRandomTrafficButton).addEventListener('click', async () => {
         try {
-            const count = Math.max(DEFAULT_DEBUG_CAR_COUNT, Number(document.getElementById(DOM_IDS.debugCarCount).value) || DEFAULT_DEBUG_CAR_COUNT);
+            const count = readDebugCarCount(debugCarCountInput);
             await spawnRandomDebugCars(count);
         } catch (err) {
             console.error(DEBUG_LOG_MESSAGES.randomTrafficFailed, err);

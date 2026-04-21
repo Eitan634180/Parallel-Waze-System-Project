@@ -10,6 +10,7 @@ import (
 
 	"nav-system/src/graph/builder"
 	"nav-system/src/graph/store"
+	"nav-system/src/utilities"
 )
 
 const builderLogPrefix = "builder:"
@@ -21,7 +22,7 @@ const (
 
 func main() {
 	pbfPath := flag.String("pbf", "", "Path to .osm.pbf file (required)")
-	outDir := flag.String("out", "./data/map", "Output directory")
+	outDir := flag.String("out", "", "Output directory")
 	cellSize := flag.Int("cell-size", defaultMapBuilderCellSize, "Max nodes per cell (Inertial Flow)")
 	workers := flag.Int("workers", defaultMapBuilderWorkers, "Deprecated: set process-wide GOMAXPROCS for map building")
 	flag.Parse()
@@ -30,6 +31,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error: --pbf is required")
 		flag.Usage()
 		os.Exit(1)
+	}
+	if *outDir == "" {
+		*outDir = utilities.RequireEnv("NAV_MAP_ROOT")
 	}
 
 	if *workers > 0 {

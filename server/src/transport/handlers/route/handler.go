@@ -11,6 +11,14 @@ import (
 	"nav-system/src/routing"
 	trafficstore "nav-system/src/traffic/store"
 	transporthttp "nav-system/src/transport/http"
+	"nav-system/src/utilities"
+)
+
+const (
+	minRouteLatitude  = utilities.MinLatitude
+	maxRouteLatitude  = utilities.MaxLatitude
+	minRouteLongitude = utilities.MinLongitude
+	maxRouteLongitude = utilities.MaxLongitude
 )
 
 type Handler struct {
@@ -116,11 +124,11 @@ func (r request) validate() error {
 		return fmt.Errorf("missing required field dst_lon")
 	}
 
-	if *r.SrcLat < -90 || *r.SrcLat > 90 || *r.DstLat < -90 || *r.DstLat > 90 {
-		return fmt.Errorf("latitude must be between -90 and 90")
+	if *r.SrcLat < minRouteLatitude || *r.SrcLat > maxRouteLatitude || *r.DstLat < minRouteLatitude || *r.DstLat > maxRouteLatitude {
+		return fmt.Errorf("latitude must be between %.0f and %.0f", minRouteLatitude, maxRouteLatitude)
 	}
-	if *r.SrcLon < -180 || *r.SrcLon > 180 || *r.DstLon < -180 || *r.DstLon > 180 {
-		return fmt.Errorf("longitude must be between -180 and 180")
+	if *r.SrcLon < minRouteLongitude || *r.SrcLon > maxRouteLongitude || *r.DstLon < minRouteLongitude || *r.DstLon > maxRouteLongitude {
+		return fmt.Errorf("longitude must be between %.0f and %.0f", minRouteLongitude, maxRouteLongitude)
 	}
 
 	return nil

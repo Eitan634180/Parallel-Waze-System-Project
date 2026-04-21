@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=1 --test-isolation=none test/unit/*.test.js test/integration/*.test.js",
-    "test:unit": "node --test --test-concurrency=1 --test-isolation=none test/unit/*.test.js",
-    "test:integration": "node --test --test-concurrency=1 --test-isolation=none test/integration/*.test.js"
+    "test": "node --import ./test/setup-env.js --test --test-concurrency=1 --test-isolation=none test/unit/*.test.js test/integration/*.test.js",
+    "test:unit": "node --import ./test/setup-env.js --test --test-concurrency=1 --test-isolation=none test/unit/*.test.js",
+    "test:integration": "node --import ./test/setup-env.js --test --test-concurrency=1 --test-isolation=none test/integration/*.test.js"
   }
 }

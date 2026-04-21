@@ -1,5 +1,5 @@
 import { state, resetDrivingSession } from '../../app/app-state.js';
-import { DEFAULT_SPEED_LIMIT } from '../../app/app-config.js';
+import { APP_DEFAULTS } from '../../app/app-config.js';
 import { mapInstance } from '../../ui/map/map-manager.js';
 import { updateDistance, updateETA, updateTrafficStatus, toggleDrivingHUD, updateTurnInfo } from '../../ui/panels/hud-panel.js';
 import { onArrival, showAlert } from '../../ui/panels/alerts-panel.js';
@@ -12,9 +12,9 @@ import { handleDrivingReroute } from './driving-reroute.js';
 import { closeDrivingSession, openDrivingSession } from './driving-session.js';
 import { accumulatePingElapsed, flushLocationPing, resetDrivingRuntime, startDrivingRuntime, stopDrivingRuntime } from './driving-runtime.js';
 import { CSS_CLASSES, DOM_IDS, PANEL_TEXT, TRAFFIC_LEVELS } from '../../ui/ui-constants.js';
+import { KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND } from '../../utils/math.js';
+import { MILLISECONDS_PER_SECOND } from '../../utils/time.js';
 
-const KMH_PER_MPS = 3.6;
-const MS_PER_SECOND = 1000;
 const ADDRESS_PARTS_LIMIT = 2;
 const ADDRESS_SEPARATOR = ',';
 const SPEED_UNIT_LABEL = ' km / h';
@@ -45,13 +45,13 @@ function setupDrivingUI() {
 
 function getCurrentSpeedKmh() {
     if (state.drive.currentRoadIndex >= state.routing.activeLegs.length) {
-        return DEFAULT_SPEED_LIMIT * KMH_PER_MPS;
+        return APP_DEFAULTS.defaultSpeedLimitMps * KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND;
     }
     const currentStep = state.routing.activeLegs[state.drive.currentRoadIndex];
     const recommendedSpeedKmh = hasEdgeId(currentStep.edge_id)
         ? state.sim.recommendedSpeeds.get(currentStep.edge_id)
         : null;
-    return recommendedSpeedKmh || currentStep.speed_limit || (DEFAULT_SPEED_LIMIT * KMH_PER_MPS);
+    return recommendedSpeedKmh || currentStep.speed_limit || (APP_DEFAULTS.defaultSpeedLimitMps * KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND);
 }
 
 export async function startDriving() {
@@ -137,7 +137,7 @@ function updateSimulation(elapsedMs) {
 
     if (state.drive.currentRoadIndex >= state.routing.activeLegs.length) {
         const actualTimeSec = state.drive.startTimeMs
-            ? (Date.now() - state.drive.startTimeMs) / MS_PER_SECOND
+            ? (Date.now() - state.drive.startTimeMs) / MILLISECONDS_PER_SECOND
             : state.routing.activeObj.dynamicETA;
 
         const totalDistanceM = state.drive.totalDistanceDrivenM || state.routing.activeObj.distance;
@@ -159,10 +159,10 @@ function updateSimulation(elapsedMs) {
     state.sim.motionState.speedKmh = advanceSpeedKmh(state.sim.motionState.speedKmh || speedKmhValue, targetSpeedKmh, elapsedMs, state.sim.driverProfile);
     state.sim.cars = getNearbySimulationCars(state.drive.carPos?.[0], state.drive.carPos?.[1]);
     const unclampedSpeedKmh = state.sim.motionState.speedKmh;
-    const unclampedMetersThisTick = (unclampedSpeedKmh / KMH_PER_MPS) * (elapsedMs / MS_PER_SECOND);
+    const unclampedMetersThisTick = (unclampedSpeedKmh / KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND) * (elapsedMs / MILLISECONDS_PER_SECOND);
     const metersThisTick = limitMovementByTraffic(unclampedMetersThisTick, unclampedSpeedKmh);
     if (unclampedMetersThisTick > 0 && metersThisTick < unclampedMetersThisTick) {
-        state.sim.motionState.speedKmh = (metersThisTick / (elapsedMs / MS_PER_SECOND)) * KMH_PER_MPS;
+        state.sim.motionState.speedKmh = (metersThisTick / (elapsedMs / MILLISECONDS_PER_SECOND)) * KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND;
     }
     const speedKmh = Math.round(state.sim.motionState.speedKmh);
 

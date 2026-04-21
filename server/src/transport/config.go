@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"nav-system/src/utilities"
 )
 
 const (
@@ -25,12 +27,16 @@ type SearchConfig struct {
 	Language     string
 	CountryCodes string
 	ViewBox      string
+	UpstreamURL  string
+	UserAgent    string
 }
 
 func LoadSearchConfigFromEnv() SearchConfig {
 	cfg := SearchConfig{
-		Limit:    SearchDefaultLimit,
-		Language: SearchDefaultLanguage,
+		Limit:       SearchDefaultLimit,
+		Language:    SearchDefaultLanguage,
+		UpstreamURL: utilities.RequireEnv("NAV_SEARCH_UPSTREAM_URL"),
+		UserAgent:   utilities.RequireEnv("NAV_SEARCH_USER_AGENT"),
 	}
 
 	if v := strings.TrimSpace(os.Getenv("NAV_SEARCH_LIMIT")); v != "" {
@@ -47,6 +53,5 @@ func LoadSearchConfigFromEnv() SearchConfig {
 	if v := strings.TrimSpace(os.Getenv("NAV_SEARCH_VIEWBOX")); v != "" {
 		cfg.ViewBox = v
 	}
-
 	return cfg
 }

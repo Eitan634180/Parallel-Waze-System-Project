@@ -104,7 +104,7 @@ func (s *Session) WritePump(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case msg := <-s.SendChan:
-			conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			conn.SetWriteDeadline(time.Now().Add(sessionWriteTimeout))
 			if err := conn.WriteJSON(msg); err != nil {
 				conn.Close()
 				return

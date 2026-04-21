@@ -1,4 +1,4 @@
-package regions
+package picker
 
 import (
 	"encoding/json"
@@ -11,10 +11,6 @@ import (
 )
 
 const (
-	defaultMapRoot           = "./data/map"
-	defaultCacheFile         = "./data/geofabrik-index.json"
-	geofabrikIndexURL        = "https://download.geofabrik.de/index-v1.json"
-	indexMaxAge              = 168 * time.Hour
 	pickerLogPrefix          = "region-picker:"
 	lastRegionFileName       = ".last-region"
 	filePerm                 = 0o644
@@ -34,11 +30,10 @@ const (
 )
 
 const (
-	geofabrikLogPrefix  = "region-picker: geofabrik:"
-	indexRequestTimeout = 30 * time.Second
-	indexFilePerm       = 0o644
-	geofabrikStatusOK   = http.StatusOK
-	rootParentID        = ""
+	geofabrikLogPrefix = "region-picker: geofabrik:"
+	indexFilePerm      = 0o644
+	geofabrikStatusOK  = http.StatusOK
+	rootParentID       = ""
 )
 
 // Feature represents a single Geofabrik region entry.
@@ -51,14 +46,10 @@ type Feature struct {
 
 // Index is the parsed Geofabrik catalog.
 type Index struct {
-	// ByID maps Geofabrik region ID to Feature.
-	ByID map[string]Feature
-	// Children maps a parent ID to its direct child features. Key "" = top level.
+	ByID     map[string]Feature
 	Children map[string][]Feature
 }
 
-// geofabrikIndexJSON is the minimal subset of the Geofabrik GeoJSON we need.
-// We skip the geometry field entirely for memory efficiency.
 type geofabrikIndexJSON struct {
 	Features []struct {
 		Properties struct {
@@ -83,9 +74,10 @@ func FetchIndex(cacheFile string, maxAge time.Duration) (*Index, error) {
 		}
 	}
 
-	log.Printf("%s downloading index from %s", geofabrikLogPrefix, geofabrikIndexURL)
+	indexURL := GeofabrikIndexURL()
+	log.Printf("%s downloading index from %s", geofabrikLogPrefix, indexURL)
 	client := &http.Client{Timeout: indexRequestTimeout}
-	resp, err := client.Get(geofabrikIndexURL) //nolint:noctx // one-shot CLI download
+	resp, err := client.Get(indexURL) //nolint:noctx // one-shot CLI download
 	if err != nil {
 		return nil, fmt.Errorf("HTTP GET: %w", err)
 	}
@@ -95,7 +87,6 @@ func FetchIndex(cacheFile string, maxAge time.Duration) (*Index, error) {
 		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 
-	// Save raw bytes to cache file so we can re-use them.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading body: %w", err)

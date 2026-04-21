@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"nav-system/src/graph/model"
+	"nav-system/src/utilities"
 )
 
 // RecommendedSpeedKmh returns a density-based speed hint for an edge in km/h.
@@ -16,7 +17,7 @@ func (s *Store) RecommendedSpeedKmh(id model.EdgeID, baseKmh, distanceM float32)
 		return baseKmh
 	}
 
-	edgeKm := distanceM / 1000
+	edgeKm := distanceM / utilities.KilometersPerMeter
 	if edgeKm < hintMinEdgeLengthKm {
 		edgeKm = hintMinEdgeLengthKm
 	}

@@ -13,12 +13,6 @@ import (
 
 const graphBuilderLogPrefix = "graph-builder:"
 
-const (
-	minGraphBuilderWorkers     = 1
-	estimatedEdgesPerWayHint   = 4
-	pendingEdgesPerSegmentHint = 2
-)
-
 // BuildBaseGraph constructs the base graph from parsed OSM nodes and ways.
 func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 	g := &model.Graph{}
@@ -115,7 +109,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 					n2 := &g.Nodes[n2idx]
 
 					distM := float32(utilities.HaversineM(n1.Lat, n1.Lon, n2.Lat, n2.Lon))
-					weightSec := distM / (speedKmh / 3.6)
+					weightSec := distM / (speedKmh / utilities.KilometersPerHourToMps)
 
 					flags := uint8(0)
 					if rw.IsOneWay {

@@ -54,7 +54,7 @@ func SameRemainingRoute(current Route, currentStepIdx int, candidate Route) bool
 	}
 
 	offset := len(currentEdges) - len(candidateEdges)
-	if offset > 2 {
+	if offset > maxRemainingRouteOffset {
 		return false
 	}
 

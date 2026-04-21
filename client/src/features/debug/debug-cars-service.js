@@ -5,10 +5,8 @@ import {
 } from '../../services/rest/navigation-api.js';
 import { connectToSimulation, disconnectSimulation } from '../../services/ws/socket-client.js';
 import { mapInstance } from '../../ui/map/map-manager.js';
-
-const METERS_PER_DEGREE = 111320;
-const TRAFFIC_BUCKET_SIZE_M = 120;
-const NEARBY_BUCKET_RADIUS = 1;
+import { METERS_PER_DEGREE_LATITUDE, RADIANS_PER_DEGREE } from '../../utils/math.js';
+import { DEBUG_CARS } from './config.js';
 
 let activeCount = 0;
 let simulationReadyPromise = null;
@@ -16,7 +14,7 @@ let cars = [];
 let onUpdateCallback = null;
 let pendingSnapshotFrame = 0;
 let trafficBuckets = new Map();
-let lonMetersPerDegree = METERS_PER_DEGREE;
+let lonMetersPerDegree = METERS_PER_DEGREE_LATITUDE;
 
 function flushSimulationSnapshot() {
     pendingSnapshotFrame = 0;
@@ -52,12 +50,12 @@ function clearSimulationSnapshots() {
 function rebuildTrafficBuckets(snapshotCars) {
     trafficBuckets = new Map();
     if (!snapshotCars.length) {
-        lonMetersPerDegree = METERS_PER_DEGREE;
+        lonMetersPerDegree = METERS_PER_DEGREE_LATITUDE;
         return;
     }
 
     const averageLat = snapshotCars.reduce((sum, car) => sum + car.lat, 0) / snapshotCars.length;
-    lonMetersPerDegree = Math.max(1, METERS_PER_DEGREE * Math.cos((averageLat * Math.PI) / 180));
+    lonMetersPerDegree = Math.max(1, METERS_PER_DEGREE_LATITUDE * Math.cos(averageLat * RADIANS_PER_DEGREE));
 
     for (const car of snapshotCars) {
         const key = bucketKey(car.lat, car.lon);
@@ -71,8 +69,8 @@ function rebuildTrafficBuckets(snapshotCars) {
 }
 
 function bucketKey(lat, lon) {
-    const latBucket = Math.floor((lat * METERS_PER_DEGREE) / TRAFFIC_BUCKET_SIZE_M);
-    const lonBucket = Math.floor((lon * lonMetersPerDegree) / TRAFFIC_BUCKET_SIZE_M);
+    const latBucket = Math.floor((lat * METERS_PER_DEGREE_LATITUDE) / DEBUG_CARS.trafficBucketSizeM);
+    const lonBucket = Math.floor((lon * lonMetersPerDegree) / DEBUG_CARS.trafficBucketSizeM);
     return `${latBucket}:${lonBucket}`;
 }
 
@@ -134,12 +132,12 @@ export function getNearbySimulationCars(lat, lon) {
         return cars;
     }
 
-    const latBucket = Math.floor((lat * METERS_PER_DEGREE) / TRAFFIC_BUCKET_SIZE_M);
-    const lonBucket = Math.floor((lon * lonMetersPerDegree) / TRAFFIC_BUCKET_SIZE_M);
+    const latBucket = Math.floor((lat * METERS_PER_DEGREE_LATITUDE) / DEBUG_CARS.trafficBucketSizeM);
+    const lonBucket = Math.floor((lon * lonMetersPerDegree) / DEBUG_CARS.trafficBucketSizeM);
     const nearbyCars = [];
 
-    for (let latOffset = -NEARBY_BUCKET_RADIUS; latOffset <= NEARBY_BUCKET_RADIUS; latOffset++) {
-        for (let lonOffset = -NEARBY_BUCKET_RADIUS; lonOffset <= NEARBY_BUCKET_RADIUS; lonOffset++) {
+    for (let latOffset = -DEBUG_CARS.nearbyBucketRadius; latOffset <= DEBUG_CARS.nearbyBucketRadius; latOffset++) {
+        for (let lonOffset = -DEBUG_CARS.nearbyBucketRadius; lonOffset <= DEBUG_CARS.nearbyBucketRadius; lonOffset++) {
             const bucket = trafficBuckets.get(`${latBucket + latOffset}:${lonBucket + lonOffset}`);
             if (bucket) {
                 nearbyCars.push(...bucket);

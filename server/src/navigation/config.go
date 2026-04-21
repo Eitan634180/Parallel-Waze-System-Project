@@ -1,6 +1,10 @@
 package navigation
 
-import "time"
+import (
+	"time"
+
+	"nav-system/src/utilities"
+)
 
 const (
 	SessionExpiry              = 5 * time.Minute
@@ -15,7 +19,7 @@ const (
 	RerouteMinGainSec         = float32(15)
 	OffRouteStrikes           = 2
 	OptimizationWorkerLimit   = 10
-	MaxHeuristicSpeedMps      = 120.0 / 3.6
+	MaxHeuristicSpeedMps      = 120.0 / utilities.KilometersPerHourToMps
 	PropagationJobQueueFactor = 4
 
 	LocalRepairMaxHops         = 5
