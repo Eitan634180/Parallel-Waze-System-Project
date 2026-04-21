@@ -9,15 +9,15 @@ import (
 )
 
 const (
-	headerOrigin             = "Origin"
-	headerVary               = "Vary"
-	headerContentType        = "Content-Type"
-	headerAllowOrigin        = "Access-Control-Allow-Origin"
-	headerAllowMethods       = "Access-Control-Allow-Methods"
-	headerAllowHeaders       = "Access-Control-Allow-Headers"
-	corsAllowedMethods       = "GET,POST,DELETE,OPTIONS"
-	corsAllowedHeaders       = headerContentType
-	originNotAllowedMessage  = "origin not allowed"
+	headerOrigin            = "Origin"
+	headerVary              = "Vary"
+	headerContentType       = "Content-Type"
+	headerAllowOrigin       = "Access-Control-Allow-Origin"
+	headerAllowMethods      = "Access-Control-Allow-Methods"
+	headerAllowHeaders      = "Access-Control-Allow-Headers"
+	corsAllowedMethods      = "GET,POST,DELETE,OPTIONS"
+	corsAllowedHeaders      = headerContentType
+	originNotAllowedMessage = "origin not allowed"
 )
 
 var allowedOriginOverrides = loadAllowedOriginOverrides()

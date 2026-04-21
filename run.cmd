@@ -16,7 +16,7 @@ set "BIN_DIR=%CACHE_DIR%\bin"
 set "SERVER_EXE=%BIN_DIR%\server.exe"
 set "PICKER_EXE=%BIN_DIR%\region-picker.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder.exe"
-set "CLIENT_URL=http://localhost:3000/navigation.html"
+set "CLIENT_URL=http://localhost:3000/public/index.html"
 
 if not defined DEV_ROUTING_MODE set "DEV_ROUTING_MODE=hierarchical"
 

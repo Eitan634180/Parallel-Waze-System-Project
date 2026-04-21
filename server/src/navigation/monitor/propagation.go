@@ -5,15 +5,15 @@ import (
 	"sync"
 	"time"
 
-	coreconfig "nav-system/src/core/config"
+	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationsession "nav-system/src/navigation/session"
-	"nav-system/src/utilities"
-	"nav-system/src/graph/model"
 	"nav-system/src/routing/engine"
 	routinggeometry "nav-system/src/routing/geometry"
 	trafficpropagation "nav-system/src/traffic/propagation"
 	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/utilities"
 )
 
 type propagationJob struct {
@@ -29,8 +29,8 @@ type heuristicSessionSnapshot struct {
 }
 
 func RunPropagation(ctx context.Context, mgr *navigationmanager.Manager, store *trafficstore.Store, g *model.Graph) {
-	workerCount := coreconfig.RoutingOptimizationWorkerLimit
-	jobs := make(chan propagationJob, workerCount*coreconfig.RoutingPropagationJobQueueFactor)
+	workerCount := navigation.OptimizationWorkerLimit
+	jobs := make(chan propagationJob, workerCount*navigation.PropagationJobQueueFactor)
 
 	var wg sync.WaitGroup
 	for i := 0; i < workerCount; i++ {
@@ -43,7 +43,7 @@ func RunPropagation(ctx context.Context, mgr *navigationmanager.Manager, store *
 		}()
 	}
 
-	ticker := time.NewTicker(coreconfig.RoutingPropagationInterval)
+	ticker := time.NewTicker(navigation.PropagationInterval)
 	defer ticker.Stop()
 
 	for {
@@ -124,9 +124,9 @@ func flagBetterRouteIfHelpful(s *navigationsession.Session, improvedEdges []traf
 		distCarToEdge := utilities.Distance(carX, carY, fromNode.X, fromNode.Y)
 		distEdgeToDestination := utilities.Distance(toNode.X, toNode.Y, snapshot.destination.X, snapshot.destination.Y)
 		idealETA :=
-			(distCarToEdge / coreconfig.RoutingMaxHeuristicSpeedMps) +
+			(distCarToEdge / navigation.MaxHeuristicSpeedMps) +
 				store.LiveWeight(changed.EdgeID, edge.Weight) +
-				(distEdgeToDestination / coreconfig.RoutingMaxHeuristicSpeedMps)
+				(distEdgeToDestination / navigation.MaxHeuristicSpeedMps)
 
 		if idealETA < snapshot.eta {
 			s.Mu.Lock()

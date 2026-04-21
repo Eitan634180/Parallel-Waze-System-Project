@@ -11,12 +11,18 @@ const mimeTypes = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
+const entryPath = '/public/index.html';
 
 export async function startStaticServer(rootDir, host, port) {
   await access(rootDir);
 
   const server = http.createServer(async (req, res) => {
     try {
+      if (shouldRedirectToEntry(req.url)) {
+        sendRedirect(res, req.url || '/');
+        return;
+      }
+
       const requestPath = sanitizePath(req.url || '/');
       const filePath = path.join(rootDir, requestPath);
       const fileInfo = await stat(filePath);
@@ -46,17 +52,28 @@ export function sanitizePath(rawUrl) {
   const pathname = decodeURIComponent(rawPath.startsWith('/') ? rawPath : `/${rawPath}`);
   const pathSegments = pathname.split('/');
   if (pathSegments.includes('..')) {
-    return 'navigation.html';
+    return entryPath.slice(1);
   }
   const normalized = path.posix.normalize(pathname).replace(/^\/+/, '');
 
   if (normalized.startsWith('..')) {
-    return 'navigation.html';
+    return entryPath.slice(1);
   }
-  return normalized || 'navigation.html';
+  return normalized || entryPath.slice(1);
 }
 
 function sendNotFound(res) {
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('Not found');
+}
+
+function shouldRedirectToEntry(rawUrl) {
+  const rawPath = String(rawUrl || '/').split('?')[0].split('#')[0];
+  return rawPath === '/' || rawPath === '/index.html';
+}
+
+function sendRedirect(res, rawUrl) {
+  const query = String(rawUrl || '').includes('?') ? `?${String(rawUrl).split('?')[1].split('#')[0]}` : '';
+  res.writeHead(302, { Location: `${entryPath}${query}` });
+  res.end();
 }

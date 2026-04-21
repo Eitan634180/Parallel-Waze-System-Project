@@ -1,9 +1,9 @@
 package reroute
 
 import (
-	coreconfig "nav-system/src/core/config"
-	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
+	navigationsession "nav-system/src/navigation/session"
 	routinggeometry "nav-system/src/routing/geometry"
 	trafficstore "nav-system/src/traffic/store"
 )
@@ -27,7 +27,7 @@ func checkLocalRepairTriggerLocked(s *navigationsession.Session, store *traffics
 		}
 
 		liveWeight := store.LiveWeight(edgeID, edge.Weight)
-		if liveWeight < edge.Weight*coreconfig.RoutingSevereCongestionMultiplier || liveWeight-edge.Weight < coreconfig.RoutingSevereCongestionMinDelay {
+		if liveWeight < edge.Weight*navigation.SevereCongestionMultiplier || liveWeight-edge.Weight < navigation.SevereCongestionMinDelay {
 			continue
 		}
 

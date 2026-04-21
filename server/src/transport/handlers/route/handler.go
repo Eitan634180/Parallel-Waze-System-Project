@@ -9,16 +9,18 @@ import (
 	navigationmonitor "nav-system/src/navigation/monitor"
 	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
-	transporthttp "nav-system/src/transport/http"
-	internalconfig "nav-system/src/transport/internal/config"
 	trafficstore "nav-system/src/traffic/store"
+	transporthttp "nav-system/src/transport/http"
 )
 
 type Handler struct {
-	Graph  *model.Graph
-	Store  *trafficstore.Store
-	Router *routing.Router
-	Cache  *Cache
+	Graph                   *model.Graph
+	Store                   *trafficstore.Store
+	Router                  *routing.Router
+	Cache                   *Cache
+	SlowRequestLogThreshold time.Duration
+	BaseRouteCount          int
+	MaxRouteCount           int
 }
 
 type request struct {
@@ -49,10 +51,10 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	routeCount := normalizedRouteCount(req.Alternatives)
+	routeCount := h.normalizedRouteCount(req.Alternatives)
 	routes := h.Router.Compute(*req.SrcLat, *req.SrcLon, *req.DstLat, *req.DstLon, routeCount, h.liveWeightFunc())
 	transporthttp.LogSlowOperation(
-		internalconfig.SlowRouteRequestLogThreshold,
+		h.SlowRequestLogThreshold,
 		start,
 		"[transport] route compute alternatives=%d returned=%d",
 		routeCount,
@@ -91,13 +93,13 @@ func (h *Handler) liveWeightFunc() routing.WeightFunc {
 	}
 }
 
-func normalizedRouteCount(alternatives int) int {
-	count := internalconfig.BaseRouteCount + alternatives
-	if count < internalconfig.BaseRouteCount {
-		return internalconfig.BaseRouteCount
+func (h *Handler) normalizedRouteCount(alternatives int) int {
+	count := h.BaseRouteCount + alternatives
+	if count < h.BaseRouteCount {
+		return h.BaseRouteCount
 	}
-	if count > internalconfig.MaxRouteCount {
-		return internalconfig.MaxRouteCount
+	if count > h.MaxRouteCount {
+		return h.MaxRouteCount
 	}
 	return count
 }

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 )
@@ -50,7 +49,7 @@ func (r *Router) twoLevelSearch(
 
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / coreconfig.RoutingMaxSearchSpeedMps
+		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
 	}
 
 	// A* on overlay graph
@@ -84,7 +83,7 @@ func (r *Router) fullGraphAStar(srcIdx, dstIdx uint32, wf WeightFunc, stats *Sea
 
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / coreconfig.RoutingMaxSearchSpeedMps
+		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
 	}
 
 	pq := utilities.NewHeap(func(a, b astarItem) bool { return a.f < b.f })

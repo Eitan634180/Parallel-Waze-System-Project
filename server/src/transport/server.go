@@ -5,20 +5,19 @@ import (
 	"net/http"
 	"time"
 
-	searchhandler "nav-system/src/transport/handlers/search"
+	"nav-system/src/graph/model"
+	navigationmanager "nav-system/src/navigation/manager"
+	navigationmonitor "nav-system/src/navigation/monitor"
+	navigationtracker "nav-system/src/navigation/tracker"
+	"nav-system/src/routing"
+	"nav-system/src/simulation"
+	trafficstore "nav-system/src/traffic/store"
 	routehandler "nav-system/src/transport/handlers/route"
+	searchhandler "nav-system/src/transport/handlers/search"
 	sessionhandler "nav-system/src/transport/handlers/session"
 	simulationhandler "nav-system/src/transport/handlers/simulation"
 	systemhandler "nav-system/src/transport/handlers/system"
 	transporthttp "nav-system/src/transport/http"
-	coreconfig "nav-system/src/core/config"
-	navigationmanager "nav-system/src/navigation/manager"
-	navigationmonitor "nav-system/src/navigation/monitor"
-	navigationtracker "nav-system/src/navigation/tracker"
-	"nav-system/src/graph/model"
-	"nav-system/src/routing"
-	"nav-system/src/simulation"
-	trafficstore "nav-system/src/traffic/store"
 )
 
 // Server wires together all dependencies and exposes the HTTP mux.
@@ -59,22 +58,29 @@ func NewServer(
 	}
 	s.routeCache = routehandler.NewCache()
 	s.routes = &routehandler.Handler{
-		Graph:  g,
-		Store:  store,
-		Router: router,
-		Cache:  s.routeCache,
+		Graph:                   g,
+		Store:                   store,
+		Router:                  router,
+		Cache:                   s.routeCache,
+		SlowRequestLogThreshold: SlowRouteRequestLogThreshold,
+		BaseRouteCount:          BaseRouteCount,
+		MaxRouteCount:           MaxRouteCount,
 	}
-	searchConfig := coreconfig.LoadSearchConfigFromEnv()
+	searchConfig := LoadSearchConfigFromEnv()
 	if searchConfig.ViewBox == "" && !g.BBox.IsZero() {
 		searchConfig.ViewBox = g.BBox.NominatimViewBox()
 	}
 	s.searches = &searchhandler.Handler{
-		Client: s.httpClient,
-		Config: searchConfig,
+		Client:                  s.httpClient,
+		Limit:                   searchConfig.Limit,
+		Language:                searchConfig.Language,
+		CountryCodes:            searchConfig.CountryCodes,
+		ViewBox:                 searchConfig.ViewBox,
+		SlowRequestLogThreshold: SlowSearchRequestLogThreshold,
 	}
 	s.sessions = &sessionhandler.Handler{
-		Manager:       mgr,
-		RouteCache:    s.routeCache,
+		Manager:    mgr,
+		RouteCache: s.routeCache,
 		Tracker: &navigationtracker.Tracker{
 			Graph:        g,
 			Store:        store,
@@ -83,7 +89,8 @@ func NewServer(
 			LiveWeights:  s.liveWeightFunc,
 			PrepareRoute: s.routeCache.Store,
 		},
-		OriginAllowed: transporthttp.IsAllowedBrowserOrigin,
+		OriginAllowed:                 transporthttp.IsAllowedBrowserOrigin,
+		SlowSessionCreateLogThreshold: SlowSessionCreationLogThreshold,
 	}
 	s.simulations = &simulationhandler.Handler{
 		Sim:           sim,

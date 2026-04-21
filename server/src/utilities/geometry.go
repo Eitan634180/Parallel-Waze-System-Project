@@ -9,8 +9,7 @@ const (
 
 var cosReferenceLat = float32(math.Cos(ReferenceLat * math.Pi / 180.0))
 
-// Project converts geographic coordinates into planar metres using a
-// default ReferenceLat.
+// Project converts geographic coordinates into planar metres using a default ReferenceLat.
 func Project(lat, lon float64) (x, y float32) {
 	return ProjectAtReferenceLat(lat, lon, ReferenceLat)
 }

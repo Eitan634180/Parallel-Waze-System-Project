@@ -3,11 +3,11 @@ package reroute
 import (
 	"time"
 
-	coreconfig "nav-system/src/core/config"
-	navigationmanager "nav-system/src/navigation/manager"
-	"nav-system/src/navigation/internal/routeutil"
-	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
+	"nav-system/src/navigation/internal/routeutil"
+	navigationmanager "nav-system/src/navigation/manager"
+	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
@@ -55,9 +55,9 @@ func AttemptCongestionReroute(
 		return
 	}
 
-	reason := rerouteReasonTraffic
+	reason := navigation.RerouteReasonTraffic
 	if isLocalPatch {
-		reason = rerouteReasonLocalPatch
+		reason = navigation.RerouteReasonLocalPatch
 	}
 
 	ApplyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA, nil)
@@ -108,7 +108,7 @@ func buildCongestionCandidate(
 				context.localRepair.fromNodeIdx,
 				context.localRepair.toNodeIdx,
 				context.localRepair.congestedCost,
-				coreconfig.RoutingLocalRepairMaxHops,
+				navigation.LocalRepairMaxHops,
 				wf,
 			)
 		} else {
@@ -116,7 +116,7 @@ func buildCongestionCandidate(
 				context.localRepair.fromNodeIdx,
 				context.localRepair.toNodeIdx,
 				context.localRepair.congestedCost,
-				coreconfig.RoutingLocalRepairOriginalMaxHops,
+				navigation.LocalRepairOriginalMaxHops,
 				wf,
 			)
 		}
@@ -136,6 +136,6 @@ func buildCongestionCandidate(
 func shouldAcceptCongestionCandidate(s *navigationsession.Session, candidate routing.Route, oldETA, newETA float32) bool {
 	etaGain := oldETA - newETA
 	return oldETA > 0 &&
-		(etaGain/oldETA >= coreconfig.RoutingRerouteSpeedupMin || etaGain >= coreconfig.RoutingRerouteMinGainSec) &&
+		(etaGain/oldETA >= navigation.RerouteSpeedupMin || etaGain >= navigation.RerouteMinGainSec) &&
 		!engine.SameRemainingRoute(s.Route, s.StepIdx, candidate)
 }

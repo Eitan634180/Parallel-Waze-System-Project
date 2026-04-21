@@ -3,10 +3,10 @@ package tracker
 import (
 	"time"
 
+	"nav-system/src/graph/model"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationmonitor "nav-system/src/navigation/monitor"
 	navigationsession "nav-system/src/navigation/session"
-	"nav-system/src/graph/model"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"

@@ -19,9 +19,9 @@ import (
 	"nav-system/src/regions"
 	"nav-system/src/routing"
 	"nav-system/src/simulation"
-	"nav-system/src/transport"
 	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/transport"
 )
 
 const serverLogPrefix = "server:"

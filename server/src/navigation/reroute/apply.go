@@ -4,11 +4,11 @@ import (
 	"log"
 	"time"
 
-	coreconfig "nav-system/src/core/config"
-	navigationmanager "nav-system/src/navigation/manager"
-	"nav-system/src/navigation/internal/routeutil"
-	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
+	"nav-system/src/navigation/internal/routeutil"
+	navigationmanager "nav-system/src/navigation/manager"
+	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
@@ -44,7 +44,7 @@ func DoReroute(
 	start := time.Now()
 	newRoutes := router.Compute(lat, lon, destination.Lat, destination.Lon, 1, wf)
 	elapsed := time.Since(start)
-	if elapsed >= coreconfig.RoutingSlowComputeLogThreshold {
+	if elapsed >= navigation.SlowComputeLogThreshold {
 		log.Printf("session: reroute compute slow (reason=%s session=%s routes=%d duration=%s)", reason, s.ID, len(newRoutes), elapsed.Round(time.Millisecond))
 	}
 	if len(newRoutes) == 0 {

@@ -29,11 +29,17 @@ func ParseRoutingMode(raw string) (RoutingMode, error) {
 }
 
 func NewRouter(g *model.Graph, si *SnapIndex) *Router {
-	return engine.NewRouter(g, si)
+	return engine.NewRouter(g, si, engine.Config{
+		MaxSearchSpeedMps:       MaxSearchSpeedMps,
+		AlternativeRoutePenalty: AlternativeRoutePenalty,
+	})
 }
 
 func NewRouterWithMode(g *model.Graph, si *SnapIndex, mode RoutingMode) *Router {
-	return engine.NewRouterWithMode(g, si, mode)
+	return engine.NewRouterWithMode(g, si, mode, engine.Config{
+		MaxSearchSpeedMps:       MaxSearchSpeedMps,
+		AlternativeRoutePenalty: AlternativeRoutePenalty,
+	})
 }
 
 func BuildSnapIndex(g *model.Graph) *SnapIndex {

@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
 	"nav-system/src/routing"
 )
@@ -47,7 +46,7 @@ func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) in
 			stepIdx:  startIndex + 1,
 			lat:      route.Steps[startIndex].Lat,
 			lon:      route.Steps[startIndex].Lon,
-			paceBias: coreconfig.SimulationPaceBiasBase + m.rng.Float32()*coreconfig.SimulationPaceBiasRange,
+			paceBias: PaceBiasBase + m.rng.Float32()*PaceBiasRange,
 		}
 
 		if m.sessionBridge.Create != nil && m.sessionBridge.ProcessPing != nil && m.sessionBridge.Destroy != nil {
@@ -80,11 +79,11 @@ func (m *Manager) SpawnRandom(count int, minStep int) int {
 }
 
 func normalizedCount(count int) int {
-	if count < coreconfig.SimulationDefaultCount {
-		return coreconfig.SimulationDefaultCount
+	if count < DefaultCount {
+		return DefaultCount
 	}
-	if count > coreconfig.SimulationMaxCount {
-		return coreconfig.SimulationMaxCount
+	if count > MaxCount {
+		return MaxCount
 	}
 	return count
 }
@@ -104,7 +103,7 @@ func (m *Manager) randomRoutes(count int) []routing.Route {
 	}
 
 	routes := m.computeRandomCandidates(bbox, count)
-	if elapsed := time.Since(start); elapsed >= coreconfig.SimulationSlowRouteLogThreshold {
+	if elapsed := time.Since(start); elapsed >= SlowRouteLogThreshold {
 		log.Printf("[simulation] random routes requested=%d generated=%d duration=%s", count, len(routes), elapsed.Round(time.Millisecond))
 	}
 	return routes
@@ -115,8 +114,8 @@ func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routing.Rout
 		return nil
 	}
 
-	attempts := limit * coreconfig.SimulationRandomRouteAttemptFactor
-	workerCount := minInt(maxInt(runtime.GOMAXPROCS(0), coreconfig.SimulationMinWorkers), attempts)
+	attempts := limit * RandomRouteAttemptFactor
+	workerCount := minInt(maxInt(runtime.GOMAXPROCS(0), MinWorkers), attempts)
 
 	jobs := make(chan struct{}, workerCount)
 	results := make(chan routing.Route, workerCount)
@@ -140,11 +139,11 @@ func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routing.Rout
 
 				srcLat, srcLon := bbox.randomPoint(rng)
 				dstLat, dstLon := bbox.randomNearbyPoint(rng, srcLat, srcLon)
-				if distanceSquared(srcLat, srcLon, dstLat, dstLon) < coreconfig.SimulationMinRandomRouteDistanceSq {
+				if distanceSquared(srcLat, srcLon, dstLat, dstLon) < MinRandomRouteDistanceSq {
 					continue
 				}
 
-				computed := m.router.Compute(srcLat, srcLon, dstLat, dstLon, coreconfig.SimulationDefaultRouteAlternatives, m.weightFunc())
+				computed := m.router.Compute(srcLat, srcLon, dstLat, dstLon, DefaultRouteAlternatives, m.weightFunc())
 				if len(computed) == 0 {
 					continue
 				}
@@ -225,7 +224,7 @@ func routeLegWeight(route routing.Route, startIndex int) float32 {
 	}
 	legDist := route.Steps[startIndex+1].DistanceM - route.Steps[startIndex].DistanceM
 	if legDist <= 0 {
-		return coreconfig.SimulationMinLegDistanceFallbackM
+		return MinLegDistanceFallbackM
 	}
 	return legDist
 }
@@ -241,10 +240,10 @@ func (b geoBox) randomPoint(rng *rand.Rand) (float64, float64) {
 }
 
 func (b geoBox) randomNearbyPoint(rng *rand.Rand, centerLat, centerLon float64) (float64, float64) {
-	minLat := maxFloat64(b.minLat, centerLat-coreconfig.SimulationMaxCommuteDegrees)
-	maxLat := minFloat64(b.maxLat, centerLat+coreconfig.SimulationMaxCommuteDegrees)
-	minLon := maxFloat64(b.minLon, centerLon-coreconfig.SimulationMaxCommuteDegrees)
-	maxLon := minFloat64(b.maxLon, centerLon+coreconfig.SimulationMaxCommuteDegrees)
+	minLat := maxFloat64(b.minLat, centerLat-MaxCommuteDegrees)
+	maxLat := minFloat64(b.maxLat, centerLat+MaxCommuteDegrees)
+	minLon := maxFloat64(b.minLon, centerLon-MaxCommuteDegrees)
+	maxLon := minFloat64(b.maxLon, centerLon+MaxCommuteDegrees)
 
 	lat := minLat + rng.Float64()*(maxLat-minLat)
 	lon := minLon + rng.Float64()*(maxLon-minLon)

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	coreconfig "nav-system/src/core/config"
 	"nav-system/src/utilities"
 )
 
@@ -22,7 +21,7 @@ func (r *Router) LocalRepairOverlay(
 	pred := make(map[uint32]overlayPredEntry)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / coreconfig.RoutingMaxSearchSpeedMps
+		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
 	}
 
 	costs[srcIdx] = 0
@@ -106,7 +105,7 @@ func (r *Router) LocalRepairOriginal(
 	pred := make(map[uint32]predEntry)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / coreconfig.RoutingMaxSearchSpeedMps
+		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
 	}
 
 	costs[srcIdx] = 0

@@ -89,7 +89,7 @@ func TestSimulationWebSocketPublishesSnapshotsAfterSpawn(t *testing.T) {
 		if math.Abs(lat-expectedStart.Lat) > 0.0004 || math.Abs(lon-expectedStart.Lon) > 0.0004 {
 			t.Fatalf("snapshot car spawned at %.6f,%.6f; want near %.6f,%.6f", lat, lon, expectedStart.Lat, expectedStart.Lon)
 		}
-			return
+		return
 	}
 
 	t.Fatal("expected simulation snapshot with at least one car")

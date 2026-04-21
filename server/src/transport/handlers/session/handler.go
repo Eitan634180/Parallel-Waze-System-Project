@@ -14,7 +14,6 @@ import (
 	navigationtracker "nav-system/src/navigation/tracker"
 	routehandler "nav-system/src/transport/handlers/route"
 	transporthttp "nav-system/src/transport/http"
-	internalconfig "nav-system/src/transport/internal/config"
 	transportws "nav-system/src/transport/ws"
 
 	"github.com/gorilla/websocket"
@@ -27,10 +26,11 @@ const (
 )
 
 type Handler struct {
-	Manager       *navigationmanager.Manager
-	Tracker       *navigationtracker.Tracker
-	RouteCache    *routehandler.Cache
-	OriginAllowed func(string) bool
+	Manager                       *navigationmanager.Manager
+	Tracker                       *navigationtracker.Tracker
+	RouteCache                    *routehandler.Cache
+	OriginAllowed                 func(string) bool
+	SlowSessionCreateLogThreshold time.Duration
 }
 
 type createRequest struct {
@@ -104,7 +104,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 	sess := h.Manager.Create(route)
 	transporthttp.LogSlowOperation(
-		internalconfig.SlowSessionCreationLogThreshold,
+		h.SlowSessionCreateLogThreshold,
 		start,
 		"[transport] session create route=%s",
 		*req.RouteID,

@@ -39,7 +39,7 @@ const browser = await chromium.launch({
     '--no-first-run',
   ],
 });
-const clientURL = `http://${config.clientHost}:${config.clientPort}/navigation.html?loadbot=1`;
+const clientURL = `http://${config.clientHost}:${config.clientPort}/public/index.html?loadbot=1`;
 
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

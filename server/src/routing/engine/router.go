@@ -1,7 +1,6 @@
 package engine
 
 import (
-	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
 )
 
@@ -12,27 +11,33 @@ type Snapper interface {
 	Snap(lat, lon float64) uint32
 }
 
+type Config struct {
+	MaxSearchSpeedMps       float32
+	AlternativeRoutePenalty float32
+}
+
 // BaseWeight is a WeightFunc that always returns the static edge weight.
 func BaseWeight(e *model.Edge) float32 { return e.Weight }
 
 // Router holds graph reference and provides route computation.
 type Router struct {
-	g    *model.Graph
-	si   Snapper
-	mode RoutingMode
+	g      *model.Graph
+	si     Snapper
+	mode   RoutingMode
+	config Config
 }
 
 // NewRouter constructs a Router.
-func NewRouter(g *model.Graph, si Snapper) *Router {
-	return NewRouterWithMode(g, si, RoutingModeHierarchical)
+func NewRouter(g *model.Graph, si Snapper, config Config) *Router {
+	return NewRouterWithMode(g, si, RoutingModeHierarchical, config)
 }
 
 // NewRouterWithMode constructs a Router with the provided query strategy.
-func NewRouterWithMode(g *model.Graph, si Snapper, mode RoutingMode) *Router {
+func NewRouterWithMode(g *model.Graph, si Snapper, mode RoutingMode, config Config) *Router {
 	if mode == "" {
 		mode = RoutingModeHierarchical
 	}
-	return &Router{g: g, si: si, mode: mode}
+	return &Router{g: g, si: si, mode: mode, config: config}
 }
 
 func (r *Router) Mode() RoutingMode {
@@ -103,11 +108,11 @@ func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc,
 		routes = append(routes, stepsToRoute(steps))
 		for _, step := range steps {
 			if step.EdgeID != nil {
-				penalties[model.EdgeID(*step.EdgeID)] = coreconfig.RoutingAlternativeRoutePenalty
+				penalties[model.EdgeID(*step.EdgeID)] = r.config.AlternativeRoutePenalty
 			}
 		}
 		for _, overlayEdgeID := range usedOverlayEdges {
-			overlayPenalties[overlayEdgeID] = coreconfig.RoutingAlternativeRoutePenalty
+			overlayPenalties[overlayEdgeID] = r.config.AlternativeRoutePenalty
 		}
 	}
 

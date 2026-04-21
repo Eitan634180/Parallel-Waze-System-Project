@@ -1,8 +1,8 @@
 package monitor
 
 import (
-	"nav-system/src/navigation/internal/routeutil"
 	"nav-system/src/graph/model"
+	"nav-system/src/navigation/internal/routeutil"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
 )

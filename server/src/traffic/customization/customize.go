@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
+	"nav-system/src/traffic"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 )
@@ -56,7 +56,7 @@ var customizationIndexCache = make(map[*model.Graph]*customizationIndex)
 
 // RunCustomization periodically reweights overlay edges using live traffic.
 func RunCustomization(ctx context.Context, g *model.Graph, store *trafficstore.Store) {
-	ticker := time.NewTicker(coreconfig.TrafficCustomizationInterval)
+	ticker := time.NewTicker(traffic.CustomizationInterval)
 	defer ticker.Stop()
 
 	for {
@@ -178,7 +178,7 @@ func CustomizeOverlayWeights(g *model.Graph, store *trafficstore.Store) {
 	g.OverlayAdj.Mu.Unlock()
 
 	elapsed := time.Since(start)
-	if elapsed >= coreconfig.TrafficSlowCustomizationLogThreshold {
+	if elapsed >= traffic.SlowCustomizationLogThreshold {
 		log.Printf("traffic: overlay customization slow (updates=%d duration=%s)", len(updates), elapsed.Round(time.Millisecond))
 	}
 }

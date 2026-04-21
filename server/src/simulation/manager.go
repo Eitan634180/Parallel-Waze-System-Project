@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
 	"nav-system/src/routing"
 	trafficstore "nav-system/src/traffic/store"
@@ -26,13 +25,19 @@ type Manager struct {
 	sessionBridge SessionBridge
 }
 
+type CarSnapshot struct {
+	ID  string  `json:"id"`
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
+}
+
 func NewManager(g *model.Graph, store *trafficstore.Store, router *routing.Router, liveWeights func() routing.WeightFunc) *Manager {
 	return &Manager{
 		g:           g,
 		store:       store,
 		router:      router,
 		liveWeights: liveWeights,
-		rng:         rand.New(rand.NewSource(coreconfig.SimulationRandomSeed)),
+		rng:         rand.New(rand.NewSource(RandomSeed)),
 		cars:        make(map[string]*car),
 		subscribers: make(map[int]chan []CarSnapshot),
 	}
@@ -45,7 +50,7 @@ func (m *Manager) SetSessionBridge(bridge SessionBridge) {
 }
 
 func (m *Manager) Run(ctx context.Context) {
-	ticker := time.NewTicker(coreconfig.SimulationTickInterval)
+	ticker := time.NewTicker(TickInterval)
 	defer ticker.Stop()
 
 	for {
@@ -54,7 +59,7 @@ func (m *Manager) Run(ctx context.Context) {
 			m.Clear()
 			return
 		case <-ticker.C:
-			m.tick(float32(coreconfig.SimulationTickInterval.Seconds()))
+			m.tick(float32(TickInterval.Seconds()))
 		}
 	}
 }

@@ -12,8 +12,8 @@ import (
 	navigationmanager "nav-system/src/navigation/manager"
 	"nav-system/src/routing"
 	"nav-system/src/simulation"
-	"nav-system/src/transport"
 	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/transport"
 )
 
 type graphFixture struct {

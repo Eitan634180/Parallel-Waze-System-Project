@@ -3,11 +3,10 @@ package geography
 import (
 	"math"
 
+	graphroot "nav-system/src/graph"
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 )
-
-const gridSize = 128
 
 // SnapIndex is a prebuilt spatial grid for nearest-node lookups.
 type SnapIndex struct {
@@ -46,15 +45,15 @@ func BuildSnapIndex(g *model.Graph) *SnapIndex {
 	maxX++
 	maxY++
 
-	cellW := (maxX - minX) / gridSize
-	cellH := (maxY - minY) / gridSize
-	buckets := make([][]uint32, gridSize*gridSize)
+	cellW := (maxX - minX) / graphroot.SnapGridSize
+	cellH := (maxY - minY) / graphroot.SnapGridSize
+	buckets := make([][]uint32, graphroot.SnapGridSize*graphroot.SnapGridSize)
 
 	for i := range g.Nodes {
 		node := &g.Nodes[i]
 		cellX := int((node.X - minX) / cellW)
 		cellY := int((node.Y - minY) / cellH)
-		bucketIdx := cellY*gridSize + cellX
+		bucketIdx := cellY*graphroot.SnapGridSize + cellX
 		buckets[bucketIdx] = append(buckets[bucketIdx], uint32(i))
 	}
 
@@ -75,32 +74,32 @@ func (si *SnapIndex) Snap(lat, lon float64) uint32 {
 	cellX := clampGridCoord(qx, si.minX, si.cellW)
 	cellY := clampGridCoord(qy, si.minY, si.cellH)
 	maxRing := max(
-		max(cellX, gridSize-1-cellX),
-		max(cellY, gridSize-1-cellY),
+		max(cellX, graphroot.SnapGridSize-1-cellX),
+		max(cellY, graphroot.SnapGridSize-1-cellY),
 	)
 
 	bestIdx := uint32(0)
 	bestDist := float32(math.MaxFloat32)
 
 	for ring := 0; ring <= maxRing; ring++ {
-		ringMinDist := float32(ring) * min32(si.cellW, si.cellH)
+		ringMinDist := float32(ring) * utilities.Min32(si.cellW, si.cellH)
 		if ring > 0 && ringMinDist*ringMinDist > bestDist {
 			break
 		}
 
 		for dy := -ring; dy <= ring; dy++ {
 			for dx := -ring; dx <= ring; dx++ {
-				if abs(dx) != ring && abs(dy) != ring {
+				if utilities.Abs(dx) != ring && utilities.Abs(dy) != ring {
 					continue
 				}
 
 				bucketX := cellX + dx
 				bucketY := cellY + dy
-				if bucketX < 0 || bucketX >= gridSize || bucketY < 0 || bucketY >= gridSize {
+				if bucketX < 0 || bucketX >= graphroot.SnapGridSize || bucketY < 0 || bucketY >= graphroot.SnapGridSize {
 					continue
 				}
 
-				for _, nodeIdx := range si.buckets[bucketY*gridSize+bucketX] {
+				for _, nodeIdx := range si.buckets[bucketY*graphroot.SnapGridSize+bucketX] {
 					node := &si.g.Nodes[nodeIdx]
 					dist := utilities.DistanceSquared(qx, qy, node.X, node.Y)
 					if dist < bestDist {
@@ -115,37 +114,6 @@ func (si *SnapIndex) Snap(lat, lon float64) uint32 {
 	return bestIdx
 }
 
-func clampInt(value, minValue, maxValue int) int {
-	if value < minValue {
-		return minValue
-	}
-	if value > maxValue {
-		return maxValue
-	}
-	return value
-}
-
 func clampGridCoord(value, minValue, cellSize float32) int {
-	return clampInt(int((value-minValue)/cellSize), 0, gridSize-1)
-}
-
-func abs(value int) int {
-	if value < 0 {
-		return -value
-	}
-	return value
-}
-
-func min32(a, b float32) float32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return utilities.ClampInt(int((value-minValue)/cellSize), 0, graphroot.SnapGridSize-1)
 }

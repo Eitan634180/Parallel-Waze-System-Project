@@ -1,10 +1,10 @@
 package offroute
 
 import (
-	"nav-system/src/utilities"
 	"nav-system/src/graph/model"
 	"nav-system/src/routing/engine"
 	routinggeometry "nav-system/src/routing/geometry"
+	"nav-system/src/utilities"
 )
 
 const (

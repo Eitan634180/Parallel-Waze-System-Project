@@ -1,8 +1,8 @@
 package reroute
 
 import (
-	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/graph/model"
+	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
 	routinggeometry "nav-system/src/routing/geometry"
 	trafficstore "nav-system/src/traffic/store"

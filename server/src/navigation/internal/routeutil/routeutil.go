@@ -1,11 +1,11 @@
 package routeutil
 
 import (
-	"nav-system/src/utilities"
 	"nav-system/src/graph/model"
-	routinggeometry "nav-system/src/routing/geometry"
 	"nav-system/src/routing/engine"
+	routinggeometry "nav-system/src/routing/geometry"
 	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/utilities"
 )
 
 func ComputeETA(route engine.Route, stepIdx int, lastLat, lastLon float64, g *model.Graph, store *trafficstore.Store) float32 {

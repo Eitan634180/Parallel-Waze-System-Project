@@ -91,7 +91,7 @@ func TestWebSocketConnectionToNonExistentSessionFailsGracefully(t *testing.T) {
 	server := httptestServer(t, fixture)
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/session/no-such-session/ws"
-	_, resp, _ := wsDialerWithTimeout(2 * time.Second).Dial(wsURL, nil)
+	_, resp, _ := wsDialerWithTimeout(2*time.Second).Dial(wsURL, nil)
 	if resp != nil {
 		defer resp.Body.Close()
 		if resp.StatusCode >= http.StatusInternalServerError {

@@ -3,7 +3,6 @@ package simulation
 import (
 	"sync"
 
-	coreconfig "nav-system/src/core/config"
 	"nav-system/src/graph/model"
 	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
@@ -28,6 +27,11 @@ type car struct {
 	pendingEdgeEvents      []EdgeTravel
 	session                *navigationsession.Session
 	removed                bool
+}
+
+type EdgeTravel struct {
+	EdgeID      uint32
+	ObservedSec float32
 }
 
 type carRef struct {
@@ -57,7 +61,7 @@ func advanceCar(c *car, g *model.Graph, store *trafficstore.Store, dtSec float32
 		cur := c.route.Steps[c.stepIdx]
 		legDist := cur.DistanceM - prev.DistanceM
 		if legDist <= 0 {
-			legDist = coreconfig.SimulationMinLegDistanceFallbackM
+			legDist = MinLegDistanceFallbackM
 		}
 		leftOnLeg := legDist - c.progressM
 		maxDistanceThisTick := speedMps * remainingSec
@@ -128,7 +132,7 @@ func recordSimSpeedSample(c *car, step routing.Step, speedMps float32, g *model.
 	if !c.edgeActive || step.EdgeID == nil || speedMps <= 0 {
 		return
 	}
-	if c.edgeTimeS < coreconfig.SimulationObservationWarmupS || c.edgeTimeS-c.lastObservationSampleS < coreconfig.SimulationObservationSampleIntervalS {
+	if c.edgeTimeS < ObservationWarmupS || c.edgeTimeS-c.lastObservationSampleS < ObservationSampleIntervalS {
 		return
 	}
 
@@ -162,7 +166,7 @@ func currentSpeedMps(c *car, g *model.Graph, store *trafficstore.Store) float32 
 	legDist := cur.DistanceM - prev.DistanceM
 	legTime := cur.BaseTimeSec - prev.BaseTimeSec
 
-	baseKmh := coreconfig.SimulationDefaultLegSpeedKmh
+	baseKmh := DefaultLegSpeedKmh
 	if legDist > 0 && legTime > 0 {
 		baseKmh = (legDist / legTime) * 3.6
 	}
@@ -180,11 +184,11 @@ func currentSpeedMps(c *car, g *model.Graph, store *trafficstore.Store) float32 
 	}
 
 	speedKmh := baseKmh * c.paceBias
-	if speedKmh < coreconfig.SimulationMinSpeedKmh {
-		speedKmh = coreconfig.SimulationMinSpeedKmh
+	if speedKmh < MinSpeedKmh {
+		speedKmh = MinSpeedKmh
 	}
-	if speedKmh > baseKmh*coreconfig.SimulationMaxSpeedMultiplier {
-		speedKmh = baseKmh * coreconfig.SimulationMaxSpeedMultiplier
+	if speedKmh > baseKmh*MaxSpeedMultiplier {
+		speedKmh = baseKmh * MaxSpeedMultiplier
 	}
 	return speedKmh / 3.6
 }

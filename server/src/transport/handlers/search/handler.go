@@ -13,9 +13,7 @@ import (
 	"strings"
 	"time"
 
-	coreconfig "nav-system/src/core/config"
 	transporthttp "nav-system/src/transport/http"
-	internalconfig "nav-system/src/transport/internal/config"
 )
 
 const (
@@ -30,8 +28,12 @@ const (
 var errWarmupDisabled = errors.New("search warmup query not configured")
 
 type Handler struct {
-	Client *http.Client
-	Config coreconfig.SearchConfig
+	Client                  *http.Client
+	Limit                   int
+	Language                string
+	CountryCodes            string
+	ViewBox                 string
+	SlowRequestLogThreshold time.Duration
 }
 
 type nominatimResult struct {
@@ -59,7 +61,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	req, err := h.newRequest(r.Context(), query, h.Config.Limit)
+	req, err := h.newRequest(r.Context(), query, h.Limit)
 	if err != nil {
 		http.Error(w, searchRequestFailedMsg, http.StatusInternalServerError)
 		return
@@ -98,7 +100,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	transporthttp.LogSlowOperation(
-		internalconfig.SlowSearchRequestLogThreshold,
+		h.SlowRequestLogThreshold,
 		start,
 		"[transport] search query=%q returned=%d",
 		query,
@@ -140,14 +142,14 @@ func (h *Handler) newRequest(ctx context.Context, query string, limit int) (*htt
 	values.Set("format", "jsonv2")
 	values.Set("limit", strconv.Itoa(limit))
 	values.Set("addressdetails", "0")
-	if h.Config.Language != "" {
-		values.Set("accept-language", h.Config.Language)
+	if h.Language != "" {
+		values.Set("accept-language", h.Language)
 	}
-	if h.Config.CountryCodes != "" {
-		values.Set("countrycodes", h.Config.CountryCodes)
+	if h.CountryCodes != "" {
+		values.Set("countrycodes", h.CountryCodes)
 	}
-	if h.Config.ViewBox != "" {
-		values.Set("viewbox", h.Config.ViewBox)
+	if h.ViewBox != "" {
+		values.Set("viewbox", h.ViewBox)
 		values.Set("bounded", "1")
 	}
 
@@ -156,8 +158,8 @@ func (h *Handler) newRequest(ctx context.Context, query string, limit int) (*htt
 		return nil, err
 	}
 	req.Header.Set("User-Agent", searchUserAgent)
-	if h.Config.Language != "" {
-		req.Header.Set("Accept-Language", h.Config.Language)
+	if h.Language != "" {
+		req.Header.Set("Accept-Language", h.Language)
 	}
 
 	return req, nil

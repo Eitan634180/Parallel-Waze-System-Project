@@ -5,11 +5,11 @@ import (
 	"log"
 	"time"
 
-	coreconfig "nav-system/src/core/config"
+	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationreroute "nav-system/src/navigation/reroute"
 	navigationsession "nav-system/src/navigation/session"
-	"nav-system/src/graph/model"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
@@ -26,11 +26,11 @@ func RunOptimizationSweep(
 ) {
 	jobs := make(chan *navigationsession.Session, 256)
 
-	for i := 0; i < coreconfig.RoutingOptimizationWorkerLimit; i++ {
+	for i := 0; i < navigation.OptimizationWorkerLimit; i++ {
 		go optimizationWorker(ctx, jobs, mgr, g, store, router, wf, prepareRoute)
 	}
 
-	ticker := time.NewTicker(coreconfig.RoutingOptimizationSweepInterval)
+	ticker := time.NewTicker(navigation.OptimizationSweepInterval)
 	defer ticker.Stop()
 
 	for {
@@ -74,7 +74,7 @@ func optimizationWorker(
 				continue
 			}
 
-			navigationreroute.ApplyRouteUpdate(sess, candidate, g, store, mgr, prepareRoute, time.Now(), rerouteReasonTrafficCleared, &oldETA, &newETA, nil)
+			navigationreroute.ApplyRouteUpdate(sess, candidate, g, store, mgr, prepareRoute, time.Now(), navigation.RerouteReasonTrafficCleared, &oldETA, &newETA, nil)
 		}
 	}
 }
@@ -119,7 +119,7 @@ func optimizationCandidate(
 	start := time.Now()
 	routes := router.Compute(snapLat, snapLon, destination.Lat, destination.Lon, 1, wf)
 	elapsed := time.Since(start)
-	if elapsed >= coreconfig.RoutingSlowComputeLogThreshold {
+	if elapsed >= navigation.SlowComputeLogThreshold {
 		log.Printf("session: optimization compute slow (session=%s routes=%d duration=%s)", s.ID, len(routes), elapsed.Round(time.Millisecond))
 	}
 	if len(routes) == 0 {
@@ -131,7 +131,7 @@ func optimizationCandidate(
 
 func shouldAcceptOptimizationCandidate(s *navigationsession.Session, candidate routing.Route, v navigationreroute.SessionVersion, oldETA, newETA float32) bool {
 	s.Mu.RLock()
-	tooSoon := time.Since(s.LastReroute) < coreconfig.RoutingRerouteCooldown
+	tooSoon := time.Since(s.LastReroute) < navigation.RerouteCooldown
 	stale := s.StepIdx != v.StepIdx || s.RouteRevision != v.RouteRevision
 	s.Mu.RUnlock()
 
@@ -145,5 +145,5 @@ func shouldAcceptOptimizationCandidate(s *navigationsession.Session, candidate r
 
 	etaGain := oldETA - newETA
 	return oldETA > 0 &&
-		(etaGain/oldETA >= coreconfig.RoutingRerouteSpeedupMin || etaGain >= coreconfig.RoutingRerouteMinGainSec)
+		(etaGain/oldETA >= navigation.RerouteSpeedupMin || etaGain >= navigation.RerouteMinGainSec)
 }

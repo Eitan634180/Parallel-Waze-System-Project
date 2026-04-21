@@ -2,13 +2,19 @@ package manager
 
 import (
 	"sync"
+	"time"
 
-	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/graph/model"
+	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 
 	"github.com/google/uuid"
+)
+
+var (
+	now       = time.Now
+	newTicker = time.NewTicker
 )
 
 // Manager owns all active sessions and the reverse edge-to-session index.

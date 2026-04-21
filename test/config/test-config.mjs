@@ -162,7 +162,7 @@ export const testConfig = {
     candidateAttempts: requireInteger('TEST_E2E_CANDIDATE_ATTEMPTS', 1),
     tripInsetFraction: requireFloat('TEST_E2E_TRIP_INSET_FRACTION', 0, 0.49),
     tripCommuteDegrees: requireFloat('TEST_E2E_TRIP_COMMUTE_DEGREES', 0.001),
-    loadbotPath: '/navigation.html?loadbot=1',
+    loadbotPath: '/public/index.html?loadbot=1',
   },
   tripGeneration: {
     minDistanceSq: requireFloat('TEST_TRIP_MIN_DISTANCE_SQ', 0),
@@ -170,7 +170,7 @@ export const testConfig = {
   },
   loadbot: {
     clientPort: loadbotClientPort,
-    clientURL: `${buildHttpUrl(host, loadbotClientPort)}/navigation.html?loadbot=1`,
+    clientURL: `${buildHttpUrl(host, loadbotClientPort)}/public/index.html?loadbot=1`,
     clients: requireInteger('TEST_LOADBOT_CLIENTS', 1),
     headless: requireBoolean('TEST_LOADBOT_HEADLESS'),
     commuteDegrees: requireFloat('TEST_LOADBOT_COMMUTE_DEGREES', 0.01),

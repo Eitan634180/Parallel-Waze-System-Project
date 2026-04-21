@@ -1,8 +1,8 @@
 package tracker
 
 import (
-	navigationoffroute "nav-system/src/navigation/internal/offroute"
 	"nav-system/src/graph/model"
+	navigationoffroute "nav-system/src/navigation/internal/offroute"
 	"nav-system/src/routing/engine"
 )
 

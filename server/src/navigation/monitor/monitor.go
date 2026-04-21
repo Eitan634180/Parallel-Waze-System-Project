@@ -3,13 +3,15 @@ package monitor
 import (
 	"time"
 
-	coreconfig "nav-system/src/core/config"
+	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
 	navigationoffroute "nav-system/src/navigation/internal/offroute"
+	"nav-system/src/navigation/internal/routeutil"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationreroute "nav-system/src/navigation/reroute"
 	navigationsession "nav-system/src/navigation/session"
-	"nav-system/src/graph/model"
 	"nav-system/src/routing"
+	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -40,7 +42,7 @@ func Check(
 	}
 
 	if assessment.shouldRerouteNow {
-		navigationreroute.DoReroute(s, snapLat, snapLon, g, store, mgr, router, wf, prepareRoute, now, rerouteReasonOffRoute, nil, nil)
+		navigationreroute.DoReroute(s, snapLat, snapLon, g, store, mgr, router, wf, prepareRoute, now, navigation.RerouteReasonOffRoute, nil, nil)
 		return
 	}
 
@@ -53,7 +55,7 @@ func Check(
 
 func pushETAIfDue(s *navigationsession.Session, g *model.Graph, store *trafficstore.Store, now time.Time) {
 	s.Mu.Lock()
-	if now.Sub(s.LastETAPush) < coreconfig.RoutingETAThrottle {
+	if now.Sub(s.LastETAPush) < navigation.ETAThrottle {
 		s.Mu.Unlock()
 		return
 	}
@@ -88,11 +90,15 @@ func refreshRouteAssessment(s *navigationsession.Session, snapLat, snapLon float
 	s.LastCongestionAhead = assessment.congestionAhead
 	s.LastCongestedEdges = assessment.congestedEdgeCount
 
-	assessment.allowReroute = now.Sub(s.LastReroute) >= coreconfig.RoutingRerouteCooldown
+	assessment.allowReroute = now.Sub(s.LastReroute) >= navigation.RerouteCooldown
 	assessment.shouldRerouteNow =
 		assessment.offRouteDistanceM <= navigationoffroute.OffRouteSanityMaxM &&
 			assessment.offRouteDistanceM > navigationoffroute.OffRouteDistM &&
-			s.OffRouteViolations >= coreconfig.RoutingOffRouteStrikes
+			s.OffRouteViolations >= navigation.OffRouteStrikes
 
 	return assessment
+}
+
+func ComputeETA(route engine.Route, stepIdx int, lastLat, lastLon float64, g *model.Graph, store *trafficstore.Store) float32 {
+	return routeutil.ComputeETA(route, stepIdx, lastLat, lastLon, g, store)
 }
