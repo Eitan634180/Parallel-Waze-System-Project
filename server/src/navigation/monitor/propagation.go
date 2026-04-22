@@ -11,7 +11,6 @@ import (
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing/engine"
-	routinggeometry "nav-system/src/routing/geometry"
 	trafficpropagation "nav-system/src/traffic/propagation"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
@@ -137,13 +136,13 @@ func flagBetterRouteIfHelpful(s *navigationsession.Session, improvedEdges []traf
 	carX, carY := utilities.ProjectAtReferenceLat(snapshot.carLat, snapshot.carLon, g.ProjectionRefLat)
 
 	for _, changed := range improvedEdges {
-		edge, ok := routinggeometry.EdgeByID(g, changed.EdgeID)
+		edge, ok := g.Edge(changed.EdgeID)
 		if !ok {
 			continue
 		}
 
-		fromNode := &g.Nodes[edge.FromNodeIdx]
-		toNode := &g.Nodes[edge.ToNodeIdx]
+		fromNode := g.Node(edge.FromNodeIdx)
+		toNode := g.Node(edge.ToNodeIdx)
 		if fromNode == nil || toNode == nil {
 			continue
 		}
@@ -173,10 +172,7 @@ func heuristicSnapshot(s *navigationsession.Session, g *model.Graph) (heuristicS
 		return heuristicSessionSnapshot{}, false
 	}
 
-	var destinationNode *model.Node
-	if destinationStep.NodeIdx < uint32(len(g.Nodes)) {
-		destinationNode = &g.Nodes[destinationStep.NodeIdx]
-	}
+	destinationNode := g.Node(destinationStep.NodeIdx)
 	if destinationNode == nil {
 		return heuristicSessionSnapshot{}, false
 	}

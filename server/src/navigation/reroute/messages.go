@@ -4,7 +4,6 @@ import (
 	"nav-system/src/graph/model"
 	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
-	routinggeometry "nav-system/src/routing/geometry"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -33,7 +32,7 @@ func sendRerouteMessage(s *navigationsession.Session, route routing.Route, reaso
 func sendCurrentSpeedHints(s *navigationsession.Session, store *trafficstore.Store, g *model.Graph) {
 	for _, edgeID32 := range s.RemainingEdges() {
 		edgeID := model.EdgeID(edgeID32)
-		edge, ok := routinggeometry.EdgeByID(g, edgeID)
+		edge, ok := g.Edge(edgeID)
 		if !ok || edge.SpeedKmh <= 0 {
 			continue
 		}

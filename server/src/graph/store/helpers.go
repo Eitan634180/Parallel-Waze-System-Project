@@ -112,40 +112,6 @@ func openFile(path string) (*os.File, uint64, error) {
 	return f, count, nil
 }
 
-func openSequenceFile(path string) (*os.File, uint64, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	hdr := make([]byte, headerMagicSize)
-	if _, err := io.ReadFull(f, hdr); err != nil {
-		f.Close()
-		return nil, 0, err
-	}
-	if string(hdr) != fileMagic {
-		f.Close()
-		return nil, 0, fmt.Errorf("bad magic in %s", path)
-	}
-
-	var ver uint16
-	if err := binary.Read(f, le, &ver); err != nil {
-		f.Close()
-		return nil, 0, err
-	}
-	if ver != fileVersion {
-		f.Close()
-		return nil, 0, fmt.Errorf("unsupported graph format version %d in %s (expected %d)", ver, path, fileVersion)
-	}
-
-	var count uint64
-	if err := binary.Read(f, le, &count); err != nil {
-		f.Close()
-		return nil, 0, err
-	}
-	return f, count, nil
-}
-
 func writeFixed(w io.Writer, v interface{}) error { return binary.Write(w, le, v) }
 
 func writeUint32(w io.Writer, v uint32) error { return binary.Write(w, le, v) }

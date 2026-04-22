@@ -4,7 +4,6 @@ import (
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
 	navigationsession "nav-system/src/navigation/session"
-	routinggeometry "nav-system/src/routing/geometry"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -21,7 +20,7 @@ func checkLocalRepairTriggerLocked(s *navigationsession.Session, store *traffics
 		}
 
 		edgeID := model.EdgeID(*step.EdgeID)
-		edge, ok := routinggeometry.EdgeByID(g, edgeID)
+		edge, ok := g.Edge(edgeID)
 		if !ok {
 			continue
 		}
@@ -33,9 +32,9 @@ func checkLocalRepairTriggerLocked(s *navigationsession.Session, store *traffics
 
 		idxU := s.Route.Steps[i-1].NodeIdx
 		idxV := s.Route.Steps[i].NodeIdx
-		if idxU < uint32(len(g.Nodes)) && idxV < uint32(len(g.Nodes)) {
-			u := &g.Nodes[idxU]
-			v := &g.Nodes[idxV]
+		u := g.Node(idxU)
+		v := g.Node(idxV)
+		if u != nil && v != nil {
 			isCrossCell := u.CellID != v.CellID
 			return true, i, liveWeight, isCrossCell
 		}

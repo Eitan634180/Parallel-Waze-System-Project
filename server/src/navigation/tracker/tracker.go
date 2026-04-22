@@ -132,15 +132,12 @@ func (t *Tracker) Advance(sess *navigationsession.Session, lat, lon float64, spe
 func (t *Tracker) SendInitialSpeedUpdates(sess *navigationsession.Session) {
 	for _, edgeID32 := range sess.RemainingEdges() {
 		eid := model.EdgeID(edgeID32)
-		if int(eid) >= len(t.Graph.Edges) {
+		edge, ok := t.Graph.Edge(eid)
+		if !ok || edge.SpeedKmh <= 0 {
 			continue
 		}
-		baseKmh := t.Graph.Edges[eid].SpeedKmh
-		if baseKmh <= 0 {
-			continue
-		}
-		recSpeed := t.Store.RecommendedSpeedKmh(eid, baseKmh, t.Graph.Edges[eid].DistanceM)
-		if recSpeed == baseKmh && t.Store.Density(eid) == 0 {
+		recSpeed := t.Store.RecommendedSpeedKmh(eid, edge.SpeedKmh, edge.DistanceM)
+		if recSpeed == edge.SpeedKmh && t.Store.Density(eid) == 0 {
 			continue
 		}
 		edgeIDVal := uint32(eid)

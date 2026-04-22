@@ -11,7 +11,6 @@ import (
 	navigationreroute "nav-system/src/navigation/reroute"
 	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
-	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -60,7 +59,7 @@ func pushETAIfDue(s *navigationsession.Session, g *model.Graph, store *trafficst
 		return
 	}
 
-	eta := ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store)
+	eta := routeutil.ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store)
 	s.ETA = eta
 	s.LastETAPush = now
 	s.Mu.Unlock()
@@ -97,8 +96,4 @@ func refreshRouteAssessment(s *navigationsession.Session, snapLat, snapLon float
 			s.OffRouteViolations >= navigation.OffRouteStrikes
 
 	return assessment
-}
-
-func ComputeETA(route engine.Route, stepIdx int, lastLat, lastLon float64, g *model.Graph, store *trafficstore.Store) float32 {
-	return routeutil.ComputeETA(route, stepIdx, lastLat, lastLon, g, store)
 }

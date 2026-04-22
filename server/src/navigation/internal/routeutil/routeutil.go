@@ -3,7 +3,6 @@ package routeutil
 import (
 	"nav-system/src/graph/model"
 	"nav-system/src/routing/engine"
-	routinggeometry "nav-system/src/routing/geometry"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 )
@@ -17,7 +16,7 @@ func ComputeETA(route engine.Route, stepIdx int, lastLat, lastLon float64, g *mo
 		}
 
 		edgeID := model.EdgeID(*step.EdgeID)
-		edge, ok := routinggeometry.EdgeByID(g, edgeID)
+		edge, ok := g.Edge(edgeID)
 		if !ok {
 			continue
 		}
@@ -59,7 +58,7 @@ func StepCongestionSummary(steps []engine.Step, store *trafficstore.Store, g *mo
 		}
 
 		edgeID := model.EdgeID(*step.EdgeID)
-		edge, ok := routinggeometry.EdgeByID(g, edgeID)
+		edge, ok := g.Edge(edgeID)
 		if !ok {
 			continue
 		}
@@ -79,7 +78,7 @@ func remainingFractionOnCurrentEdge(route engine.Route, stepIdx int, lastLat, la
 	}
 
 	px, py := utilities.ProjectAtReferenceLat(lastLat, lastLon, g.ProjectionRefLat)
-	node := routinggeometry.NodeByIndex(g, step.NodeIdx)
+	node := g.Node(step.NodeIdx)
 	if node == nil {
 		return 1
 	}

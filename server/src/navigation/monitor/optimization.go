@@ -7,6 +7,7 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
+	"nav-system/src/navigation/internal/routeutil"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationreroute "nav-system/src/navigation/reroute"
 	navigationsession "nav-system/src/navigation/session"
@@ -154,7 +155,7 @@ func optimizationCandidate(
 	}
 
 	context := optimizationContext{
-		oldETA:  ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
+		oldETA:  routeutil.ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
 		route:   s.Route,
 		stepIdx: s.StepIdx,
 		version: navigationreroute.SessionVersion{StepIdx: s.StepIdx, RouteRevision: s.RouteRevision},

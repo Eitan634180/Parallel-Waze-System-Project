@@ -49,3 +49,17 @@ func (g *Graph) BuildNodeIdxMap() map[NodeRawID]uint32 {
 	}
 	return m
 }
+
+func (g *Graph) Edge(id EdgeID) (*Edge, bool) {
+	if int(id) < 0 || int(id) >= len(g.Edges) {
+		return nil, false
+	}
+	return &g.Edges[id], true
+}
+
+func (g *Graph) Node(idx uint32) *Node {
+	if idx >= uint32(len(g.Nodes)) {
+		return nil
+	}
+	return &g.Nodes[idx]
+}

@@ -163,7 +163,7 @@ func loadEdges(path string) ([]model.Edge, error) {
 }
 
 func loadBaseAdj(path string) (model.AdjacencyList, error) {
-	f, offsetCount, err := openSequenceFile(path)
+	f, offsetCount, err := openFile(path)
 	if err != nil {
 		return model.AdjacencyList{}, err
 	}
@@ -245,7 +245,7 @@ func loadBoundary(path string) ([]uint32, error) {
 }
 
 func loadOverlayAdj(path string) (model.OverlayAdjList, error) {
-	f, offsetCount, err := openSequenceFile(path)
+	f, offsetCount, err := openFile(path)
 	if err != nil {
 		return model.OverlayAdjList{}, err
 	}

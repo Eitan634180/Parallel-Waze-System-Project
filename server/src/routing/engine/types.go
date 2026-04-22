@@ -20,3 +20,21 @@ type Route struct {
 	CongestionAhead bool    `json:"congestion_ahead"`
 	CongestedEdges  int     `json:"congested_edges"`
 }
+
+type ijItem struct {
+	idx  uint32
+	cost float32
+}
+
+type astarItem struct {
+	idx uint32
+	f   float32
+	g   float32
+}
+
+type localAstarItem struct {
+	idx  uint32
+	f    float32
+	g    float32
+	hops int
+}
