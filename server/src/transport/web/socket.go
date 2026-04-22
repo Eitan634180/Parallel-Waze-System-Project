@@ -1,4 +1,4 @@
-package transportws
+package transportweb
 
 import (
 	"net/http"

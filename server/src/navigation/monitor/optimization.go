@@ -15,6 +15,13 @@ import (
 	trafficstore "nav-system/src/traffic/store"
 )
 
+type optimizationContext struct {
+	oldETA  float32
+	route   routing.Route
+	stepIdx int
+	version navigationreroute.SessionVersion
+}
+
 func RunOptimizationSweep(
 	ctx context.Context,
 	mgr *navigationmanager.Manager,
@@ -64,17 +71,29 @@ func optimizationWorker(
 		case <-ctx.Done():
 			return
 		case sess := <-jobs:
-			oldETA, candidate, version, ok := optimizationCandidate(sess, g, store, router, wf)
+			context, candidate, ok := optimizationCandidate(sess, g, store, router, wf)
 			if !ok {
 				continue
 			}
 
 			newETA := candidate.TotalTimeSec
-			if !shouldAcceptOptimizationCandidate(sess, candidate, version, oldETA, newETA) {
+			if !shouldAcceptOptimizationCandidate(sess, candidate, context, newETA) {
 				continue
 			}
 
-			navigationreroute.ApplyRouteUpdate(sess, candidate, g, store, mgr, prepareRoute, time.Now(), navigation.RerouteReasonTrafficCleared, &oldETA, &newETA, nil)
+			navigationreroute.ApplyRouteUpdate(
+				sess,
+				candidate,
+				g,
+				store,
+				mgr,
+				prepareRoute,
+				time.Now(),
+				navigation.RerouteReasonTrafficCleared,
+				&context.oldETA,
+				&newETA,
+				&context.version,
+			)
 		}
 	}
 }
@@ -103,17 +122,21 @@ func optimizationCandidate(
 	store *trafficstore.Store,
 	router *routing.Router,
 	wf routing.WeightFunc,
-) (float32, routing.Route, navigationreroute.SessionVersion, bool) {
+) (optimizationContext, routing.Route, bool) {
 	s.Mu.Lock()
 	destination, ok := engine.Destination(s.Route)
 	if !ok {
 		s.Mu.Unlock()
-		return 0, routing.Route{}, navigationreroute.SessionVersion{}, false
+		return optimizationContext{}, routing.Route{}, false
 	}
 
-	oldETA := ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store)
+	context := optimizationContext{
+		oldETA:  ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
+		route:   s.Route,
+		stepIdx: s.StepIdx,
+		version: navigationreroute.SessionVersion{StepIdx: s.StepIdx, RouteRevision: s.RouteRevision},
+	}
 	snapLat, snapLon := s.LastLat, s.LastLon
-	version := navigationreroute.SessionVersion{StepIdx: s.StepIdx, RouteRevision: s.RouteRevision}
 	s.Mu.Unlock()
 
 	start := time.Now()
@@ -123,27 +146,27 @@ func optimizationCandidate(
 		log.Printf("session: optimization compute slow (session=%s routes=%d duration=%s)", s.ID, len(routes), elapsed.Round(time.Millisecond))
 	}
 	if len(routes) == 0 {
-		return 0, routing.Route{}, version, false
+		return optimizationContext{}, routing.Route{}, false
 	}
 
-	return oldETA, routes[0], version, true
+	return context, routes[0], true
 }
 
-func shouldAcceptOptimizationCandidate(s *navigationsession.Session, candidate routing.Route, v navigationreroute.SessionVersion, oldETA, newETA float32) bool {
+func shouldAcceptOptimizationCandidate(s *navigationsession.Session, candidate routing.Route, context optimizationContext, newETA float32) bool {
 	s.Mu.RLock()
 	tooSoon := time.Since(s.LastReroute) < navigation.RerouteCooldown
-	stale := s.StepIdx != v.StepIdx || s.RouteRevision != v.RouteRevision
+	stale := s.StepIdx != context.version.StepIdx || s.RouteRevision != context.version.RouteRevision
 	s.Mu.RUnlock()
 
 	if tooSoon || stale {
 		return false
 	}
 
-	if engine.SameRemainingRoute(s.Route, s.StepIdx, candidate) {
+	if engine.SameRemainingRoute(context.route, context.stepIdx, candidate) {
 		return false
 	}
 
-	etaGain := oldETA - newETA
-	return oldETA > 0 &&
-		(etaGain/oldETA >= navigation.RerouteSpeedupMin || etaGain >= navigation.RerouteMinGainSec)
+	etaGain := context.oldETA - newETA
+	return context.oldETA > 0 &&
+		(etaGain/context.oldETA >= navigation.RerouteSpeedupMin || etaGain >= navigation.RerouteMinGainSec)
 }

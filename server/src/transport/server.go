@@ -12,12 +12,8 @@ import (
 	"nav-system/src/routing"
 	"nav-system/src/simulation"
 	trafficstore "nav-system/src/traffic/store"
-	routehandler "nav-system/src/transport/handlers/route"
-	searchhandler "nav-system/src/transport/handlers/search"
-	sessionhandler "nav-system/src/transport/handlers/session"
-	simulationhandler "nav-system/src/transport/handlers/simulation"
-	systemhandler "nav-system/src/transport/handlers/system"
-	transporthttp "nav-system/src/transport/http"
+	handlers "nav-system/src/transport/handlers"
+	transportweb "nav-system/src/transport/web"
 )
 
 // Server wires together all dependencies and exposes the HTTP mux.
@@ -28,12 +24,12 @@ type Server struct {
 	router *routing.Router
 	sim    *simulation.Manager
 
-	routeCache  *routehandler.Cache
-	routes      *routehandler.Handler
-	searches    *searchhandler.Handler
-	sessions    *sessionhandler.Handler
-	simulations *simulationhandler.Handler
-	systems     *systemhandler.Handler
+	routeCache  *handlers.RouteCache
+	routes      *handlers.RouteHandler
+	searches    *handlers.SearchHandler
+	sessions    *handlers.SessionHandler
+	simulations *handlers.SimulationHandler
+	systems     *handlers.SystemHandler
 
 	httpClient *http.Client
 	mux        *http.ServeMux
@@ -56,8 +52,8 @@ func NewServer(
 		httpClient: &http.Client{Timeout: HTTPClientTimeout},
 		mux:        http.NewServeMux(),
 	}
-	s.routeCache = routehandler.NewCache()
-	s.routes = &routehandler.Handler{
+	s.routeCache = handlers.NewRouteCache()
+	s.routes = &handlers.RouteHandler{
 		Graph:                   g,
 		Store:                   store,
 		Router:                  router,
@@ -70,7 +66,7 @@ func NewServer(
 	if searchConfig.ViewBox == "" && !g.BBox.IsZero() {
 		searchConfig.ViewBox = g.BBox.NominatimViewBox()
 	}
-	s.searches = &searchhandler.Handler{
+	s.searches = &handlers.SearchHandler{
 		Client:                  s.httpClient,
 		Limit:                   searchConfig.Limit,
 		Language:                searchConfig.Language,
@@ -80,7 +76,7 @@ func NewServer(
 		UserAgent:               searchConfig.UserAgent,
 		SlowRequestLogThreshold: SlowSearchRequestLogThreshold,
 	}
-	s.sessions = &sessionhandler.Handler{
+	s.sessions = &handlers.SessionHandler{
 		Manager:    mgr,
 		RouteCache: s.routeCache,
 		Tracker: &navigationtracker.Tracker{
@@ -91,29 +87,29 @@ func NewServer(
 			LiveWeights:  s.liveWeightFunc,
 			PrepareRoute: s.routeCache.Store,
 		},
-		OriginAllowed:                 transporthttp.IsAllowedBrowserOrigin,
+		OriginAllowed:                 transportweb.IsAllowedBrowserOrigin,
 		SlowSessionCreateLogThreshold: SlowSessionCreationLogThreshold,
 	}
-	s.simulations = &simulationhandler.Handler{
+	s.simulations = &handlers.SimulationHandler{
 		Sim:           sim,
 		RouteCache:    s.routeCache,
-		OriginAllowed: transporthttp.IsAllowedBrowserOrigin,
+		OriginAllowed: transportweb.IsAllowedBrowserOrigin,
 	}
-	s.systems = &systemhandler.Handler{Graph: g}
+	s.systems = &handlers.SystemHandler{Graph: g}
 	s.sim.SetSessionBridge(simulation.NewSessionBridge(s.sessions.Tracker))
 	s.registerRoutes()
 	return s
 }
 
 func (s *Server) registerRoutes() {
-	s.mux.HandleFunc(transporthttp.SearchRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.searches.Handle))
-	s.mux.HandleFunc(transporthttp.RouteRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.routes.Handle))
-	s.mux.HandleFunc(transporthttp.SessionRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.sessions.HandleCollection))
-	s.mux.HandleFunc(transporthttp.SessionSubtreeRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.sessions.HandleByID))
-	s.mux.HandleFunc(transporthttp.SimulationRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.simulations.HandleRoot))
-	s.mux.HandleFunc(transporthttp.SimulationRandomRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.simulations.HandleRandom))
-	s.mux.HandleFunc(transporthttp.SimulationWSRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.simulations.HandleWS))
-	s.mux.HandleFunc(transporthttp.SystemInfoRoutePath, transporthttp.WithCORS(transporthttp.IsAllowedBrowserOrigin, s.systems.Handle))
+	s.mux.HandleFunc(transportweb.SearchRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.searches.Handle))
+	s.mux.HandleFunc(transportweb.RouteRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.routes.Handle))
+	s.mux.HandleFunc(transportweb.SessionRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.sessions.HandleCollection))
+	s.mux.HandleFunc(transportweb.SessionSubtreeRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.sessions.HandleByID))
+	s.mux.HandleFunc(transportweb.SimulationRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.simulations.HandleRoot))
+	s.mux.HandleFunc(transportweb.SimulationRandomRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.simulations.HandleRandom))
+	s.mux.HandleFunc(transportweb.SimulationWSRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.simulations.HandleWS))
+	s.mux.HandleFunc(transportweb.SystemInfoRoutePath, transportweb.WithCORS(transportweb.IsAllowedBrowserOrigin, s.systems.Handle))
 }
 
 // ServeHTTP implements http.Handler.

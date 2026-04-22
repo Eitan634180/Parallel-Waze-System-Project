@@ -1,17 +1,17 @@
-package systemhandler
+package handlers
 
 import (
 	"net/http"
 
 	"nav-system/src/graph/model"
-	transporthttp "nav-system/src/transport/http"
+	transportweb "nav-system/src/transport/web"
 )
 
-type Handler struct {
+type SystemHandler struct {
 	Graph *model.Graph
 }
 
-type Response struct {
+type SystemResponse struct {
 	BBox struct {
 		MinLat float64 `json:"min_lat"`
 		MaxLat float64 `json:"max_lat"`
@@ -22,14 +22,14 @@ type Response struct {
 	CenterLon float64 `json:"center_lon"`
 }
 
-func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
+func (h *SystemHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		transporthttp.MethodNotAllowed(w)
+		transportweb.MethodNotAllowed(w)
 		return
 	}
 
 	bbox := h.Graph.BBox
-	resp := Response{
+	resp := SystemResponse{
 		CenterLat: bbox.CenterLat(),
 		CenterLon: bbox.CenterLon(),
 	}
@@ -38,5 +38,5 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	resp.BBox.MinLon = bbox.MinLon
 	resp.BBox.MaxLon = bbox.MaxLon
 
-	transporthttp.WriteJSON(w, http.StatusOK, resp)
+	transportweb.WriteJSON(w, http.StatusOK, resp)
 }

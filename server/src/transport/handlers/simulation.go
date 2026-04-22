@@ -1,4 +1,4 @@
-package simulationhandler
+package handlers
 
 import (
 	"fmt"
@@ -6,42 +6,40 @@ import (
 	"net/http"
 
 	"nav-system/src/simulation"
-	routehandler "nav-system/src/transport/handlers/route"
-	transporthttp "nav-system/src/transport/http"
-	transportws "nav-system/src/transport/ws"
+	transportweb "nav-system/src/transport/web"
 )
 
 const simulationWSLogPrefix = "transport: simulation websocket"
 
-type Handler struct {
+type SimulationHandler struct {
 	Sim           *simulation.Manager
-	RouteCache    *routehandler.Cache
+	RouteCache    *RouteCache
 	OriginAllowed func(string) bool
 }
 
-type request struct {
+type simulationRequest struct {
 	Count        int      `json:"count"`
 	RouteIDs     []string `json:"route_ids"`
 	MinStepIndex int      `json:"min_step_index"`
 }
 
-type response struct {
+type simulationResponse struct {
 	Created int `json:"created"`
 	Active  int `json:"active"`
 }
 
-type snapshotMessage struct {
-	Type string       `json:"type"`
-	Cars []carMessage `json:"cars"`
+type simulationSnapshotMessage struct {
+	Type string                 `json:"type"`
+	Cars []simulationCarMessage `json:"cars"`
 }
 
-type carMessage struct {
+type simulationCarMessage struct {
 	ID  string  `json:"id"`
 	Lat float64 `json:"lat"`
 	Lon float64 `json:"lon"`
 }
 
-func (h *Handler) HandleRoot(w http.ResponseWriter, r *http.Request) {
+func (h *SimulationHandler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		h.spawnCars(w, r)
@@ -49,17 +47,17 @@ func (h *Handler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 		h.Sim.Clear()
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		transporthttp.MethodNotAllowed(w)
+		transportweb.MethodNotAllowed(w)
 	}
 }
 
-func (h *Handler) HandleRandom(w http.ResponseWriter, r *http.Request) {
+func (h *SimulationHandler) HandleRandom(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		transporthttp.MethodNotAllowed(w)
+		transportweb.MethodNotAllowed(w)
 		return
 	}
 
-	req, ok := transporthttp.DecodeJSON[request](w, r)
+	req, ok := transportweb.DecodeJSON[simulationRequest](w, r)
 	if !ok {
 		return
 	}
@@ -69,11 +67,11 @@ func (h *Handler) HandleRandom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created := h.Sim.SpawnRandom(req.Count, req.MinStepIndex)
-	transporthttp.WriteJSON(w, http.StatusOK, response{Created: created, Active: h.Sim.Count()})
+	transportweb.WriteJSON(w, http.StatusOK, simulationResponse{Created: created, Active: h.Sim.Count()})
 }
 
-func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
-	upgrader := transportws.NewUpgrader(h.OriginAllowed)
+func (h *SimulationHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
+	upgrader := transportweb.NewUpgrader(h.OriginAllowed)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("%s upgrade failed: %v", simulationWSLogPrefix, err)
@@ -86,15 +84,15 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 	}()
 
-	go transportws.DrainUntilClosed(conn)
+	go transportweb.DrainUntilClosed(conn)
 
 	for snapshots := range ch {
-		payload := snapshotMessage{
+		payload := simulationSnapshotMessage{
 			Type: "snapshot",
-			Cars: make([]carMessage, 0, len(snapshots)),
+			Cars: make([]simulationCarMessage, 0, len(snapshots)),
 		}
 		for _, car := range snapshots {
-			payload.Cars = append(payload.Cars, carMessage{ID: car.ID, Lat: car.Lat, Lon: car.Lon})
+			payload.Cars = append(payload.Cars, simulationCarMessage{ID: car.ID, Lat: car.Lat, Lon: car.Lon})
 		}
 		if err := conn.WriteJSON(payload); err != nil {
 			return
@@ -102,8 +100,8 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) spawnCars(w http.ResponseWriter, r *http.Request) {
-	req, ok := transporthttp.DecodeJSON[request](w, r)
+func (h *SimulationHandler) spawnCars(w http.ResponseWriter, r *http.Request) {
+	req, ok := transportweb.DecodeJSON[simulationRequest](w, r)
 	if !ok {
 		return
 	}
@@ -119,10 +117,10 @@ func (h *Handler) spawnCars(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created := h.Sim.SpawnRoutes(routes, req.Count, req.MinStepIndex)
-	transporthttp.WriteJSON(w, http.StatusOK, response{Created: created, Active: h.Sim.Count()})
+	transportweb.WriteJSON(w, http.StatusOK, simulationResponse{Created: created, Active: h.Sim.Count()})
 }
 
-func (r request) validate() error {
+func (r simulationRequest) validate() error {
 	if len(r.RouteIDs) == 0 {
 		return fmt.Errorf("route_ids must not be empty")
 	}
@@ -132,7 +130,7 @@ func (r request) validate() error {
 	return nil
 }
 
-func (r request) validateRandom() error {
+func (r simulationRequest) validateRandom() error {
 	if r.MinStepIndex < 0 {
 		return fmt.Errorf("min_step_index must be non-negative")
 	}

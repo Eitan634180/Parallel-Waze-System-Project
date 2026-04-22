@@ -1,4 +1,4 @@
-package searchhandler
+package handlers
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	transporthttp "nav-system/src/transport/http"
+	transportweb "nav-system/src/transport/web"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 
 var errWarmupDisabled = errors.New("search warmup query not configured")
 
-type Handler struct {
+type SearchHandler struct {
 	Client                  *http.Client
 	Limit                   int
 	Language                string
@@ -42,21 +42,21 @@ type nominatimResult struct {
 	Lon         string `json:"lon"`
 }
 
-type Result struct {
+type SearchResult struct {
 	DisplayName string  `json:"displayName"`
 	Lat         float64 `json:"lat"`
 	Lng         float64 `json:"lng"`
 }
 
-func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
+func (h *SearchHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		transporthttp.MethodNotAllowed(w)
+		transportweb.MethodNotAllowed(w)
 		return
 	}
 
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
-		transporthttp.WriteJSON(w, http.StatusOK, []Result{})
+		transportweb.WriteJSON(w, http.StatusOK, []SearchResult{})
 		return
 	}
 
@@ -85,31 +85,31 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := make([]Result, 0, len(upstream))
+	results := make([]SearchResult, 0, len(upstream))
 	for _, item := range upstream {
 		lat, errLat := strconv.ParseFloat(item.Lat, 64)
 		lng, errLng := strconv.ParseFloat(item.Lon, 64)
 		if errLat != nil || errLng != nil {
 			continue
 		}
-		results = append(results, Result{
+		results = append(results, SearchResult{
 			DisplayName: item.DisplayName,
 			Lat:         lat,
 			Lng:         lng,
 		})
 	}
 
-	transporthttp.LogSlowOperation(
+	transportweb.LogSlowOperation(
 		h.SlowRequestLogThreshold,
 		start,
 		"[transport] search query=%q returned=%d",
 		query,
 		len(results),
 	)
-	transporthttp.WriteJSON(w, http.StatusOK, results)
+	transportweb.WriteJSON(w, http.StatusOK, results)
 }
 
-func (h *Handler) Warm(ctx context.Context) error {
+func (h *SearchHandler) Warm(ctx context.Context) error {
 	query := strings.TrimSpace(os.Getenv("NAV_SEARCH_WARMUP_QUERY"))
 	if query == "" {
 		return errWarmupDisabled
@@ -136,7 +136,7 @@ func (h *Handler) Warm(ctx context.Context) error {
 	return nil
 }
 
-func (h *Handler) newRequest(ctx context.Context, query string, limit int) (*http.Request, error) {
+func (h *SearchHandler) newRequest(ctx context.Context, query string, limit int) (*http.Request, error) {
 	values := url.Values{}
 	values.Set("q", query)
 	values.Set("format", "jsonv2")

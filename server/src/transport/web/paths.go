@@ -1,4 +1,4 @@
-package transporthttp
+package transportweb
 
 const (
 	SearchRoutePath           = "/search"

@@ -1,4 +1,4 @@
-package routehandler
+package handlers
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	navigationsession "nav-system/src/navigation/session"
 	"nav-system/src/routing"
 	trafficstore "nav-system/src/traffic/store"
-	transporthttp "nav-system/src/transport/http"
+	transportweb "nav-system/src/transport/web"
 	"nav-system/src/utilities"
 )
 
@@ -21,17 +21,17 @@ const (
 	maxRouteLongitude = utilities.MaxLongitude
 )
 
-type Handler struct {
+type RouteHandler struct {
 	Graph                   *model.Graph
 	Store                   *trafficstore.Store
 	Router                  *routing.Router
-	Cache                   *Cache
+	Cache                   *RouteCache
 	SlowRequestLogThreshold time.Duration
 	BaseRouteCount          int
 	MaxRouteCount           int
 }
 
-type request struct {
+type routeRequest struct {
 	SrcLat       *float64 `json:"src_lat"`
 	SrcLon       *float64 `json:"src_lon"`
 	DstLat       *float64 `json:"dst_lat"`
@@ -39,17 +39,17 @@ type request struct {
 	Alternatives int      `json:"alternatives"`
 }
 
-type response struct {
+type routeResponse struct {
 	Routes []navigationsession.RoutePayload `json:"routes"`
 }
 
-func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
+func (h *RouteHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		transporthttp.MethodNotAllowed(w)
+		transportweb.MethodNotAllowed(w)
 		return
 	}
 
-	req, ok := transporthttp.DecodeJSON[request](w, r)
+	req, ok := transportweb.DecodeJSON[routeRequest](w, r)
 	if !ok {
 		return
 	}
@@ -61,7 +61,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	routeCount := h.normalizedRouteCount(req.Alternatives)
 	routes := h.Router.Compute(*req.SrcLat, *req.SrcLon, *req.DstLat, *req.DstLon, routeCount, h.liveWeightFunc())
-	transporthttp.LogSlowOperation(
+	transportweb.LogSlowOperation(
 		h.SlowRequestLogThreshold,
 		start,
 		"[transport] route compute alternatives=%d returned=%d",
@@ -73,15 +73,15 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := response{Routes: make([]navigationsession.RoutePayload, 0, len(routes))}
+	resp := routeResponse{Routes: make([]navigationsession.RoutePayload, 0, len(routes))}
 	for _, route := range routes {
 		resp.Routes = append(resp.Routes, h.routeResponsePayload(route))
 	}
 
-	transporthttp.WriteJSON(w, http.StatusOK, resp)
+	transportweb.WriteJSON(w, http.StatusOK, resp)
 }
 
-func (h *Handler) routeResponsePayload(route routing.Route) navigationsession.RoutePayload {
+func (h *RouteHandler) routeResponsePayload(route routing.Route) navigationsession.RoutePayload {
 	route.CongestionAhead, route.CongestedEdges = navigationmonitor.RouteCongestionSummary(route, h.Store, h.Graph)
 	route = h.Cache.Store(route)
 
@@ -95,13 +95,13 @@ func (h *Handler) routeResponsePayload(route routing.Route) navigationsession.Ro
 	}
 }
 
-func (h *Handler) liveWeightFunc() routing.WeightFunc {
+func (h *RouteHandler) liveWeightFunc() routing.WeightFunc {
 	return func(e *model.Edge) float32 {
 		return h.Store.LiveWeight(e.ID, e.Weight)
 	}
 }
 
-func (h *Handler) normalizedRouteCount(alternatives int) int {
+func (h *RouteHandler) normalizedRouteCount(alternatives int) int {
 	count := h.BaseRouteCount + alternatives
 	if count < h.BaseRouteCount {
 		return h.BaseRouteCount
@@ -112,7 +112,7 @@ func (h *Handler) normalizedRouteCount(alternatives int) int {
 	return count
 }
 
-func (r request) validate() error {
+func (r routeRequest) validate() error {
 	switch {
 	case r.SrcLat == nil:
 		return fmt.Errorf("missing required field src_lat")

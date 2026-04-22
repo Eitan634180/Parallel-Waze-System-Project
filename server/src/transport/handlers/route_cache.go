@@ -1,4 +1,4 @@
-package routehandler
+package handlers
 
 import (
 	"sync"
@@ -9,35 +9,37 @@ import (
 	"github.com/google/uuid"
 )
 
-type Cache struct {
+const routeCacheTTL = 30 * time.Minute
+
+type RouteCache struct {
 	mu      sync.RWMutex
-	entries map[string]cacheEntry
+	entries map[string]routeCacheEntry
 }
 
-type cacheEntry struct {
+type routeCacheEntry struct {
 	route     routing.Route
 	createdAt time.Time
 }
 
-func NewCache() *Cache {
-	return &Cache{entries: make(map[string]cacheEntry)}
+func NewRouteCache() *RouteCache {
+	return &RouteCache{entries: make(map[string]routeCacheEntry)}
 }
 
-func (c *Cache) Store(route routing.Route) routing.Route {
+func (c *RouteCache) Store(route routing.Route) routing.Route {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if route.ID == "" {
 		route.ID = uuid.NewString()
 	}
-	c.entries[route.ID] = cacheEntry{
+	c.entries[route.ID] = routeCacheEntry{
 		route:     route,
 		createdAt: time.Now(),
 	}
 	return route
 }
 
-func (c *Cache) Get(id string) (routing.Route, bool) {
+func (c *RouteCache) Get(id string) (routing.Route, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -45,7 +47,7 @@ func (c *Cache) Get(id string) (routing.Route, bool) {
 	return entry.route, ok
 }
 
-func (c *Cache) GetMany(ids []string) []routing.Route {
+func (c *RouteCache) GetMany(ids []string) []routing.Route {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -59,7 +61,7 @@ func (c *Cache) GetMany(ids []string) []routing.Route {
 	return routes
 }
 
-func (c *Cache) PruneExpired(now time.Time) {
+func (c *RouteCache) PruneExpired(now time.Time) {
 	cutoff := now.Add(-routeCacheTTL)
 
 	c.mu.Lock()

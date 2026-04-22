@@ -1,4 +1,4 @@
-package sessionhandler
+package handlers
 
 import (
 	"context"
@@ -12,9 +12,7 @@ import (
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationsession "nav-system/src/navigation/session"
 	navigationtracker "nav-system/src/navigation/tracker"
-	routehandler "nav-system/src/transport/handlers/route"
-	transporthttp "nav-system/src/transport/http"
-	transportws "nav-system/src/transport/ws"
+	transportweb "nav-system/src/transport/web"
 
 	"github.com/gorilla/websocket"
 )
@@ -25,47 +23,47 @@ const (
 	sessionPathSplitLimit = 2
 )
 
-type Handler struct {
+type SessionHandler struct {
 	Manager                       *navigationmanager.Manager
 	Tracker                       *navigationtracker.Tracker
-	RouteCache                    *routehandler.Cache
+	RouteCache                    *RouteCache
 	OriginAllowed                 func(string) bool
 	SlowSessionCreateLogThreshold time.Duration
 }
 
-type createRequest struct {
+type sessionCreateRequest struct {
 	RouteID *string `json:"route_id"`
 }
 
-type createResponse struct {
+type sessionCreateResponse struct {
 	SessionID string `json:"session_id"`
 }
 
-type pingMsg struct {
-	Type       string       `json:"type"`
-	Lat        float64      `json:"lat"`
-	Lon        float64      `json:"lon"`
-	SpeedKmh   float32      `json:"speed_kmh"`
-	StepIndex  int          `json:"step_index"`
-	EdgeEvents []edgeTravel `json:"edge_events,omitempty"`
+type sessionPingMessage struct {
+	Type       string              `json:"type"`
+	Lat        float64             `json:"lat"`
+	Lon        float64             `json:"lon"`
+	SpeedKmh   float32             `json:"speed_kmh"`
+	StepIndex  int                 `json:"step_index"`
+	EdgeEvents []sessionEdgeTravel `json:"edge_events,omitempty"`
 }
 
-type edgeTravel struct {
+type sessionEdgeTravel struct {
 	EdgeID      uint32  `json:"edge_id"`
 	ObservedSec float32 `json:"observed_sec"`
 }
 
-func (h *Handler) HandleCollection(w http.ResponseWriter, r *http.Request) {
+func (h *SessionHandler) HandleCollection(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		h.create(w, r)
 	default:
-		transporthttp.MethodNotAllowed(w)
+		transportweb.MethodNotAllowed(w)
 	}
 }
 
-func (h *Handler) HandleByID(w http.ResponseWriter, r *http.Request) {
-	sessionID, subpath, ok := parsePath(r.URL.Path)
+func (h *SessionHandler) HandleByID(w http.ResponseWriter, r *http.Request) {
+	sessionID, subpath, ok := parseSessionPath(r.URL.Path)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -78,15 +76,15 @@ func (h *Handler) HandleByID(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			h.delete(w, sessionID)
 		} else {
-			transporthttp.MethodNotAllowed(w)
+			transportweb.MethodNotAllowed(w)
 		}
 	default:
 		http.NotFound(w, r)
 	}
 }
 
-func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	req, ok := transporthttp.DecodeJSON[createRequest](w, r)
+func (h *SessionHandler) create(w http.ResponseWriter, r *http.Request) {
+	req, ok := transportweb.DecodeJSON[sessionCreateRequest](w, r)
 	if !ok {
 		return
 	}
@@ -103,35 +101,35 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := h.Manager.Create(route)
-	transporthttp.LogSlowOperation(
+	transportweb.LogSlowOperation(
 		h.SlowSessionCreateLogThreshold,
 		start,
 		"[transport] session create route=%s",
 		*req.RouteID,
 	)
-	transporthttp.WriteJSON(w, http.StatusOK, createResponse{SessionID: sess.ID})
+	transportweb.WriteJSON(w, http.StatusOK, sessionCreateResponse{SessionID: sess.ID})
 }
 
-func (h *Handler) delete(w http.ResponseWriter, id string) {
+func (h *SessionHandler) delete(w http.ResponseWriter, id string) {
 	h.Manager.Delete(id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (r createRequest) validate() error {
+func (r sessionCreateRequest) validate() error {
 	if r.RouteID == nil || *r.RouteID == "" {
 		return fmt.Errorf("missing required field route_id")
 	}
 	return nil
 }
 
-func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request, sessionID string) {
+func (h *SessionHandler) handleWS(w http.ResponseWriter, r *http.Request, sessionID string) {
 	sess := h.Manager.Get(sessionID)
 	if sess == nil {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
 
-	upgrader := transportws.NewUpgrader(h.OriginAllowed)
+	upgrader := transportweb.NewUpgrader(h.OriginAllowed)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("%s upgrade failed: %v", sessionWSLogPrefix, err)
@@ -181,7 +179,7 @@ func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request, sessionID str
 			return
 		}
 
-		var msg pingMsg
+		var msg sessionPingMessage
 		if err := json.Unmarshal(data, &msg); err != nil || msg.Type != "ping" {
 			continue
 		}
@@ -213,7 +211,7 @@ func detachSessionConnection(sess *navigationsession.Session, conn *websocket.Co
 	return true, currentEdgeID
 }
 
-func (h *Handler) processPing(sess *navigationsession.Session, msg pingMsg) {
+func (h *SessionHandler) processPing(sess *navigationsession.Session, msg sessionPingMessage) {
 	observations := make([]navigationtracker.EdgeObservation, len(msg.EdgeEvents))
 	for i, event := range msg.EdgeEvents {
 		observations[i] = navigationtracker.EdgeObservation{
@@ -224,8 +222,8 @@ func (h *Handler) processPing(sess *navigationsession.Session, msg pingMsg) {
 	h.Tracker.Advance(sess, msg.Lat, msg.Lon, msg.SpeedKmh, msg.StepIndex, observations)
 }
 
-func parsePath(path string) (sessionID, subpath string, ok bool) {
-	trimmed := strings.TrimPrefix(path, transporthttp.SessionSubtreeRoutePath)
+func parseSessionPath(path string) (sessionID, subpath string, ok bool) {
+	trimmed := strings.TrimPrefix(path, transportweb.SessionSubtreeRoutePath)
 	parts := strings.SplitN(trimmed, sessionPathSeparator, sessionPathSplitLimit)
 	if len(parts) == 0 || parts[0] == "" {
 		return "", "", false

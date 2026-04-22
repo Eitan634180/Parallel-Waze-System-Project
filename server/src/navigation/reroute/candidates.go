@@ -15,8 +15,10 @@ import (
 
 type congestionContext struct {
 	currentRoute routing.Route
+	currentStep  int
 	destination  routing.Step
 	oldETA       float32
+	version      SessionVersion
 	localRepair  localRepairRequest
 }
 
@@ -51,7 +53,7 @@ func AttemptCongestionReroute(
 	}
 
 	newETA := candidate.TotalTimeSec
-	if !isLocalPatch && !shouldAcceptCongestionCandidate(s, candidate, context.oldETA, newETA) {
+	if !isLocalPatch && !shouldAcceptCongestionCandidate(candidate, context, newETA) {
 		return
 	}
 
@@ -60,7 +62,7 @@ func AttemptCongestionReroute(
 		reason = navigation.RerouteReasonLocalPatch
 	}
 
-	ApplyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA, nil)
+	ApplyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA, &context.version)
 }
 
 func captureCongestionContext(s *navigationsession.Session, g *model.Graph, store *trafficstore.Store) (congestionContext, bool) {
@@ -74,8 +76,10 @@ func captureCongestionContext(s *navigationsession.Session, g *model.Graph, stor
 
 	context := congestionContext{
 		currentRoute: s.Route,
+		currentStep:  s.StepIdx,
 		destination:  destination,
 		oldETA:       routeutil.ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
+		version:      SessionVersion{StepIdx: s.StepIdx, RouteRevision: s.RouteRevision},
 	}
 
 	triggered, repairStepIdx, congestedCost, isCrossCell := checkLocalRepairTriggerLocked(s, store, g)
@@ -133,9 +137,9 @@ func buildCongestionCandidate(
 	return routes[0], false, true
 }
 
-func shouldAcceptCongestionCandidate(s *navigationsession.Session, candidate routing.Route, oldETA, newETA float32) bool {
-	etaGain := oldETA - newETA
-	return oldETA > 0 &&
-		(etaGain/oldETA >= navigation.RerouteSpeedupMin || etaGain >= navigation.RerouteMinGainSec) &&
-		!engine.SameRemainingRoute(s.Route, s.StepIdx, candidate)
+func shouldAcceptCongestionCandidate(candidate routing.Route, context congestionContext, newETA float32) bool {
+	etaGain := context.oldETA - newETA
+	return context.oldETA > 0 &&
+		(etaGain/context.oldETA >= navigation.RerouteSpeedupMin || etaGain >= navigation.RerouteMinGainSec) &&
+		!engine.SameRemainingRoute(context.currentRoute, context.currentStep, candidate)
 }
