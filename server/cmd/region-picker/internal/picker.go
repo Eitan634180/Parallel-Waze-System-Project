@@ -4,18 +4,17 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"nav-system/src/utilities"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"nav-system/src/mapdata"
 )
 
 var pickerUI = os.Stderr
 
 func Run() {
-	mapRoot := flag.String("map-root", mapdata.DefaultMapRoot(), "Directory containing region subdirectories")
+	mapRoot := flag.String("map-root", utilities.RequireEnv("NAV_MAP_ROOT"), "Directory containing region subdirectories")
 	cacheFile := flag.String("cache", DefaultGeofabrikCacheFile(), "Local cache file for the Geofabrik index")
 	regionID := flag.String("region", "", "Non-interactive: download and build this Geofabrik region ID")
 	prompt := flag.Bool("prompt", false, "Always show the selection menu even if a last region is remembered")

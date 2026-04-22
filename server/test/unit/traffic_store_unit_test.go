@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"math"
+	"sync"
 	"testing"
 
 	"nav-system/src/graph/model"
@@ -319,5 +320,72 @@ func TestTrafficStoreRecommendedSpeedZeroBaseReturnsZero(t *testing.T) {
 	got := store.RecommendedSpeedKmh(edgeID, 0, 500)
 	if got != 0 {
 		t.Fatalf("zero base speed should yield zero, got %.1f", got)
+	}
+}
+
+func TestTrafficStoreConcurrentReadersAndWriters(t *testing.T) {
+	store := trafficstore.NewStore()
+	const edgeCount = 128
+	const iterations = 500
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	run := func(fn func(i int)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for i := 0; i < iterations; i++ {
+				fn(i)
+			}
+		}()
+	}
+
+	run(func(i int) {
+		edgeID := model.EdgeID(i % edgeCount)
+		store.RecordObservation(edgeID, 20, 10)
+		_ = store.LiveWeight(edgeID, 10)
+	})
+
+	run(func(i int) {
+		edgeID := model.EdgeID((i * 7) % edgeCount)
+		store.RecordSpeedSample(edgeID, 45, 10, 100)
+		_ = store.Multiplier(edgeID)
+	})
+
+	run(func(i int) {
+		edgeID := model.EdgeID((i * 11) % edgeCount)
+		store.EnterEdge(edgeID)
+		_ = store.Density(edgeID)
+		store.LeaveEdge(edgeID)
+	})
+
+	run(func(i int) {
+		edgeID := model.EdgeID((i * 13) % edgeCount)
+		_ = store.LiveWeight(edgeID, 10)
+		_ = store.Multiplier(edgeID)
+		_ = store.Density(edgeID)
+	})
+
+	run(func(i int) {
+		dst := make([]float32, 0, edgeCount)
+		_ = store.DirtySnapshot()
+		store.ApplyDecay(0.9, 0.01)
+		_ = store.SwapPending()
+		store.RefillPendingForBenchmarks()
+		_ = store.SnapshotWeightMultipliers(dst, edgeCount)
+	})
+
+	close(start)
+	wg.Wait()
+
+	for edgeID := model.EdgeID(0); edgeID < edgeCount; edgeID++ {
+		if got := store.Density(edgeID); got < 0 {
+			t.Fatalf("density should never be negative for edge %d, got %d", edgeID, got)
+		}
+		if got := store.Multiplier(edgeID); got < 1.0 {
+			t.Fatalf("multiplier should never drop below 1.0 for edge %d, got %.4f", edgeID, got)
+		}
 	}
 }

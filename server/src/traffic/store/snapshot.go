@@ -2,20 +2,20 @@ package store
 
 import "nav-system/src/graph/model"
 
-func (s *Store) checkDedup(id model.EdgeID, changed *[]ChangedEdge) {
+func (s *Store) checkDedup(id model.EdgeID, data *storeData, changed *[]ChangedEdge) {
 	if s.snapshotDedup[id] {
 		return
 	}
 	s.snapshotDedup[id] = true
 
-	cur := s.weight[id]
+	cur := loadWeight(data, id)
 	prev := s.prev[id]
 	delta := cur - prev
 	if delta < 0 {
 		delta = -delta
 	}
 
-	density := s.density[id]
+	density := loadDensity(data, id)
 	densityChanged := density != s.prevDensity[id]
 
 	if delta >= SignificantShift || densityChanged {
@@ -28,15 +28,16 @@ func (s *Store) checkDedup(id model.EdgeID, changed *[]ChangedEdge) {
 // DirtySnapshot returns edges whose multiplier or density changed since the previous call.
 // Safe to call concurrently with EnterEdge/LeaveEdge/RecordObservation.
 func (s *Store) DirtySnapshot() []ChangedEdge {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.metaMu.Lock()
+	defer s.metaMu.Unlock()
 
 	var changed []ChangedEdge
+	data := s.data.Load()
 	for _, id := range s.dirtyEdges {
-		s.checkDedup(id, &changed)
+		s.checkDedup(id, data, &changed)
 	}
 	for _, id := range s.activityEdges {
-		s.checkDedup(id, &changed)
+		s.checkDedup(id, data, &changed)
 	}
 
 	// Cleanup dedup state for the next call
@@ -56,13 +57,13 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 // SwapPending atomically takes ownership of the pending set and replaces it
 // with a fresh empty slice. Used by the customization loop to find edges whose weights changed.
 func (s *Store) SwapPending() []model.EdgeID {
-	s.mu.Lock()
+	s.metaMu.Lock()
 	pending := s.pendingEdges
 	s.pendingEdges = nil
 	for _, id := range pending {
 		s.isPending[id] = false
 	}
-	s.mu.Unlock()
+	s.metaMu.Unlock()
 	return pending
 }
 
@@ -70,8 +71,8 @@ func (s *Store) SwapPending() []model.EdgeID {
 // currently dirty edges. This is strictly for synthetic benchmarks where ApplyDecay
 // does not naturally run between customization cycles.
 func (s *Store) RefillPendingForBenchmarks() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.metaMu.Lock()
+	defer s.metaMu.Unlock()
 	s.pendingEdges = s.pendingEdges[:0]
 	for _, id := range s.dirtyEdges {
 		if !s.isPending[id] {

@@ -1,6 +1,8 @@
 package store
 
 import (
+	"math"
+
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 )
@@ -32,18 +34,18 @@ func (s *Store) recordObservedRatio(id model.EdgeID, ratio, alpha float32) {
 	if ratio < 1.0 {
 		ratio = 1.0
 	}
-	s.mu.Lock()
-	s.ensure(id)
-	cur := s.weight[id]
+	s.metaMu.Lock()
+	data := s.ensureLocked(id)
+	cur := math.Float32frombits(data.weight[id].Load())
 	updated := alpha*ratio + (1-alpha)*cur
 	if updated < 1.0 {
 		updated = 1.0
 	}
 	if updated == cur {
-		s.mu.Unlock()
+		s.metaMu.Unlock()
 		return
 	}
-	s.weight[id] = updated
+	storeWeight(data, id, updated)
 
 	if !s.isDirty[id] {
 		s.isDirty[id] = true
@@ -53,31 +55,21 @@ func (s *Store) recordObservedRatio(id model.EdgeID, ratio, alpha float32) {
 		s.isPending[id] = true
 		s.pendingEdges = append(s.pendingEdges, id)
 	}
-	s.mu.Unlock()
+	s.metaMu.Unlock()
 }
 
 // LiveWeight returns the routing/ETA cost for an edge based on observed traffic only.
 func (s *Store) LiveWeight(id model.EdgeID, baseSec float32) float32 {
-	s.mu.RLock()
-	if int(id) >= len(s.weight) {
-		s.mu.RUnlock()
+	data := s.data.Load()
+	if data == nil || int(id) >= len(data.weight) {
 		return baseSec
 	}
-	m := s.weight[id]
-	s.mu.RUnlock()
-	return baseSec * m
+	return baseSec * math.Float32frombits(data.weight[id].Load())
 }
 
 // Multiplier returns the raw multiplier for an edge (1.0 if not observed).
 func (s *Store) Multiplier(id model.EdgeID) float32 {
-	s.mu.RLock()
-	if int(id) >= len(s.weight) {
-		s.mu.RUnlock()
-		return 1.0
-	}
-	m := s.weight[id]
-	s.mu.RUnlock()
-	return m
+	return loadWeight(s.data.Load(), id)
 }
 
 // SnapshotWeightMultipliers fills a dense multiplier slice indexed by EdgeID.
@@ -93,11 +85,12 @@ func (s *Store) SnapshotWeightMultipliers(dst []float32, edgeCount int) []float3
 		dst[i] = 1.0
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.metaMu.Lock()
+	defer s.metaMu.Unlock()
+	data := s.data.Load()
 	for _, edgeID := range s.dirtyEdges {
 		if int(edgeID) < len(dst) {
-			dst[edgeID] = s.weight[edgeID]
+			dst[edgeID] = loadWeight(data, edgeID)
 		}
 	}
 	return dst

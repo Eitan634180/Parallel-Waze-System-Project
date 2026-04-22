@@ -4,39 +4,34 @@ import "nav-system/src/graph/model"
 
 // EnterEdge increments the active-session count for an edge.
 func (s *Store) EnterEdge(id model.EdgeID) {
-	s.mu.Lock()
-	s.ensure(id)
-	s.density[id]++
+	s.metaMu.Lock()
+	data := s.ensureLocked(id)
+	data.density[id].Add(1)
 	if !s.isActive[id] {
 		s.isActive[id] = true
 		s.activityEdges = append(s.activityEdges, id)
 	}
-	s.mu.Unlock()
+	s.metaMu.Unlock()
 }
 
 // LeaveEdge decrements the active-session count for an edge.
 func (s *Store) LeaveEdge(id model.EdgeID) {
-	s.mu.Lock()
-	s.ensure(id)
-	d := s.density[id] - 1
+	s.metaMu.Lock()
+	data := s.ensureLocked(id)
+	d := data.density[id].Load() - 1
 	if d <= 0 {
-		s.density[id] = 0
+		data.density[id].Store(0)
 	} else {
-		s.density[id] = d
+		data.density[id].Store(d)
 	}
 	if !s.isActive[id] {
 		s.isActive[id] = true
 		s.activityEdges = append(s.activityEdges, id)
 	}
-	s.mu.Unlock()
+	s.metaMu.Unlock()
 }
 
 // Density returns the current number of active sessions on an edge.
 func (s *Store) Density(id model.EdgeID) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if int(id) >= len(s.density) {
-		return 0
-	}
-	return s.density[id]
+	return int(loadDensity(s.data.Load(), id))
 }

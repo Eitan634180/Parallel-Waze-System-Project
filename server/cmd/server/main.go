@@ -48,7 +48,7 @@ func main() {
 	}
 
 	if *dataDir == "" {
-		mapRoot := mapdata.DefaultMapRoot()
+		mapRoot := utilities.RequireEnv("NAV_MAP_ROOT")
 		availableRegions, err := mapdata.ListReady(mapRoot)
 		if err != nil {
 			log.Fatalf("scanning map directory: %v", err)

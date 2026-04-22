@@ -1,19 +1,26 @@
 package store
 
 import (
+	"math"
 	"sync"
+	"sync/atomic"
 
 	"nav-system/src/graph/model"
 )
 
+type storeData struct {
+	weight  []atomic.Uint32
+	density []atomic.Int32
+}
+
 // Store holds the live traffic state for every edge that has been observed.
 // The zero value is valid via lazy ensure allocations; use NewStore() for clarity.
 type Store struct {
-	mu          sync.RWMutex
-	weight      []float32 // observed EWMA multiplier (1.0 = free-flow)
-	density     []int     // number of active sessions currently on edge
+	metaMu sync.Mutex
+	data   atomic.Pointer[storeData]
+
 	prev        []float32 // multiplier at last propagation snapshot
-	prevDensity []int     // density at last propagation snapshot
+	prevDensity []int32   // density at last propagation snapshot
 
 	dirtyEdges    []model.EdgeID // persistent: edges whose multiplier != 1.0 (for decay)
 	isDirty       []bool
@@ -40,31 +47,73 @@ func NewStore() *Store {
 func NewStoreWithCapacity(edgeCount int) *Store {
 	s := &Store{}
 	if edgeCount > 0 {
-		s.resize(edgeCount)
+		s.resizeLocked(edgeCount)
 	}
 	return s
 }
 
-func (s *Store) ensure(id model.EdgeID) {
-	if int(id) < len(s.weight) {
-		return
+func newStoreData(edgeCount int) *storeData {
+	data := &storeData{
+		weight:  make([]atomic.Uint32, edgeCount),
+		density: make([]atomic.Int32, edgeCount),
+	}
+	defaultWeight := math.Float32bits(1.0)
+	for i := range data.weight {
+		data.weight[i].Store(defaultWeight)
+	}
+	return data
+}
+
+func loadWeight(data *storeData, id model.EdgeID) float32 {
+	if data == nil || int(id) >= len(data.weight) {
+		return 1.0
+	}
+	return math.Float32frombits(data.weight[id].Load())
+}
+
+func loadDensity(data *storeData, id model.EdgeID) int32 {
+	if data == nil || int(id) >= len(data.density) {
+		return 0
+	}
+	return data.density[id].Load()
+}
+
+func storeWeight(data *storeData, id model.EdgeID, weight float32) {
+	data.weight[id].Store(math.Float32bits(weight))
+}
+
+func (s *Store) ensureLocked(id model.EdgeID) *storeData {
+	data := s.data.Load()
+	if data != nil && int(id) < len(data.weight) {
+		return data
 	}
 
 	newLen := int(id)*storeGrowthMultiplier + storeGrowthPadding
-	s.resize(newLen)
+	if newLen <= int(id) {
+		newLen = int(id) + 1
+	}
+	s.resizeLocked(newLen)
+	return s.data.Load()
 }
 
-func (s *Store) resize(newLen int) {
-	if newLen <= len(s.weight) {
+func (s *Store) resizeLocked(newLen int) {
+	current := s.data.Load()
+	currentLen := 0
+	if current != nil {
+		currentLen = len(current.weight)
+	}
+	if newLen <= currentLen {
 		return
 	}
 
-	newWeight := make([]float32, newLen)
-	for i := range newWeight {
-		newWeight[i] = 1.0
+	next := newStoreData(newLen)
+	if current != nil {
+		for i := 0; i < currentLen; i++ {
+			next.weight[i].Store(current.weight[i].Load())
+			next.density[i].Store(current.density[i].Load())
+		}
 	}
-	copy(newWeight, s.weight)
-	s.weight = newWeight
+	s.data.Store(next)
 
 	newPrev := make([]float32, newLen)
 	for i := range newPrev {
@@ -73,11 +122,7 @@ func (s *Store) resize(newLen int) {
 	copy(newPrev, s.prev)
 	s.prev = newPrev
 
-	newDensity := make([]int, newLen)
-	copy(newDensity, s.density)
-	s.density = newDensity
-
-	newPrevDensity := make([]int, newLen)
+	newPrevDensity := make([]int32, newLen)
 	copy(newPrevDensity, s.prevDensity)
 	s.prevDensity = newPrevDensity
 

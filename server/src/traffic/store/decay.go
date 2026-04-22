@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"nav-system/src/traffic"
@@ -27,12 +28,13 @@ func Worker(ctx context.Context, store *Store) {
 
 // ApplyDecay exponentially decays dirty-edge multipliers back toward 1.0.
 func (s *Store) ApplyDecay(factor, tolerance float32) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.metaMu.Lock()
+	defer s.metaMu.Unlock()
 
 	newDirty := s.dirtyEdges[:0]
+	data := s.data.Load()
 	for _, id := range s.dirtyEdges {
-		cur := s.weight[id]
+		cur := math.Float32frombits(data.weight[id].Load())
 		updated := 1.0 + (cur-1.0)*factor
 		diff := updated - 1.0
 		if diff < 0 {
@@ -40,15 +42,15 @@ func (s *Store) ApplyDecay(factor, tolerance float32) {
 		}
 
 		if diff < tolerance {
-			s.weight[id] = 1.0
+			storeWeight(data, id, 1.0)
 			s.isDirty[id] = false
-			if s.density[id] == 0 {
+			if data.density[id].Load() == 0 {
 				s.isActive[id] = false
 				s.prev[id] = 1.0
 				s.prevDensity[id] = 0
 			}
 		} else {
-			s.weight[id] = updated
+			storeWeight(data, id, updated)
 			newDirty = append(newDirty, id)
 		}
 
