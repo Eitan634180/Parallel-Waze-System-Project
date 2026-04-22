@@ -77,6 +77,7 @@ type Session struct {
 	LastCongestedEdges    int
 	LastRerouteReason     string
 	CheckBetterRoute      bool
+	OptimizationQueued    bool
 
 	Conn       *websocket.Conn
 	SendChan   chan OutMsg

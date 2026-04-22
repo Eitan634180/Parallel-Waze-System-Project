@@ -2,8 +2,11 @@ package simulation
 
 import (
 	"context"
+	"log"
 	"math/rand"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nav-system/src/graph/model"
@@ -52,6 +55,8 @@ func (m *Manager) SetSessionBridge(bridge SessionBridge) {
 func (m *Manager) Run(ctx context.Context) {
 	ticker := time.NewTicker(TickInterval)
 	defer ticker.Stop()
+	lastTick := time.Now()
+	accumulator := time.Duration(0)
 
 	for {
 		select {
@@ -59,7 +64,20 @@ func (m *Manager) Run(ctx context.Context) {
 			m.Clear()
 			return
 		case <-ticker.C:
-			m.tick(float32(TickInterval.Seconds()))
+			now := time.Now()
+			accumulator += now.Sub(lastTick)
+			lastTick = now
+
+			steps := 0
+			for accumulator >= TickInterval && steps < MaxCatchUpSteps {
+				m.tick(float32(TickInterval.Seconds()))
+				accumulator -= TickInterval
+				steps++
+			}
+			if accumulator >= TickInterval {
+				log.Printf("[simulation] tick overload: capped catch-up at %d steps", MaxCatchUpSteps)
+				accumulator = TickInterval
+			}
 		}
 	}
 }
@@ -124,25 +142,65 @@ func (m *Manager) Unsubscribe(id int) {
 
 func (m *Manager) tick(dtSec float32) {
 	refs := m.carRefs()
+	if len(refs) == 0 {
+		return
+	}
+
+	workerCount := minInt(maxInt(runtime.GOMAXPROCS(0), MinWorkers), len(refs))
+	finishedChunks := make(chan []carRef, workerCount)
+	processPing := m.sessionBridge.ProcessPing
+
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			localFinished := make([]carRef, 0)
+			for {
+				start := int(next.Add(TickWorkChunkSize) - TickWorkChunkSize)
+				if start >= len(refs) {
+					break
+				}
+
+				end := start + TickWorkChunkSize
+				if end > len(refs) {
+					end = len(refs)
+				}
+
+				for _, ref := range refs[start:end] {
+					c := ref.car
+					c.mu.Lock()
+					if c.removed {
+						c.mu.Unlock()
+						continue
+					}
+
+					alive := advanceCar(c, m.g, m.store, dtSec, processPing)
+					if alive && c.session != nil {
+						syncCarWithSession(c)
+					}
+					if !alive {
+						c.removed = true
+						localFinished = append(localFinished, ref)
+					}
+					c.mu.Unlock()
+				}
+			}
+
+			finishedChunks <- localFinished
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(finishedChunks)
+	}()
+
 	finished := make([]carRef, 0)
-
-	for _, ref := range refs {
-		c := ref.car
-		c.mu.Lock()
-		if c.removed {
-			c.mu.Unlock()
-			continue
-		}
-
-		alive := advanceCar(c, m.g, m.store, dtSec, m.sessionBridge.ProcessPing)
-		if alive && c.session != nil {
-			syncCarWithSession(c)
-		}
-		if !alive {
-			c.removed = true
-			finished = append(finished, ref)
-		}
-		c.mu.Unlock()
+	for chunk := range finishedChunks {
+		finished = append(finished, chunk...)
 	}
 
 	for _, ref := range finished {

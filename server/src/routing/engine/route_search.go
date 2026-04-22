@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 )
 
@@ -69,7 +68,7 @@ func (r *Router) twoLevelSearch(
 	}
 
 	_, egressPred := multiSourceCellDijkstra(g, seeds, dstIdx, dstCellID, wf, stats)
-	return r.reconstruct(srcIdx, dstIdx, srcCellID, dstCellID, injectionPred, overlayPred, egressPred, wf)
+	return reconstructPath(r.g, srcIdx, dstIdx, srcCellID, dstCellID, injectionPred, overlayPred, egressPred, wf)
 }
 
 // fullGraphAStar runs a global A* on the base graph.
@@ -230,15 +229,4 @@ func (r *Router) overlayAStar(
 	}
 
 	return costs, pred
-}
-
-func (r *Router) reconstruct(
-	srcIdx, dstIdx uint32,
-	srcCellID, dstCellID model.CellID,
-	injPred map[uint32]predEntry,
-	overlayPred map[uint32]overlayPredEntry,
-	egressPred map[uint32]predEntry,
-	wf WeightFunc,
-) ([]Step, []uint32, bool) {
-	return reconstructPath(r.g, srcIdx, dstIdx, srcCellID, dstCellID, injPred, overlayPred, egressPred, wf)
 }

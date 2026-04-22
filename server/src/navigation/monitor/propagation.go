@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nav-system/src/graph/model"
@@ -16,11 +17,6 @@ import (
 	"nav-system/src/utilities"
 )
 
-type propagationJob struct {
-	session       *navigationsession.Session
-	improvedEdges []trafficstore.ChangedEdge
-}
-
 type heuristicSessionSnapshot struct {
 	carLat      float64
 	carLon      float64
@@ -29,52 +25,83 @@ type heuristicSessionSnapshot struct {
 }
 
 func RunPropagation(ctx context.Context, mgr *navigationmanager.Manager, store *trafficstore.Store, g *model.Graph) {
-	workerCount := navigation.OptimizationWorkerLimit
-	jobs := make(chan propagationJob, workerCount*navigation.PropagationJobQueueFactor)
-
-	var wg sync.WaitGroup
-	for i := 0; i < workerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				flagBetterRouteIfHelpful(job.session, job.improvedEdges, store, g)
-			}
-		}()
-	}
-
 	ticker := time.NewTicker(navigation.PropagationInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
 			return
 		case <-ticker.C:
-			propagate(ctx, mgr, jobs, store, g)
+			propagate(ctx, mgr, store, g)
 		}
 	}
 }
 
-func propagate(ctx context.Context, mgr *navigationmanager.Manager, jobs chan<- propagationJob, store *trafficstore.Store, g *model.Graph) {
+func propagate(ctx context.Context, mgr *navigationmanager.Manager, store *trafficstore.Store, g *model.Graph) {
 	changedEdges := store.DirtySnapshot()
 	improvedEdges := trafficpropagation.ImprovedEdges(changedEdges)
 	if len(improvedEdges) > 0 {
-		for _, sess := range mgr.ActiveSessions() {
-			select {
-			case <-ctx.Done():
-				return
-			case jobs <- propagationJob{session: sess, improvedEdges: improvedEdges}:
-			default:
-			}
-		}
+		flagBetterRoutes(ctx, mgr.ActiveSessions(), improvedEdges, store, g)
 	}
 
 	for _, update := range trafficpropagation.RecommendedSpeedUpdates(g, store, changedEdges) {
 		broadcastSpeedUpdate(mgr, update.EdgeID, update.RecommendedSpeedKmh)
 	}
+}
+
+func flagBetterRoutes(
+	ctx context.Context,
+	sessions []*navigationsession.Session,
+	improvedEdges []trafficstore.ChangedEdge,
+	store *trafficstore.Store,
+	g *model.Graph,
+) {
+	if len(sessions) == 0 {
+		return
+	}
+
+	workerCount := min(len(sessions), navigation.OptimizationWorkerLimit)
+	if workerCount < 1 {
+		workerCount = 1
+	}
+
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				start := int(next.Add(propagationBatchChunkSize) - propagationBatchChunkSize)
+				if start >= len(sessions) {
+					return
+				}
+
+				end := start + propagationBatchChunkSize
+				if end > len(sessions) {
+					end = len(sessions)
+				}
+
+				for _, sess := range sessions[start:end] {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
+					flagBetterRouteIfHelpful(sess, improvedEdges, store, g)
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func broadcastSpeedUpdate(mgr *navigationmanager.Manager, edgeID model.EdgeID, recommendedSpeed float32) {

@@ -4,6 +4,8 @@ import "time"
 
 const (
 	TickInterval               = 250 * time.Millisecond
+	MaxCatchUpSteps            = 4
+	TickWorkChunkSize          = 64
 	ObservationWarmupS         = float32(1.0)
 	ObservationSampleIntervalS = float32(1.0)
 	RandomSeed                 = int64(42)

@@ -45,12 +45,8 @@ func RunOptimizationSweep(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			for _, sess := range flaggedSessions(mgr.ActiveSessions()) {
-				select {
-				case jobs <- sess:
-				default:
-					log.Printf("session: optimization queue full, dropping session %s", sess.ID)
-				}
+			for _, sess := range mgr.ActiveSessions() {
+				tryQueueOptimization(jobs, sess)
 			}
 		}
 	}
@@ -71,13 +67,19 @@ func optimizationWorker(
 		case <-ctx.Done():
 			return
 		case sess := <-jobs:
+			if sess == nil || !beginOptimizationWork(sess) {
+				continue
+			}
+
 			context, candidate, ok := optimizationCandidate(sess, g, store, router, wf)
 			if !ok {
+				finishOptimizationWork(sess)
 				continue
 			}
 
 			newETA := candidate.TotalTimeSec
 			if !shouldAcceptOptimizationCandidate(sess, candidate, context, newETA) {
+				finishOptimizationWork(sess)
 				continue
 			}
 
@@ -94,26 +96,47 @@ func optimizationWorker(
 				&newETA,
 				&context.version,
 			)
+			finishOptimizationWork(sess)
 		}
 	}
 }
 
-func flaggedSessions(sessions []*navigationsession.Session) []*navigationsession.Session {
-	flagged := make([]*navigationsession.Session, 0, len(sessions))
-
-	for _, sess := range sessions {
-		sess.Mu.Lock()
-		if !sess.CheckBetterRoute {
-			sess.Mu.Unlock()
-			continue
-		}
-
-		sess.CheckBetterRoute = false
+func tryQueueOptimization(jobs chan<- *navigationsession.Session, sess *navigationsession.Session) {
+	sess.Mu.Lock()
+	if !sess.CheckBetterRoute || sess.OptimizationQueued {
 		sess.Mu.Unlock()
-		flagged = append(flagged, sess)
+		return
+	}
+	sess.OptimizationQueued = true
+	sess.Mu.Unlock()
+
+	select {
+	case jobs <- sess:
+	default:
+		sess.Mu.Lock()
+		sess.OptimizationQueued = false
+		sess.Mu.Unlock()
+		log.Printf("session: optimization queue full, deferring session %s", sess.ID)
+	}
+}
+
+func beginOptimizationWork(sess *navigationsession.Session) bool {
+	sess.Mu.Lock()
+	defer sess.Mu.Unlock()
+
+	if !sess.CheckBetterRoute {
+		sess.OptimizationQueued = false
+		return false
 	}
 
-	return flagged
+	sess.CheckBetterRoute = false
+	return true
+}
+
+func finishOptimizationWork(sess *navigationsession.Session) {
+	sess.Mu.Lock()
+	sess.OptimizationQueued = false
+	sess.Mu.Unlock()
 }
 
 func optimizationCandidate(
