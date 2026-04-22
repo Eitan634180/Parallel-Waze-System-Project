@@ -21,6 +21,21 @@ func TestTrafficStoreLiveWeightReturnsBaseWhenUnobserved(t *testing.T) {
 	}
 }
 
+func TestTrafficStoreWithCapacitySupportsInRangeEdgesWithoutWarmup(t *testing.T) {
+	store := trafficstore.NewStoreWithCapacity(4)
+	const edgeID = model.EdgeID(3)
+	const base = float32(10.0)
+
+	if got := store.LiveWeight(edgeID, base); got != base {
+		t.Fatalf("LiveWeight on pre-sized edge: got %.4f want %.4f", got, base)
+	}
+
+	store.RecordObservation(edgeID, base*2, base)
+	if got := store.Multiplier(edgeID); got <= 1.0 {
+		t.Fatalf("expected pre-sized edge multiplier to update, got %.4f", got)
+	}
+}
+
 func TestTrafficStoreRecordObservationAppliesEWMA(t *testing.T) {
 	store := trafficstore.NewStore()
 	const edgeID = model.EdgeID(42)

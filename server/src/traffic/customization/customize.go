@@ -33,14 +33,14 @@ type shortcutTarget struct {
 
 type customizationIndex struct {
 	crossCellOverlayByBaseEdge []uint32
-	crossCellBaseEdgeIDs       []model.EdgeID
 	shortcutTargetsByBoundary  [][]shortcutTarget
-	edgeSourceCellIDs          []model.CellID
-	edgeIsIntraCell            []bool
-	intraCellAdj               model.AdjacencyList
-	weightSnapshotMu           sync.Mutex
-	weightMultipliers          []float32
-	cellBoundaryIdxs           [][]uint32
+}
+
+type Customizer struct {
+	g                 *model.Graph
+	index             *customizationIndex
+	mu                sync.Mutex
+	weightMultipliers []float32
 }
 
 type liveDijkstraScratch struct {
@@ -50,11 +50,15 @@ type liveDijkstraScratch struct {
 	heap      *utilities.Heap[livePQItem]
 }
 
-var customizationIndexMu sync.RWMutex
-var customizationIndexCache = make(map[*model.Graph]*customizationIndex)
+func NewCustomizer(g *model.Graph) *Customizer {
+	return &Customizer{
+		g:     g,
+		index: buildCustomizationIndex(g),
+	}
+}
 
-// RunCustomization periodically reweights overlay edges using live traffic.
-func RunCustomization(ctx context.Context, g *model.Graph, store *trafficstore.Store) {
+// Run periodically customizes overlay weights.
+func (c *Customizer) Run(ctx context.Context, store *trafficstore.Store) {
 	ticker := time.NewTicker(traffic.CustomizationInterval)
 	defer ticker.Stop()
 
@@ -63,14 +67,13 @@ func RunCustomization(ctx context.Context, g *model.Graph, store *trafficstore.S
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			CustomizeOverlayWeights(g, store)
+			c.Customize(store)
 		}
 	}
 }
 
-// CustomizeOverlayWeights recomputes all overlay edge weights against the
-// current live traffic multipliers in store.
-func CustomizeOverlayWeights(g *model.Graph, store *trafficstore.Store) {
+// Customize recomputes overlay weights against the current live traffic.
+func (c *Customizer) Customize(store *trafficstore.Store) {
 	start := time.Now()
 
 	pendingEdges := store.SwapPending()
@@ -78,47 +81,44 @@ func CustomizeOverlayWeights(g *model.Graph, store *trafficstore.Store) {
 		return
 	}
 
-	index := getCustomizationIndex(g)
-	index.weightSnapshotMu.Lock()
-	defer index.weightSnapshotMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	index.weightMultipliers = store.SnapshotWeightMultipliers(index.weightMultipliers, len(g.Edges))
-	weights := index.weightMultipliers
-	updates := make([]overlayWeightUpdate, 0, len(index.crossCellOverlayByBaseEdge))
+	g := c.g
+	index := c.index
+	c.weightMultipliers = store.SnapshotWeightMultipliers(c.weightMultipliers, len(g.Edges))
+	weights := c.weightMultipliers
+	updates := make([]overlayWeightUpdate, 0, len(pendingEdges))
 	affectedCellIDs := make([]model.CellID, 0, len(g.Cells))
+
 	coverage := 0.0
 	if len(g.Edges) > 0 {
 		coverage = float64(len(pendingEdges)) / float64(len(g.Edges))
 	}
 
-	isDirty := make([]bool, len(g.Edges))
-	for _, id := range pendingEdges {
-		if int(id) < len(isDirty) {
-			isDirty[id] = true
-		}
-	}
-
 	if coverage >= fullAffectedCellsDirtyCoverage {
-		affectedCellIDs = affectedCellIDs[:0]
 		for _, cell := range g.Cells {
 			affectedCellIDs = append(affectedCellIDs, cell.ID)
 		}
 	} else {
 		cellSeen := make([]bool, len(g.Cells))
 		for _, edgeID := range pendingEdges {
-			if int(edgeID) >= len(index.edgeSourceCellIDs) || !index.edgeIsIntraCell[edgeID] {
+			if int(edgeID) >= len(g.Edges) {
 				continue
 			}
-			cID := index.edgeSourceCellIDs[edgeID]
-			if !cellSeen[cID] {
-				cellSeen[cID] = true
-				affectedCellIDs = append(affectedCellIDs, cID)
+
+			edge := &g.Edges[edgeID]
+			fromCellID := g.Nodes[edge.FromNodeIdx].CellID
+			toCellID := g.Nodes[edge.ToNodeIdx].CellID
+			if fromCellID == toCellID && int(fromCellID) < len(cellSeen) && !cellSeen[fromCellID] {
+				cellSeen[fromCellID] = true
+				affectedCellIDs = append(affectedCellIDs, fromCellID)
 			}
 		}
 	}
 
-	for _, edgeID := range index.crossCellBaseEdgeIDs {
-		if int(edgeID) >= len(isDirty) || !isDirty[edgeID] {
+	for _, edgeID := range pendingEdges {
+		if int(edgeID) >= len(index.crossCellOverlayByBaseEdge) {
 			continue
 		}
 
@@ -136,7 +136,7 @@ func CustomizeOverlayWeights(g *model.Graph, store *trafficstore.Store) {
 	type cellUpdates struct {
 		updates []overlayWeightUpdate
 	}
-	cellJobs := make(chan model.Cell, len(affectedCellIDs))
+	cellJobs := make(chan model.CellID, len(affectedCellIDs))
 	cellResults := make(chan cellUpdates, len(affectedCellIDs))
 
 	workerCount := max(runtime.GOMAXPROCS(0), 1)
@@ -146,9 +146,9 @@ func CustomizeOverlayWeights(g *model.Graph, store *trafficstore.Store) {
 		go func() {
 			defer wg.Done()
 			scratch := newLiveDijkstraScratch(len(g.Nodes))
-			// The work done in every cell is small enough that splitting it into boundary node jobs costs more than it saves
-			for cell := range cellJobs {
-				updates := computeCellCustomizationUpdates(g, cell, index, weights, scratch)
+			// The work done in every cell is small enough that splitting it into boundary node jobs costs more than it saves.
+			for cellID := range cellJobs {
+				updates := computeCellCustomizationUpdates(g, cellID, index, weights, scratch)
 				cellResults <- cellUpdates{updates: updates}
 			}
 		}()
@@ -156,7 +156,7 @@ func CustomizeOverlayWeights(g *model.Graph, store *trafficstore.Store) {
 
 	for _, cellID := range affectedCellIDs {
 		if int(cellID) < len(g.Cells) {
-			cellJobs <- g.Cells[cellID]
+			cellJobs <- cellID
 		}
 	}
 	close(cellJobs)
@@ -184,28 +184,33 @@ func CustomizeOverlayWeights(g *model.Graph, store *trafficstore.Store) {
 
 func computeCellCustomizationUpdates(
 	g *model.Graph,
-	cell model.Cell,
+	cellID model.CellID,
 	index *customizationIndex,
 	weights []float32,
 	scratch *liveDijkstraScratch,
 ) []overlayWeightUpdate {
-	if int(cell.ID) >= len(index.cellBoundaryIdxs) {
-		return nil
-	}
-	cellBIdxs := index.cellBoundaryIdxs[cell.ID]
-	if len(cellBIdxs) < 2 {
+	if int(cellID) >= len(g.Cells) {
 		return nil
 	}
 
-	updates := make([]overlayWeightUpdate, 0, len(cellBIdxs))
-	for _, srcBIdx := range cellBIdxs {
-		targets := index.shortcutTargetsByBoundary[srcBIdx]
+	cell := &g.Cells[cellID]
+	if len(cell.BoundaryNodeIdxs) < 2 {
+		return nil
+	}
+
+	updates := make([]overlayWeightUpdate, 0, len(cell.BoundaryNodeIdxs))
+	for _, srcIdx := range cell.BoundaryNodeIdxs {
+		srcBoundaryIdx := g.BoundaryNodeIdx[srcIdx]
+		if srcBoundaryIdx == -1 {
+			continue
+		}
+
+		targets := index.shortcutTargetsByBoundary[srcBoundaryIdx]
 		if len(targets) == 0 {
 			continue
 		}
 
-		srcIdx := g.BoundaryBaseIdxs[srcBIdx]
-		liveCellDijkstra(g, index, srcIdx, targets, weights, scratch)
+		liveCellDijkstra(g, cellID, srcIdx, targets, weights, scratch)
 		for _, target := range targets {
 			weight, ok := scratch.cost(target.toIdx)
 			if !ok {
@@ -222,7 +227,7 @@ func computeCellCustomizationUpdates(
 
 func liveCellDijkstra(
 	g *model.Graph,
-	index *customizationIndex,
+	cellID model.CellID,
 	srcIdx uint32,
 	targets []shortcutTarget,
 	weights []float32,
@@ -257,8 +262,12 @@ func liveCellDijkstra(
 			}
 		}
 
-		for _, eid := range index.intraCellAdj.Neighbours(cur.idx) {
+		for _, eid := range g.BaseAdj.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
+			if g.Nodes[e.ToNodeIdx].CellID != cellID {
+				continue
+			}
+
 			newCost := best + liveWeightFromSnapshot(weights, eid, e.Weight)
 			if existing, has := scratch.cost(e.ToNodeIdx); !has || newCost < existing {
 				scratch.set(e.ToNodeIdx, newCost)
@@ -275,58 +284,13 @@ func liveWeightFromSnapshot(weights []float32, id model.EdgeID, baseSec float32)
 	return baseSec * weights[id]
 }
 
-func getCustomizationIndex(g *model.Graph) *customizationIndex {
-	customizationIndexMu.RLock()
-	cached := customizationIndexCache[g]
-	customizationIndexMu.RUnlock()
-	if cached != nil {
-		return cached
-	}
-
-	built := buildCustomizationIndex(g)
-	customizationIndexMu.Lock()
-	if existing := customizationIndexCache[g]; existing != nil {
-		customizationIndexMu.Unlock()
-		return existing
-	}
-	customizationIndexCache[g] = built
-	customizationIndexMu.Unlock()
-	return built
-}
-
 func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	index := &customizationIndex{
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
-		crossCellBaseEdgeIDs:       make([]model.EdgeID, 0),
 		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.BoundaryBaseIdxs)),
-		edgeSourceCellIDs:          make([]model.CellID, len(g.Edges)),
-		edgeIsIntraCell:            make([]bool, len(g.Edges)),
-		intraCellAdj: model.AdjacencyList{
-			Offsets: make([]uint32, len(g.Nodes)+1),
-			EdgeIDs: make([]model.EdgeID, 0, len(g.BaseAdj.EdgeIDs)),
-		},
-		cellBoundaryIdxs: make([][]uint32, len(g.Cells)),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
-	}
-	for nodeIdx := uint32(0); int(nodeIdx) < len(g.Nodes); nodeIdx++ {
-		sourceCellID := g.Nodes[nodeIdx].CellID
-		for _, eid := range g.BaseAdj.Neighbours(nodeIdx) {
-			index.edgeSourceCellIDs[eid] = sourceCellID
-			if g.Nodes[g.Edges[eid].ToNodeIdx].CellID == sourceCellID {
-				index.edgeIsIntraCell[eid] = true
-				index.intraCellAdj.EdgeIDs = append(index.intraCellAdj.EdgeIDs, eid)
-			}
-		}
-		index.intraCellAdj.Offsets[nodeIdx+1] = uint32(len(index.intraCellAdj.EdgeIDs))
-	}
-
-	for bIdx, nodeIdx := range g.BoundaryBaseIdxs {
-		cellID := g.Nodes[nodeIdx].CellID
-		if int(cellID) < len(index.cellBoundaryIdxs) {
-			index.cellBoundaryIdxs[cellID] = append(index.cellBoundaryIdxs[cellID], uint32(bIdx))
-		}
 	}
 
 	g.OverlayAdj.Mu.RLock()
@@ -349,7 +313,6 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 			continue
 		}
 		index.crossCellOverlayByBaseEdge[baseEdgeID] = uint32(overlayEdgeIdx)
-		index.crossCellBaseEdgeIDs = append(index.crossCellBaseEdgeIDs, baseEdgeID)
 	}
 
 	return index

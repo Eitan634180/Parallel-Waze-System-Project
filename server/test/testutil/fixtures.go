@@ -139,7 +139,7 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 	tb.Helper()
 
 	built := BuildGraphFixture(tb, graphName, maxCellSize)
-	store := trafficstore.NewStore()
+	store := trafficstore.NewStoreWithCapacity(len(built.Graph.Edges))
 	manager := navigationmanager.NewManager()
 	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routing.WeightFunc {
 		return func(e *model.Edge) float32 {

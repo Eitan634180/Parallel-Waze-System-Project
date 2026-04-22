@@ -298,11 +298,12 @@ func runOverlayCustomization(args []string) {
 	}
 	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs), len(g.Edges))
 
-	store := trafficstore.NewStore()
+	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
+	customizer := trafficcustomization.NewCustomizer(g)
 	dirtyEdges := seedDirtyStore(g, store)
 	log.Printf("%s store ready (%d dirty edges)", customizationBenchLogPrefix, dirtyEdges)
 
-	trafficcustomization.CustomizeOverlayWeights(g, store)
+	customizer.Customize(store)
 	log.Printf("%s finished initial customization", customizationBenchLogPrefix)
 
 	for _, workers := range workerCounts {
@@ -312,7 +313,7 @@ func runOverlayCustomization(args []string) {
 		for run := 1; run <= *runs; run++ {
 			store.RefillPendingForBenchmarks()
 			start := time.Now()
-			trafficcustomization.CustomizeOverlayWeights(g, store)
+			customizer.Customize(store)
 			elapsed := time.Since(start)
 			total += elapsed
 			log.Printf("%s workers=%d run=%d duration=%s", customizationBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))

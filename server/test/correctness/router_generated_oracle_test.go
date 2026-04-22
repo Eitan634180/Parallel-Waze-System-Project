@@ -321,7 +321,8 @@ func longPathModes(name string) []routing.RoutingMode {
 func applyGeneratedTraffic(t testing.TB, g *model.Graph) routing.WeightFunc {
 	t.Helper()
 
-	store := trafficstore.NewStore()
+	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
+	customizer := trafficcustomization.NewCustomizer(g)
 	for edgeID := range g.Edges {
 		edge := &g.Edges[edgeID]
 		switch edgeID % 4 {
@@ -334,7 +335,7 @@ func applyGeneratedTraffic(t testing.TB, g *model.Graph) routing.WeightFunc {
 		}
 	}
 
-	trafficcustomization.CustomizeOverlayWeights(g, store)
+	customizer.Customize(store)
 	return func(edge *model.Edge) float32 {
 		return store.LiveWeight(edge.ID, edge.Weight)
 	}

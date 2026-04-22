@@ -85,7 +85,8 @@ func main() {
 	si := routing.BuildSnapIndex(g)
 	log.Printf("%s snap index ready in %s", serverLogPrefix, time.Since(t).Round(time.Millisecond))
 
-	store := trafficstore.NewStore()
+	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
+	customizer := trafficcustomization.NewCustomizer(g)
 	mgr := navigationmanager.NewManager()
 	router := routing.NewRouterWithMode(g, si, routingMode)
 	sim := simulation.NewManager(g, store, router, func() routing.WeightFunc {
@@ -94,7 +95,7 @@ func main() {
 		}
 	})
 	log.Printf("%s routing mode: %s", serverLogPrefix, routingMode)
-	trafficcustomization.CustomizeOverlayWeights(g, store)
+	customizer.Customize(store)
 	srv := transport.NewServer(g, store, mgr, router, sim)
 
 	warmCtx, warmCancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -109,7 +110,7 @@ func main() {
 	defer cancel()
 
 	go trafficstore.Worker(ctx, store)
-	go trafficcustomization.RunCustomization(ctx, g, store)
+	go customizer.Run(ctx, store)
 	go mgr.RunExpiry(ctx)
 	go navigationmonitor.RunPropagation(ctx, mgr, store, g)
 	go srv.RunOptimizationSweep(ctx)

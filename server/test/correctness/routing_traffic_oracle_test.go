@@ -11,12 +11,13 @@ import (
 
 func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
-	store := trafficstore.NewStore()
+	store := trafficstore.NewStoreWithCapacity(len(fixture.Graph.Edges))
+	customizer := trafficcustomization.NewCustomizer(fixture.Graph)
 
 	congestedEdge := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
 	baseWeight := fixture.Graph.Edges[congestedEdge].Weight
 	store.RecordObservation(congestedEdge, baseWeight*40, baseWeight)
-	trafficcustomization.CustomizeOverlayWeights(fixture.Graph, store)
+	customizer.Customize(store)
 
 	liveWeight := func(edge *model.Edge) float32 {
 		return store.LiveWeight(edge.ID, edge.Weight)

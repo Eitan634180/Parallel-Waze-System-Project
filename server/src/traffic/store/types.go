@@ -37,12 +37,27 @@ func NewStore() *Store {
 	return &Store{}
 }
 
+func NewStoreWithCapacity(edgeCount int) *Store {
+	s := &Store{}
+	if edgeCount > 0 {
+		s.resize(edgeCount)
+	}
+	return s
+}
+
 func (s *Store) ensure(id model.EdgeID) {
 	if int(id) < len(s.weight) {
 		return
 	}
 
 	newLen := int(id)*storeGrowthMultiplier + storeGrowthPadding
+	s.resize(newLen)
+}
+
+func (s *Store) resize(newLen int) {
+	if newLen <= len(s.weight) {
+		return
+	}
 
 	newWeight := make([]float32, newLen)
 	for i := range newWeight {
