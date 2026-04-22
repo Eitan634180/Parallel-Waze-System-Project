@@ -158,63 +158,82 @@ func runRouteLoad(args []string) {
 	targetGOMAXPROCS := flags.Int("target-gomaxprocs", 0, "Target server GOMAXPROCS for benchmark metadata")
 	flags.Parse(args)
 
-	if strings.TrimSpace(*serverURL) == "" {
+	resolvedServerURL, err := resolveRouteLoadServerURL(*serverURL)
+	if err != nil {
+		failf("resolve server url: %v", err)
+	}
+	resolvedCasesName := resolveCasesName(*casesName)
+	resolvedConcurrency, err := resolvePositiveInt(*concurrency, "TEST_BENCH_CONCURRENCY")
+	if err != nil {
+		failf("resolve concurrency: %v", err)
+	}
+	resolvedRequests, err := resolvePositiveInt(*requests, "TEST_BENCH_REQUESTS")
+	if err != nil {
+		failf("resolve requests: %v", err)
+	}
+	resolvedWarmup, err := resolveNonNegativeInt(*warmup, "TEST_BENCH_WARMUP")
+	if err != nil {
+		failf("resolve warmup: %v", err)
+	}
+	resolvedRoutingMode := resolveBenchmarkRoutingMode(*routingMode)
+
+	if strings.TrimSpace(resolvedServerURL) == "" {
 		fail("server must be provided")
 	}
-	if *concurrency <= 0 {
+	if resolvedConcurrency <= 0 {
 		fail("concurrency must be positive")
 	}
-	if *requests <= 0 {
+	if resolvedRequests <= 0 {
 		fail("requests must be positive")
 	}
-	if *warmup < 0 {
+	if resolvedWarmup < 0 {
 		fail("warmup must be non-negative")
 	}
-	if strings.TrimSpace(*casesName) == "" {
+	if strings.TrimSpace(resolvedCasesName) == "" {
 		fail("cases must be provided")
 	}
-	if strings.TrimSpace(*routingMode) == "" {
+	if strings.TrimSpace(resolvedRoutingMode) == "" {
 		fail("routing-mode must be provided")
 	}
 
-	fixture, err := benchmarkfixture.LoadFixture(*casesName)
+	fixture, err := benchmarkfixture.LoadFixture(resolvedCasesName)
 	if err != nil {
 		failf("LoadFixture: %v", err)
 	}
 
 	client := &http.Client{Timeout: loadbenchHTTPTimeout}
-	if *warmup > 0 {
-		if err := runWarmup(client, *serverURL, *warmup); err != nil {
+	if resolvedWarmup > 0 {
+		if err := runWarmup(client, resolvedServerURL, resolvedWarmup); err != nil {
 			failf("warmup failed: %v", err)
 		}
 		defer func() {
-			if err := clearWarmup(client, *serverURL); err != nil {
+			if err := clearWarmup(client, resolvedServerURL); err != nil {
 				failf("cleanup failed: %v", err)
 			}
 		}()
 	}
 
 	start := time.Now()
-	latencies, errorCount, err := runMeasured(client, *serverURL, fixture.Corpus, *requests, *concurrency)
+	latencies, errorCount, err := runMeasured(client, resolvedServerURL, fixture.Corpus, resolvedRequests, resolvedConcurrency)
 	if err != nil {
 		failf("runMeasured: %v", err)
 	}
 	total := time.Since(start)
 
 	report := loadbenchSummary{
-		Server:        *serverURL,
-		RoutingMode:   *routingMode,
-		Corpus:        *casesName,
+		Server:        resolvedServerURL,
+		RoutingMode:   resolvedRoutingMode,
+		Corpus:        resolvedCasesName,
 		Region:        fixture.Region,
 		QueryCount:    len(fixture.Corpus),
-		Concurrency:   *concurrency,
-		Requests:      *requests,
-		Warmup:        *warmup,
+		Concurrency:   resolvedConcurrency,
+		Requests:      resolvedRequests,
+		Warmup:        resolvedWarmup,
 		GOMAXPROCS:    benchmarkGOMAXPROCS(*targetGOMAXPROCS),
 		GoVersion:     runtime.Version(),
 		CommitHash:    readCommitHash(),
 		TotalSec:      total.Seconds(),
-		ThroughputRPS: float64(*requests) / total.Seconds(),
+		ThroughputRPS: float64(resolvedRequests) / total.Seconds(),
 		P50Ms:         percentileMs(latencies, loadbenchP50),
 		P95Ms:         percentileMs(latencies, loadbenchP95),
 		P99Ms:         percentileMs(latencies, loadbenchP99),
@@ -238,38 +257,46 @@ func runOverlayBuild(args []string) {
 	flags := flag.NewFlagSet(overlayBuildCommand, flag.ExitOnError)
 	dataDir := flags.String("data", "", "Path to saved graph directory")
 	workersFlag := flags.String("workers", "1", "Comma-separated worker counts")
-	runs := flags.Int("runs", 5, "Timed runs per worker count")
+	runs := flags.Int("runs", 0, "Timed runs per worker count")
 	flags.Parse(args)
 
-	if *runs <= 0 {
-		log.Fatalf("runs must be > 0")
+	resolvedDataDir, err := resolveBenchmarkDataDir(*dataDir)
+	if err != nil {
+		log.Fatalf("resolve data dir: %v", err)
 	}
-	if *dataDir == "" {
-		*dataDir = utilities.RequireEnv("NAV_MAP_ROOT")
+	resolvedWorkers := resolveWorkers(*workersFlag)
+	resolvedRuns, err := resolvePositiveInt(*runs, "TEST_BENCH_OVERLAY_RUNS")
+	if err != nil {
+		log.Fatalf("resolve runs: %v", err)
+	}
+	if resolvedRuns == 0 {
+		resolvedRuns = 5
 	}
 
-	workerCounts := parseWorkerCounts(*workersFlag)
+	if resolvedRuns <= 0 {
+		log.Fatalf("runs must be > 0")
+	}
 	originalGOMAXPROCS := runtime.GOMAXPROCS(0)
 	defer runtime.GOMAXPROCS(originalGOMAXPROCS)
 
-	log.Printf("%s loading graph from %s", overlayBenchLogPrefix, *dataDir)
-	g, err := graphstore.LoadGraph(*dataDir)
+	log.Printf("%s loading graph from %s", overlayBenchLogPrefix, resolvedDataDir)
+	g, err := graphstore.LoadGraph(resolvedDataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
 	log.Printf("%s graph ready (%d cells, %d boundary nodes)", overlayBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs))
 
-	for _, workers := range workerCounts {
+	for _, workers := range resolvedWorkers {
 		var total time.Duration
-		for run := 1; run <= *runs; run++ {
+		for run := 1; run <= resolvedRuns; run++ {
 			runtime.GOMAXPROCS(workers)
 			elapsed := graphbuilder.BuildOverlayGraph(g, workers)
 			total += elapsed
 			log.Printf("%s workers=%d run=%d duration=%s", overlayBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))
 		}
 
-		avg := total / time.Duration(*runs)
-		fmt.Printf("%s workers=%d avg=%s runs=%d\n", overlayBenchLogPrefix, workers, avg.Round(time.Millisecond), *runs)
+		avg := total / time.Duration(resolvedRuns)
+		fmt.Printf("%s workers=%d avg=%s runs=%d\n", overlayBenchLogPrefix, workers, avg.Round(time.Millisecond), resolvedRuns)
 	}
 }
 
@@ -277,22 +304,30 @@ func runOverlayCustomization(args []string) {
 	flags := flag.NewFlagSet(overlayCustomizationCommand, flag.ExitOnError)
 	dataDir := flags.String("data", "", "Path to saved graph directory")
 	workersFlag := flags.String("workers", "1", "Comma-separated worker counts")
-	runs := flags.Int("runs", 5, "Timed runs per worker count")
+	runs := flags.Int("runs", 0, "Timed runs per worker count")
 	flags.Parse(args)
 
-	if *runs <= 0 {
-		log.Fatalf("runs must be > 0")
+	resolvedDataDir, err := resolveBenchmarkDataDir(*dataDir)
+	if err != nil {
+		log.Fatalf("resolve data dir: %v", err)
 	}
-	if *dataDir == "" {
-		*dataDir = utilities.RequireEnv("NAV_MAP_ROOT")
+	resolvedWorkers := resolveWorkers(*workersFlag)
+	resolvedRuns, err := resolvePositiveInt(*runs, "TEST_BENCH_OVERLAY_RUNS")
+	if err != nil {
+		log.Fatalf("resolve runs: %v", err)
+	}
+	if resolvedRuns == 0 {
+		resolvedRuns = 5
 	}
 
-	workerCounts := parseWorkerCounts(*workersFlag)
+	if resolvedRuns <= 0 {
+		log.Fatalf("runs must be > 0")
+	}
 	originalGOMAXPROCS := runtime.GOMAXPROCS(0)
 	defer runtime.GOMAXPROCS(originalGOMAXPROCS)
 
-	log.Printf("%s loading graph from %s", customizationBenchLogPrefix, *dataDir)
-	g, err := graphstore.LoadGraph(*dataDir)
+	log.Printf("%s loading graph from %s", customizationBenchLogPrefix, resolvedDataDir)
+	g, err := graphstore.LoadGraph(resolvedDataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
@@ -306,11 +341,11 @@ func runOverlayCustomization(args []string) {
 	customizer.Customize(store)
 	log.Printf("%s finished initial customization", customizationBenchLogPrefix)
 
-	for _, workers := range workerCounts {
+	for _, workers := range resolvedWorkers {
 		runtime.GOMAXPROCS(workers)
 
 		var total time.Duration
-		for run := 1; run <= *runs; run++ {
+		for run := 1; run <= resolvedRuns; run++ {
 			store.RefillPendingForBenchmarks()
 			start := time.Now()
 			customizer.Customize(store)
@@ -319,8 +354,8 @@ func runOverlayCustomization(args []string) {
 			log.Printf("%s workers=%d run=%d duration=%s", customizationBenchLogPrefix, workers, run, elapsed.Round(time.Millisecond))
 		}
 
-		avg := total / time.Duration(*runs)
-		fmt.Printf("%s workers=%d avg=%s runs=%d\n", customizationBenchLogPrefix, workers, avg.Round(time.Millisecond), *runs)
+		avg := total / time.Duration(resolvedRuns)
+		fmt.Printf("%s workers=%d avg=%s runs=%d\n", customizationBenchLogPrefix, workers, avg.Round(time.Millisecond), resolvedRuns)
 	}
 }
 
@@ -527,8 +562,106 @@ func readCommitHash() string {
 	return ""
 }
 
+func resolveRouteLoadServerURL(flagValue string) (string, error) {
+	value := strings.TrimSpace(flagValue)
+	if value != "" {
+		return value, nil
+	}
+	if value, ok := utilities.LookupEnvTrimmed("TEST_BENCH_SERVER_URL"); ok {
+		return value, nil
+	}
+	host, hostOK := utilities.LookupEnvTrimmed("TEST_HOST")
+	port, portOK := utilities.LookupEnvTrimmed("TEST_BENCH_SERVER_PORT")
+	if hostOK && portOK {
+		return fmt.Sprintf("http://%s:%s", host, port), nil
+	}
+	return "", fmt.Errorf("TEST_BENCH_SERVER_URL or TEST_HOST with TEST_BENCH_SERVER_PORT must be set")
+}
+
+func resolveCasesName(flagValue string) string {
+	value := strings.TrimSpace(flagValue)
+	if value != "" {
+		return value
+	}
+	if value, ok := utilities.LookupEnvTrimmed("TEST_BENCH_CORPUS"); ok {
+		return value
+	}
+	return ""
+}
+
+func resolvePositiveInt(flagValue int, envName string) (int, error) {
+	if flagValue > 0 {
+		return flagValue, nil
+	}
+	value, ok := utilities.LookupEnvTrimmed(envName)
+	if !ok {
+		return flagValue, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", envName)
+	}
+	return parsed, nil
+}
+
+func resolveNonNegativeInt(flagValue int, envName string) (int, error) {
+	if flagValue >= 0 {
+		return flagValue, nil
+	}
+	value, ok := utilities.LookupEnvTrimmed(envName)
+	if !ok {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return 0, fmt.Errorf("%s must be a non-negative integer", envName)
+	}
+	return parsed, nil
+}
+
+func resolveBenchmarkRoutingMode(flagValue string) string {
+	value := strings.TrimSpace(flagValue)
+	if value != "" {
+		return value
+	}
+	if value, ok := utilities.LookupAnyEnvTrimmed("TEST_BENCH_ROUTING_MODE", "NAV_SERVER_ROUTING_MODE", "TEST_ROUTING_MODE"); ok {
+		return value
+	}
+	return ""
+}
+
+func resolveBenchmarkDataDir(flagValue string) (string, error) {
+	value := strings.TrimSpace(flagValue)
+	if value != "" {
+		return utilities.ResolveModulePath(value)
+	}
+	if value, ok := utilities.LookupEnvTrimmed("NAV_SERVER_DATA_DIR"); ok {
+		return utilities.ResolveModulePath(value)
+	}
+	regionDir, ok := utilities.LookupAnyEnvTrimmed("TEST_REGION_DIR", "DEV_REGION_DIR")
+	if !ok {
+		return utilities.ResolveModulePath(utilities.RequireEnv("NAV_MAP_ROOT"))
+	}
+	mapRoot, err := utilities.ResolveModulePath(utilities.RequireEnv("NAV_MAP_ROOT"))
+	if err != nil {
+		return "", err
+	}
+	return utilities.ResolveMapPath(mapRoot, regionDir), nil
+}
+
+func resolveWorkers(flagValue string) []int {
+	value := strings.TrimSpace(flagValue)
+	if value == "" || value == "1" {
+		if envValue, ok := utilities.LookupEnvTrimmed("TEST_BENCH_GOMAXPROCS"); ok {
+			value = envValue
+		}
+	}
+	return parseWorkerCounts(value)
+}
+
 func parseWorkerCounts(raw string) []int {
-	parts := strings.Split(raw, ",")
+	normalized := strings.ReplaceAll(strings.TrimSpace(raw), ",", " ")
+	parts := strings.Fields(normalized)
 	workers := make([]int, 0, len(parts))
 	for _, part := range parts {
 		value, err := strconv.Atoi(strings.TrimSpace(part))

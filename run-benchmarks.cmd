@@ -11,15 +11,11 @@ set "GOCACHE_DIR=%CACHE_DIR%\go-bench"
 set "BIN_DIR=%CACHE_DIR%\bin"
 set "OUT_DIR=%ROOT%.benchmarks"
 set "BUILD_WORK_DIR=%CACHE_DIR%\bench-build"
-set "BENCH_CASES_DIR=%SERVER_DIR%\test\testdata\benchmark-cases"
-set "MAP_ROOT=%SERVER_DIR%\data\map"
 set "TARGET=%~1"
 set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
 set "BENCHMARK_EXE=%BIN_DIR%\benchmark.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder-bench.exe"
 set "SERVER_SCALE_SCRIPT=%ROOT%server-scale.ps1"
-set "SERVER_ADDR=%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
-set "SERVER_URL=http://%TEST_HOST%:%TEST_BENCH_SERVER_PORT%"
 
 if "%TARGET%"=="" set "TARGET=all"
 
@@ -56,69 +52,6 @@ if not exist "%CHECK_DIR%\boundary.bin" exit /b 1
 if not exist "%CHECK_DIR%\overlay_adj.bin" exit /b 1
 exit /b 0
 
-:resolve_map_path
-if "%~1"=="" exit /b 1
-set "REL_PATH=%~1"
-if not "%REL_PATH::=%"=="%REL_PATH%" (
-  echo %~2 in project.env.test must be relative to server\data\map.
-  exit /b 1
-)
-if "%REL_PATH:~0,1%"=="\" (
-  echo %~2 in project.env.test must be relative to server\data\map.
-  exit /b 1
-)
-if "%REL_PATH:~0,1%"=="/" (
-  echo %~2 in project.env.test must be relative to server\data\map.
-  exit /b 1
-)
-set "%~3=%MAP_ROOT%\%REL_PATH%"
-set "REL_PATH="
-exit /b 0
-
-:rdir
-if not defined TEST_REGION_DIR (
-  echo TEST_REGION_DIR was not set in project.env.test.
-  exit /b 1
-)
-call :resolve_map_path "%TEST_REGION_DIR%" TEST_REGION_DIR SERVER_DATA
-if errorlevel 1 exit /b %ERRORLEVEL%
-call :ready "%SERVER_DATA%"
-if errorlevel 1 (
-  echo Benchmark region files not found under: %SERVER_DATA%
-  exit /b 1
-)
-exit /b 0
-
-:bcorp
-if not defined TEST_BENCH_CORPUS (
-  echo TEST_BENCH_CORPUS was not set in project.env.test.
-  exit /b 1
-)
-if not exist "%BENCH_CASES_DIR%\%TEST_BENCH_CORPUS%" (
-  echo Benchmark corpus file not found: %BENCH_CASES_DIR%\%TEST_BENCH_CORPUS%
-  exit /b 1
-)
-exit /b 0
-
-:bsinp
-call :rdir
-if errorlevel 1 exit /b %ERRORLEVEL%
-if not defined TEST_BENCH_PBF_PATH (
-  echo TEST_BENCH_PBF_PATH was not set in project.env.test.
-  exit /b 1
-)
-call :resolve_map_path "%TEST_BENCH_PBF_PATH%" TEST_BENCH_PBF_PATH REGION_PBF
-if errorlevel 1 exit /b %ERRORLEVEL%
-if not defined REGION_PBF (
-  echo TEST_BENCH_PBF_PATH was not set in project.env.test.
-  exit /b 1
-)
-if not exist "%REGION_PBF%" (
-  echo Benchmark PBF file not found: %REGION_PBF%
-  exit /b 1
-)
-exit /b 0
-
 :ensure_go
 where go >nul 2>nul
 if errorlevel 1 (
@@ -153,10 +86,6 @@ exit /b %EXIT_CODE%
 exit /b %ERRORLEVEL%
 
 :cmp
-call :rdir
-if errorlevel 1 exit /b %ERRORLEVEL%
-call :bcorp
-if errorlevel 1 exit /b %ERRORLEVEL%
 call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
 pushd "%SERVER_DIR%"
@@ -170,23 +99,17 @@ call :write_report
 exit /b %ERRORLEVEL%
 
 :server_scale
-call :rdir
-if errorlevel 1 exit /b %ERRORLEVEL%
-call :bcorp
-if errorlevel 1 exit /b %ERRORLEVEL%
 call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
 for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
   echo Running server-scale for mode=%TEST_BENCH_ROUTING_MODE% GOMAXPROCS=%%P
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%SERVER_SCALE_SCRIPT%" -ServerExe "%SERVER_EXE%" -ServerWorkdir "%SERVER_DIR%" -ServerAddr "%SERVER_ADDR%" -ServerData "%SERVER_DATA%" -RoutingMode "%TEST_BENCH_ROUTING_MODE%" -GOMAXPROCS %%P -StartupWaitSec %TEST_BENCH_SERVER_STARTUP_WAIT_SEC% -BenchmarkExe "%BENCHMARK_EXE%" -ServerURL "%SERVER_URL%" -Cases "%TEST_BENCH_CORPUS%" -Concurrency %TEST_BENCH_CONCURRENCY% -Requests %TEST_BENCH_REQUESTS% -Warmup %TEST_BENCH_WARMUP% -Out "%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P"
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%SERVER_SCALE_SCRIPT%" -ServerExe "%SERVER_EXE%" -ServerWorkdir "%SERVER_DIR%" -GOMAXPROCS %%P -StartupWaitSec %TEST_BENCH_SERVER_STARTUP_WAIT_SEC% -BenchmarkExe "%BENCHMARK_EXE%" -Out "%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P"
   if errorlevel 1 exit /b !ERRORLEVEL!
 )
 call :write_report
 exit /b %ERRORLEVEL%
 
 :build_scale
-call :bsinp
-if errorlevel 1 exit /b %ERRORLEVEL%
 call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
 for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
@@ -195,7 +118,7 @@ for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
   set "GOCACHE=%GOCACHE_DIR%"
   set "CGO_ENABLED=0"
   set "GOMAXPROCS=%%P"
-  "%BUILDER_EXE%" --pbf "%REGION_PBF%" --out "%BUILD_WORK_DIR%\p%%P" --cell-size %TEST_BENCH_CELL_SIZE% > "%OUT_DIR%\build-scale\p%%P.log" 2>&1
+  "%BUILDER_EXE%" --out "%BUILD_WORK_DIR%\p%%P" > "%OUT_DIR%\build-scale\p%%P.log" 2>&1
   set "EXIT_CODE=!ERRORLEVEL!"
   popd
   if not "!EXIT_CODE!"=="0" exit /b !EXIT_CODE!
@@ -204,20 +127,13 @@ call :write_report
 exit /b %ERRORLEVEL%
 
 :overlay_scale
-call :rdir
-if errorlevel 1 exit /b %ERRORLEVEL%
-if not defined TEST_BENCH_OVERLAY_RUNS (
-  echo TEST_BENCH_OVERLAY_RUNS was not set in project.env.test.
-  exit /b 1
-)
 call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
-set "OVERLAY_WORKERS=%TEST_BENCH_GOMAXPROCS: =,%"
-echo Running overlay-scale for workers=%OVERLAY_WORKERS%
+echo Running overlay-scale for workers=%TEST_BENCH_GOMAXPROCS%
 pushd "%SERVER_DIR%"
 set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
-"%BENCHMARK_EXE%" overlay-build --data "%SERVER_DATA%" --workers "%OVERLAY_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\overlay-scale\summary.log" 2>&1
+"%BENCHMARK_EXE%" overlay-build > "%OUT_DIR%\overlay-scale\summary.log" 2>&1
 set "EXIT_CODE=!ERRORLEVEL!"
 popd
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
@@ -225,20 +141,13 @@ call :write_report
 exit /b %ERRORLEVEL%
 
 :customization_scale
-call :rdir
-if errorlevel 1 exit /b %ERRORLEVEL%
-if not defined TEST_BENCH_OVERLAY_RUNS (
-  echo TEST_BENCH_OVERLAY_RUNS was not set in project.env.test.
-  exit /b 1
-)
 call :build_tools
 if errorlevel 1 exit /b %ERRORLEVEL%
-set "CUSTOMIZATION_WORKERS=%TEST_BENCH_GOMAXPROCS: =,%"
-echo Running customization-scale for workers=%CUSTOMIZATION_WORKERS%
+echo Running customization-scale for workers=%TEST_BENCH_GOMAXPROCS%
 pushd "%SERVER_DIR%"
 set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
-"%BENCHMARK_EXE%" overlay-customization --data "%SERVER_DATA%" --workers "%CUSTOMIZATION_WORKERS%" --runs %TEST_BENCH_OVERLAY_RUNS% > "%OUT_DIR%\customization-scale\summary.log" 2>&1
+"%BENCHMARK_EXE%" overlay-customization > "%OUT_DIR%\customization-scale\summary.log" 2>&1
 set "EXIT_CODE=!ERRORLEVEL!"
 popd
 if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%

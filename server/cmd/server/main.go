@@ -4,10 +4,13 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,26 +32,29 @@ const serverLogPrefix = "server:"
 func main() {
 	dataDir := flag.String("data", "", "Directory containing binary graph files")
 	addr := flag.String("addr", "", "HTTP listen address")
-	routingModeFlag := flag.String("routing-mode", string(routing.RoutingModeHierarchical), "Routing mode: hierarchical|base-astar|base-dijkstra")
+	routingModeFlag := flag.String("routing-mode", "", "Routing mode: hierarchical|base-astar|base-dijkstra")
 	flag.Parse()
 
-	if *addr == "" {
-		*addr = utilities.RequireEnv("NAV_SERVER_ADDR")
+	resolvedAddr, err := resolveListenAddr(*addr)
+	if err != nil {
+		log.Fatalf("%s resolve listen addr: %v", serverLogPrefix, err)
 	}
 
-	routingMode, err := routing.ParseRoutingMode(*routingModeFlag)
+	routingMode, err := routing.ParseRoutingMode(resolveRoutingMode(*routingModeFlag))
 	if err != nil {
 		log.Fatalf("ParseRoutingMode: %v", err)
 	}
 
-	if *dataDir == "" {
-		if configuredDataDir, ok := utilities.LookupEnvTrimmed("NAV_SERVER_DATA_DIR"); ok {
-			*dataDir = configuredDataDir
-		}
+	resolvedDataDir, err := resolveDataDir(*dataDir)
+	if err != nil {
+		log.Fatalf("%s resolve data dir: %v", serverLogPrefix, err)
 	}
 
-	if *dataDir == "" {
-		mapRoot := utilities.RequireEnv("NAV_MAP_ROOT")
+	if resolvedDataDir == "" {
+		mapRoot, err := resolveMapRoot()
+		if err != nil {
+			log.Fatalf("%s resolve map root: %v", serverLogPrefix, err)
+		}
 		availableRegions, err := mapdata.ListReady(mapRoot)
 		if err != nil {
 			log.Fatalf("scanning map directory: %v", err)
@@ -57,7 +63,7 @@ func main() {
 		case 0:
 			log.Fatalf("%s no preprocessed regions found in %s. Run region-picker first.", serverLogPrefix, mapRoot)
 		case 1:
-			*dataDir = availableRegions[0].Dir
+			resolvedDataDir = availableRegions[0].Dir
 			log.Printf("%s auto-selected region: %s", serverLogPrefix, availableRegions[0].ID)
 		default:
 			log.Printf("%s multiple regions available in %s:", serverLogPrefix, mapRoot)
@@ -68,9 +74,9 @@ func main() {
 		}
 	}
 
-	log.Printf("%s loading graph from %s", serverLogPrefix, *dataDir)
+	log.Printf("%s loading graph from %s", serverLogPrefix, resolvedDataDir)
 	t := time.Now()
-	g, err := graphstore.LoadGraph(*dataDir)
+	g, err := graphstore.LoadGraph(resolvedDataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
@@ -118,12 +124,12 @@ func main() {
 	go sim.Run(ctx)
 
 	httpSrv := &http.Server{
-		Addr:    *addr,
+		Addr:    resolvedAddr,
 		Handler: srv,
 	}
 
 	go func() {
-		log.Printf("%s listening on %s", serverLogPrefix, *addr)
+		log.Printf("%s listening on %s", serverLogPrefix, resolvedAddr)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe: %v", err)
 		}
@@ -139,4 +145,62 @@ func main() {
 	defer shutCancel()
 	_ = httpSrv.Shutdown(shutCtx)
 	log.Printf("%s stopped", serverLogPrefix)
+}
+
+func resolveListenAddr(flagValue string) (string, error) {
+	if value := strings.TrimSpace(flagValue); value != "" {
+		return value, nil
+	}
+	if value, ok := utilities.LookupEnvTrimmed("NAV_SERVER_ADDR"); ok {
+		return value, nil
+	}
+
+	host, ok := utilities.LookupEnvTrimmed("TEST_HOST")
+	if !ok {
+		return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+	}
+	if port, ok := utilities.LookupEnvTrimmed("TEST_BENCH_SERVER_PORT"); ok {
+		return net.JoinHostPort(host, port), nil
+	}
+	if port, ok := utilities.LookupEnvTrimmed("TEST_SERVER_PORT"); ok {
+		return net.JoinHostPort(host, port), nil
+	}
+	return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+}
+
+func resolveRoutingMode(flagValue string) string {
+	if value := strings.TrimSpace(flagValue); value != "" {
+		return value
+	}
+	if value, ok := utilities.LookupAnyEnvTrimmed(
+		"NAV_SERVER_ROUTING_MODE",
+		"DEV_ROUTING_MODE",
+		"TEST_BENCH_ROUTING_MODE",
+		"TEST_ROUTING_MODE",
+	); ok {
+		return value
+	}
+	return string(routing.RoutingModeHierarchical)
+}
+
+func resolveDataDir(flagValue string) (string, error) {
+	if value := strings.TrimSpace(flagValue); value != "" {
+		return utilities.ResolveModulePath(value)
+	}
+	if value, ok := utilities.LookupEnvTrimmed("NAV_SERVER_DATA_DIR"); ok {
+		return utilities.ResolveModulePath(value)
+	}
+	if value, ok := utilities.LookupAnyEnvTrimmed("DEV_REGION_DIR", "TEST_REGION_DIR"); ok {
+		mapRoot, err := resolveMapRoot()
+		if err != nil {
+			return "", err
+		}
+		return utilities.ResolveMapPath(mapRoot, value), nil
+	}
+	return "", nil
+}
+
+func resolveMapRoot() (string, error) {
+	mapRoot := utilities.RequireEnv("NAV_MAP_ROOT")
+	return utilities.ResolveModulePath(mapRoot)
 }

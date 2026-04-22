@@ -4,7 +4,7 @@ setlocal
 set "ROOT=%~dp0"
 set "TESTS_DIR=%ROOT%test"
 set "LOADBOT_DIR=%TESTS_DIR%\performance\loadbot"
-set "DEFAULT_CLIENTS=20"
+set "CLIENTS=20"
 
 if not exist "%TESTS_DIR%\package.json" (
   echo Loadbot was not found in "%LOADBOT_DIR%".
@@ -27,8 +27,8 @@ if errorlevel 1 (
 )
 
 echo.
-set /p CLIENTS=How many browser clients should run? [default: %DEFAULT_CLIENTS%]: 
-if "%CLIENTS%"=="" set "CLIENTS=%DEFAULT_CLIENTS%"
+set /p CLIENTS=How many browser clients should run? [default: %CLIENTS%]: 
+if "%CLIENTS%"=="" set "CLIENTS=%CLIENTS%"
 
 echo.
 echo Starting browser load test with %CLIENTS% clients

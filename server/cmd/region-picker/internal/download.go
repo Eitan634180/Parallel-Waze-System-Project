@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"nav-system/src/utilities"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -130,7 +131,7 @@ func runMapBuilder(pbfPath, outDir string) error {
 	}
 
 	log.Printf("%s map-builder binary not found; falling back to 'go run'", downloadLogPrefix)
-	serverDir, err := findServerDir()
+	serverDir, err := utilities.FindModuleRoot()
 	if err != nil {
 		return fmt.Errorf("cannot locate server source: %w", err)
 	}
@@ -150,32 +151,4 @@ func execCmdDir(dir, name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-func findServerDir() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-
-	candidates := []string{filepath.Dir(exe)}
-	if cwd, err := os.Getwd(); err == nil {
-		candidates = append(candidates, cwd, filepath.Join(cwd, "server"))
-	}
-
-	for _, base := range candidates {
-		dir := base
-		for i := 0; i < serverSearchMaxDepth; i++ {
-			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-				return dir, nil
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-			dir = parent
-		}
-	}
-
-	return "", fmt.Errorf("go.mod not found near %s", exe)
 }

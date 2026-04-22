@@ -14,33 +14,42 @@ import (
 var pickerUI = os.Stderr
 
 func Run() {
-	mapRoot := flag.String("map-root", utilities.RequireEnv("NAV_MAP_ROOT"), "Directory containing region subdirectories")
-	cacheFile := flag.String("cache", DefaultGeofabrikCacheFile(), "Local cache file for the Geofabrik index")
+	mapRoot := flag.String("map-root", "", "Directory containing region subdirectories")
+	cacheFile := flag.String("cache", "", "Local cache file for the Geofabrik index")
 	regionID := flag.String("region", "", "Non-interactive: download and build this Geofabrik region ID")
 	prompt := flag.Bool("prompt", false, "Always show the selection menu even if a last region is remembered")
 	keepPBF := flag.Bool("keep-pbf", true, "Keep the downloaded .pbf file after building")
 	flag.Parse()
 
-	if err := os.MkdirAll(*mapRoot, pickerDirectoryPerm); err != nil {
+	resolvedMapRoot, err := resolvePickerPath(*mapRoot, "NAV_MAP_ROOT")
+	if err != nil {
+		log.Fatalf("%s resolve map root: %v", pickerLogPrefix, err)
+	}
+	resolvedCacheFile, err := resolvePickerPath(*cacheFile, "NAV_GEOFABRIK_CACHE_FILE")
+	if err != nil {
+		log.Fatalf("%s resolve cache file: %v", pickerLogPrefix, err)
+	}
+
+	if err := os.MkdirAll(resolvedMapRoot, pickerDirectoryPerm); err != nil {
 		log.Fatalf("%s cannot create map root: %v", pickerLogPrefix, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(*cacheFile), pickerDirectoryPerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(resolvedCacheFile), pickerDirectoryPerm); err != nil {
 		log.Fatalf("%s cannot create data dir: %v", pickerLogPrefix, err)
 	}
-	lastRegionPath := filepath.Join(filepath.Dir(*cacheFile), lastRegionFileName)
+	lastRegionPath := filepath.Join(filepath.Dir(resolvedCacheFile), lastRegionFileName)
 
 	if *regionID != "" {
-		runNonInteractive(*regionID, *mapRoot, *cacheFile, lastRegionPath, *keepPBF)
+		runNonInteractive(*regionID, resolvedMapRoot, resolvedCacheFile, lastRegionPath, *keepPBF)
 		return
 	}
 
-	regions, err := ListReady(*mapRoot)
+	regions, err := ListReady(resolvedMapRoot)
 	if err != nil {
 		log.Fatalf("%s scanning map root: %v", pickerLogPrefix, err)
 	}
 
 	if len(regions) == 0 {
-		runDownloadFlow(*mapRoot, *cacheFile, lastRegionPath, *keepPBF)
+		runDownloadFlow(resolvedMapRoot, resolvedCacheFile, lastRegionPath, *keepPBF)
 		return
 	}
 
@@ -65,12 +74,20 @@ func Run() {
 
 	chosen, downloadRequested := selectExistingRegion(regions)
 	if downloadRequested {
-		runDownloadFlow(*mapRoot, *cacheFile, lastRegionPath, *keepPBF)
+		runDownloadFlow(resolvedMapRoot, resolvedCacheFile, lastRegionPath, *keepPBF)
 		return
 	}
 
 	writeLastRegion(lastRegionPath, chosen.Dir)
 	fmt.Println(chosen.Dir)
+}
+
+func resolvePickerPath(flagValue, envName string) (string, error) {
+	value := strings.TrimSpace(flagValue)
+	if value == "" {
+		value = utilities.RequireEnv(envName)
+	}
+	return utilities.ResolveModulePath(value)
 }
 
 func runNonInteractive(regionID, mapRoot, cacheFile, lastRegionPath string, keepPBF bool) {

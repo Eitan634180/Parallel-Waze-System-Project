@@ -33,7 +33,6 @@ func TestDeleteNonExistentSessionIsIdempotent(t *testing.T) {
 	if resp.StatusCode >= http.StatusInternalServerError {
 		t.Fatalf("deleting unknown session should not return 5xx, got %d", resp.StatusCode)
 	}
-	// The API is idempotent: it returns 204 even if the session doesn't exist.
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE unknown session: got %d, want 204 NoContent", resp.StatusCode)
 	}

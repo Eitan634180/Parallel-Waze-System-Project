@@ -40,11 +40,11 @@ function resolveRegionDir() {
   return testConfig.regionDir;
 }
 
-const regionDir = resolveRegionDir();
+resolveRegionDir();
 
 const child = spawn(
   'go',
-  ['run', './cmd/server', '--addr', testConfig.server.listenAddr, '--data', regionDir, '--routing-mode', testConfig.server.routingMode],
+  ['run', './cmd/server'],
   {
     cwd: serverDir,
     stdio: 'inherit',
@@ -52,6 +52,7 @@ const child = spawn(
       ...process.env,
       CGO_ENABLED: '0',
       GOCACHE: cacheDir,
+      NAV_SERVER_ADDR: testConfig.server.listenAddr,
     },
   },
 );

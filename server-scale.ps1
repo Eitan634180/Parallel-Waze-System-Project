@@ -1,17 +1,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$ServerExe,
     [Parameter(Mandatory = $true)][string]$ServerWorkdir,
-    [Parameter(Mandatory = $true)][string]$ServerAddr,
-    [Parameter(Mandatory = $true)][string]$ServerData,
-    [Parameter(Mandatory = $true)][string]$RoutingMode,
     [Parameter(Mandatory = $true)][int]$GOMAXPROCS,
     [Parameter(Mandatory = $true)][int]$StartupWaitSec,
     [Parameter(Mandatory = $true)][string]$BenchmarkExe,
-    [Parameter(Mandatory = $true)][string]$ServerURL,
-    [Parameter(Mandatory = $true)][string]$Cases,
-    [Parameter(Mandatory = $true)][int]$Concurrency,
-    [Parameter(Mandatory = $true)][int]$Requests,
-    [Parameter(Mandatory = $true)][int]$Warmup,
     [Parameter(Mandatory = $true)][string]$Out
 )
 
@@ -21,8 +13,8 @@ $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $ServerExe
 $psi.WorkingDirectory = $ServerWorkdir
 $psi.UseShellExecute = $false
-$psi.Arguments = ('--addr "{0}" --data "{1}" --routing-mode "{2}"' -f $ServerAddr, $ServerData, $RoutingMode)
 $psi.EnvironmentVariables['GOMAXPROCS'] = [string]$GOMAXPROCS
+$psi.EnvironmentVariables['NAV_SERVER_ADDR'] = ('{0}:{1}' -f $env:TEST_HOST, $env:TEST_BENCH_SERVER_PORT)
 
 $serverProc = [System.Diagnostics.Process]::Start($psi)
 if (-not $serverProc) {
@@ -38,12 +30,6 @@ $benchExit = 0
 try {
     & $BenchmarkExe `
         route-load `
-        --server $ServerURL `
-        --cases $Cases `
-        --concurrency $Concurrency `
-        --requests $Requests `
-        --warmup $Warmup `
-        --routing-mode $RoutingMode `
         --target-gomaxprocs $GOMAXPROCS `
         --out $Out
     $benchExit = $LASTEXITCODE
