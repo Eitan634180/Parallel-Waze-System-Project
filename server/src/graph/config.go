@@ -11,7 +11,6 @@ const (
 	FlowTerminalNodeCount    = 2
 	FlowSinkNodeOffset       = 1
 	UnitFlowCapacity         = 1
-	BoundaryNodeCapacityHint = 32768
 
 	SnapGridSize   = 128
 	FileBufferSize = 1 << 20

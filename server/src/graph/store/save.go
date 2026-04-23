@@ -157,10 +157,10 @@ func saveCells(g *model.Graph, path string) error {
 	}
 	for i := range g.Cells {
 		c := &g.Cells[i]
-		if err := writeUint32(bw, uint32(len(c.BoundaryNodeIdxs))); err != nil {
+		if err := writeUint32(bw, uint32(len(c.GateNodeIdxs))); err != nil {
 			return err
 		}
-		for _, idx := range c.BoundaryNodeIdxs {
+		for _, idx := range c.GateNodeIdxs {
 			if err := writeUint32(bw, idx); err != nil {
 				return err
 			}

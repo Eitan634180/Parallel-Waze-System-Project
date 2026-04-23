@@ -35,7 +35,7 @@ type OverlayEdge struct {
 
 // Cell is one partition region produced by recursive bisection.
 type Cell struct {
-	BoundaryNodeIdxs []uint32
+	GateNodeIdxs []uint32
 }
 
 func (e *Edge) IsOneWay() bool { return e.Flags&FlagOneWay != 0 }

@@ -84,7 +84,7 @@ func buildGeneratedCorridorFixture(tb testing.TB, spec generatedCorridorSpec) *G
 	}
 
 	builder.PartitionCells(g, spec.maxCellSize)
-	builder.DetectBoundaryNodes(g)
+	builder.DetectGateNodes(g)
 	builder.BuildOverlayGraph(g, 1)
 
 	snap := routingengine.BuildSnapIndex(g)

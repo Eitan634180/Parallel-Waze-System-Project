@@ -52,7 +52,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	}()
 
 	boundaryCount := 0
-	for _, bIdx := range g.BoundaryNodeIdx {
+	for _, bIdx := range g.GateNodeIdx {
 		if bIdx != -1 {
 			boundaryCount++
 		}
@@ -62,7 +62,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	totalEdges := 0
 	for result := range results {
 		for _, edge := range result.edges {
-			fromIdx := g.BoundaryNodeIdx[edge.FromNodeIdx]
+			fromIdx := g.GateNodeIdx[edge.FromNodeIdx]
 			if fromIdx == -1 {
 				continue
 			}
@@ -102,41 +102,41 @@ func groupNodesByCell(g *model.Graph) [][]uint32 {
 	return nodesByCell
 }
 
-// DetectBoundaryNodes marks nodes that touch edges crossing a cell boundary.
-func DetectBoundaryNodes(g *model.Graph) {
+// DetectGateNodes marks nodes that touch edges crossing a cell boundary.
+func DetectGateNodes(g *model.Graph) {
 	log.Printf("%s detecting boundary nodes", cellBuilderLogPrefix)
 
-	isBoundary := make([]bool, len(g.Nodes))
+	isGate := make([]bool, len(g.Nodes))
 	for i := range g.Nodes {
 		fromCellID := g.Nodes[i].CellID
 		for _, eid := range g.Base.Neighbours(uint32(i)) {
 			e := &g.Edges[eid]
 			toIdx := e.ToNodeIdx
 			if g.Nodes[toIdx].CellID != fromCellID {
-				isBoundary[i] = true
-				isBoundary[toIdx] = true
+				isGate[i] = true
+				isGate[toIdx] = true
 			}
 		}
 	}
 
-	g.BoundaryNodeIdx = make([]int32, len(g.Nodes))
-	for i := range g.BoundaryNodeIdx {
-		g.BoundaryNodeIdx[i] = -1
+	g.GateNodeIdx = make([]int32, len(g.Nodes))
+	for i := range g.GateNodeIdx {
+		g.GateNodeIdx[i] = -1
 	}
-	cellBoundary := make(map[model.CellID][]uint32)
+	cellGates := make(map[model.CellID][]uint32)
 
 	boundaryCount := 0
 	for i, node := range g.Nodes {
-		if !isBoundary[i] {
+		if !isGate[i] {
 			continue
 		}
-		g.BoundaryNodeIdx[i] = int32(boundaryCount)
+		g.GateNodeIdx[i] = int32(boundaryCount)
 		boundaryCount++
-		cellBoundary[node.CellID] = append(cellBoundary[node.CellID], uint32(i))
+		cellGates[node.CellID] = append(cellGates[node.CellID], uint32(i))
 	}
 
 	for i := range g.Cells {
-		g.Cells[i].BoundaryNodeIdxs = cellBoundary[model.CellID(i)]
+		g.Cells[i].GateNodeIdxs = cellGates[model.CellID(i)]
 	}
 
 	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, boundaryCount)
@@ -156,8 +156,8 @@ func countCrossCell(g *model.Graph, edges []model.OverlayEdge) int {
 func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Cell, cellNodeIdxs []uint32) []model.OverlayEdge {
 	var result []model.OverlayEdge
 
-	for _, fromIdx := range cell.BoundaryNodeIdxs {
-		if g.BoundaryNodeIdx[fromIdx] == -1 {
+	for _, fromIdx := range cell.GateNodeIdxs {
+		if g.GateNodeIdx[fromIdx] == -1 {
 			continue
 		}
 
@@ -168,7 +168,7 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 			if g.Nodes[toIdx].CellID == cellID {
 				continue
 			}
-			if g.BoundaryNodeIdx[toIdx] == -1 {
+			if g.GateNodeIdx[toIdx] == -1 {
 				continue
 			}
 			result = append(result, model.OverlayEdge{
@@ -179,7 +179,7 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 		}
 	}
 
-	if len(cell.BoundaryNodeIdxs) < 2 {
+	if len(cell.GateNodeIdxs) < 2 {
 		return result
 	}
 
@@ -188,9 +188,9 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 		inCell[idx] = true
 	}
 
-	for _, srcIdx := range cell.BoundaryNodeIdxs {
-		dists := cellDijkstra(g, srcIdx, cell.BoundaryNodeIdxs, inCell)
-		for _, dstIdx := range cell.BoundaryNodeIdxs {
+	for _, srcIdx := range cell.GateNodeIdxs {
+		dists := cellDijkstra(g, srcIdx, cell.GateNodeIdxs, inCell)
+		for _, dstIdx := range cell.GateNodeIdxs {
 			if dstIdx == srcIdx {
 				continue
 			}
@@ -215,11 +215,11 @@ type distInfo struct {
 
 // cellDijkstra runs Dijkstra inside one cell and returns settled boundary
 // distances from the source boundary node.
-func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell []bool) map[uint32]distInfo {
+func cellDijkstra(g *model.Graph, srcIdx uint32, GateNodes []uint32, inCell []bool) map[uint32]distInfo {
 	dist := make(map[uint32]distInfo)
 	dist[srcIdx] = distInfo{0}
-	targetSet := make(map[uint32]struct{}, len(boundaryNodes))
-	for _, idx := range boundaryNodes {
+	targetSet := make(map[uint32]struct{}, len(GateNodes))
+	for _, idx := range GateNodes {
 		targetSet[idx] = struct{}{}
 	}
 
@@ -227,7 +227,7 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell 
 	pq.Push(dijkstraItem{idx: srcIdx, weight: 0})
 
 	settled := 0
-	totalBoundary := len(boundaryNodes)
+	totalGates := len(GateNodes)
 
 	for pq.Len() > 0 {
 		cur := pq.Pop()
@@ -238,10 +238,10 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell 
 			continue
 		}
 
-		if _, isBoundary := targetSet[cur.idx]; isBoundary {
+		if _, isGate := targetSet[cur.idx]; isGate {
 			settled++
 			delete(targetSet, cur.idx)
-			if settled == totalBoundary {
+			if settled == totalGates {
 				break
 			}
 		}
@@ -260,8 +260,8 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell 
 		}
 	}
 
-	result := make(map[uint32]distInfo, len(boundaryNodes))
-	for _, idx := range boundaryNodes {
+	result := make(map[uint32]distInfo, len(GateNodes))
+	for _, idx := range GateNodes {
 		if d, ok := dist[idx]; ok {
 			result[idx] = d
 		}

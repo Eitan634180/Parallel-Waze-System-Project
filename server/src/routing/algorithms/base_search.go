@@ -134,7 +134,7 @@ func OverlayAStar(
 			}
 		}
 
-		boundaryIdx := g.BoundaryNodeIdx[current.idx]
+		boundaryIdx := g.GateNodeIdx[current.idx]
 		if boundaryIdx == -1 {
 			continue
 		}

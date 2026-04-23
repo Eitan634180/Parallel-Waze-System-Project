@@ -32,7 +32,7 @@ type shortcutTarget struct {
 
 type customizationIndex struct {
 	crossCellOverlayByBaseEdge []uint32
-	shortcutTargetsByBoundary  [][]shortcutTarget
+	shortcutTargetsByGate  [][]shortcutTarget
 }
 
 type Customizer struct {
@@ -189,18 +189,18 @@ func computeCellCustomizationUpdates(
 	}
 
 	cell := &g.Cells[cellID]
-	if len(cell.BoundaryNodeIdxs) < 2 {
+	if len(cell.GateNodeIdxs) < 2 {
 		return nil
 	}
 
-	updates := make([]overlayWeightUpdate, 0, len(cell.BoundaryNodeIdxs))
-	for _, srcIdx := range cell.BoundaryNodeIdxs {
-		srcBoundaryIdx := g.BoundaryNodeIdx[srcIdx]
-		if srcBoundaryIdx == -1 {
+	updates := make([]overlayWeightUpdate, 0, len(cell.GateNodeIdxs))
+	for _, srcIdx := range cell.GateNodeIdxs {
+		srcGateIdx := g.GateNodeIdx[srcIdx]
+		if srcGateIdx == -1 {
 			continue
 		}
 
-		targets := index.shortcutTargetsByBoundary[srcBoundaryIdx]
+		targets := index.shortcutTargetsByGate[srcGateIdx]
 		if len(targets) == 0 {
 			continue
 		}
@@ -282,7 +282,7 @@ func liveWeightFromSnapshot(weights []float32, id model.EdgeID, baseSec float32)
 func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	index := &customizationIndex{
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
-		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
+		shortcutTargetsByGate:  make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
@@ -290,10 +290,10 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 
 	for overlayEdgeIdx, overlayEdge := range g.Overlay.OverlayEdges {
 		if g.Nodes[overlayEdge.FromNodeIdx].CellID == g.Nodes[overlayEdge.ToNodeIdx].CellID {
-			fromBoundaryIdx := g.BoundaryNodeIdx[overlayEdge.FromNodeIdx]
-			if fromBoundaryIdx != -1 {
-				index.shortcutTargetsByBoundary[fromBoundaryIdx] = append(
-					index.shortcutTargetsByBoundary[fromBoundaryIdx],
+			fromGateIdx := g.GateNodeIdx[overlayEdge.FromNodeIdx]
+			if fromGateIdx != -1 {
+				index.shortcutTargetsByGate[fromGateIdx] = append(
+					index.shortcutTargetsByGate[fromGateIdx],
 					shortcutTarget{toIdx: overlayEdge.ToNodeIdx, edgeIdx: uint32(overlayEdgeIdx)},
 				)
 			}

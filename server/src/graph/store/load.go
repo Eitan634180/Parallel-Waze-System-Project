@@ -60,7 +60,6 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		return nil
 	})
 
-
 	eg.Go(func() error {
 		overlayAdj, err := loadOverlayAdj(filepath.Join(dir, overlayAdjFileName))
 		if err != nil {
@@ -81,23 +80,23 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		return nil, err
 	}
 
-	g.BoundaryNodeIdx = make([]int32, len(g.Nodes))
-	for i := range g.BoundaryNodeIdx {
-		g.BoundaryNodeIdx[i] = -1
+	g.GateNodeIdx = make([]int32, len(g.Nodes))
+	for i := range g.GateNodeIdx {
+		g.GateNodeIdx[i] = -1
 	}
-	
+
 	boundaryCount := 0
 	for i := range g.Nodes {
 		fromCellID := g.Nodes[i].CellID
-		isBoundary := false
+		isGate := false
 		for _, eid := range g.Base.Neighbours(uint32(i)) {
 			if g.Nodes[g.Edges[eid].ToNodeIdx].CellID != fromCellID {
-				isBoundary = true
+				isGate = true
 				break
 			}
 		}
-		if isBoundary {
-			g.BoundaryNodeIdx[i] = int32(boundaryCount)
+		if isGate {
+			g.GateNodeIdx[i] = int32(boundaryCount)
 			boundaryCount++
 		}
 	}
@@ -221,11 +220,10 @@ func loadCells(path string) ([]model.Cell, error) {
 			}
 			boundary[j] = v
 		}
-		cells[i] = model.Cell{BoundaryNodeIdxs: boundary}
+		cells[i] = model.Cell{GateNodeIdxs: boundary}
 	}
 	return cells, nil
 }
-
 
 func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 	f, offsetCount, err := openFile(path)
@@ -259,7 +257,6 @@ func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 			ToNodeIdx:   b.ToNodeIdx,
 			Weight:      b.Weight,
 		}
-
 
 	}
 	return model.OverlayGraph{

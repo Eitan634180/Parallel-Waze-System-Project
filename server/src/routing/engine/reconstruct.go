@@ -24,11 +24,11 @@ func (r *Router) twoLevelSearch(
 		return steps, nil, ok
 	}
 
-	srcBoundary := g.Cells[srcCellID].BoundaryNodeIdxs
-	injectionCosts, injectionPred := algorithms.CellDijkstra(g, srcIdx, srcBoundary, srcCellID, wf, stats)
+	srcGate := g.Cells[srcCellID].GateNodeIdxs
+	injectionCosts, injectionPred := algorithms.CellDijkstra(g, srcIdx, srcGate, srcCellID, wf, stats)
 
-	overlaySeeds := make(map[uint32]float32, len(srcBoundary))
-	for _, idx := range srcBoundary {
+	overlaySeeds := make(map[uint32]float32, len(srcGate))
+	for _, idx := range srcGate {
 		if cost, ok := injectionCosts[idx]; ok {
 			overlaySeeds[idx] = cost
 		}
@@ -37,10 +37,10 @@ func (r *Router) twoLevelSearch(
 		return nil, nil, false
 	}
 
-	dstBoundary := g.Cells[dstCellID].BoundaryNodeIdxs
-	dstBoundarySet := make(map[uint32]struct{}, len(dstBoundary))
-	for _, idx := range dstBoundary {
-		dstBoundarySet[idx] = struct{}{}
+	dstGate := g.Cells[dstCellID].GateNodeIdxs
+	dstGateSet := make(map[uint32]struct{}, len(dstGate))
+	for _, idx := range dstGate {
+		dstGateSet[idx] = struct{}{}
 	}
 
 	heuristic := func(idx uint32) float32 {
@@ -48,10 +48,10 @@ func (r *Router) twoLevelSearch(
 		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
 	}
 
-	overlayCosts, overlayPred := algorithms.OverlayAStar(g, overlaySeeds, dstBoundarySet, heuristic, r.overlayWeight, overlayPenalties, stats)
+	overlayCosts, overlayPred := algorithms.OverlayAStar(g, overlaySeeds, dstGateSet, heuristic, r.overlayWeight, overlayPenalties, stats)
 
-	seeds := make([]algorithms.Seed, 0, len(dstBoundary))
-	for _, idx := range dstBoundary {
+	seeds := make([]algorithms.Seed, 0, len(dstGate))
+	for _, idx := range dstGate {
 		cost, ok := overlayCosts[idx]
 		if !ok {
 			continue
@@ -75,17 +75,17 @@ func reconstructPath(
 	egressPred map[uint32]algorithms.BasePredecessor,
 	wf WeightFunc,
 ) ([]entities.Step, []uint32, bool) {
-	egressSteps, entryBoundaryIdx := walkBaseBack(g, dstIdx, egressPred, wf)
-	if entryBoundaryIdx == ^uint32(0) {
+	egressSteps, entryGateIdx := walkBaseBack(g, dstIdx, egressPred, wf)
+	if entryGateIdx == ^uint32(0) {
 		return nil, nil, false
 	}
 
-	overlaySteps, overlayEdgeIDs, exitBoundaryIdx := walkOverlayBack(g, entryBoundaryIdx, srcCellID, overlayPred, wf)
-	if exitBoundaryIdx == ^uint32(0) {
+	overlaySteps, overlayEdgeIDs, exitGateIdx := walkOverlayBack(g, entryGateIdx, srcCellID, overlayPred, wf)
+	if exitGateIdx == ^uint32(0) {
 		return nil, nil, false
 	}
 
-	srcSteps, _ := walkBaseBack(g, exitBoundaryIdx, injPred, wf)
+	srcSteps, _ := walkBaseBack(g, exitGateIdx, injPred, wf)
 
 	reverseSteps(srcSteps)
 	reverseSteps(overlaySteps)
@@ -141,7 +141,6 @@ func walkOverlayBack(
 
 		prevIdx := predecessor.PrevNodeIdx
 		edgeIDs = append(edgeIDs, predecessor.EdgeIdx)
-
 
 		if g.Nodes[prevIdx].CellID != g.Nodes[current].CellID {
 			edgeID, _, timeSec := baseEdgeBetween(g, prevIdx, current, wf)

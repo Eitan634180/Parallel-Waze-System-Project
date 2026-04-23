@@ -80,7 +80,7 @@ func main() {
 
 	log.Printf("%s detecting boundary nodes", builderLogPrefix)
 	t = time.Now()
-	builder.DetectBoundaryNodes(g)
+	builder.DetectGateNodes(g)
 	log.Printf("%s boundary nodes ready in %s (%d nodes)",
 		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Overlay.Offsets)-1)
 

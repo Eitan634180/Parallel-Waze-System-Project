@@ -9,7 +9,7 @@ type Graph struct {
 	Base    BaseGraph
 	Overlay OverlayGraph
 
-	BoundaryNodeIdx []int32
+	GateNodeIdx []int32
 
 	BBox             BoundingBox
 	ProjectionRefLat float64

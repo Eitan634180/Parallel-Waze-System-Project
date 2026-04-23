@@ -128,7 +128,7 @@ func BuildGraphFixture(tb testing.TB, graphName string, maxCellSize int) *BuiltG
 	}
 
 	builder.PartitionCells(g, maxCellSize)
-	builder.DetectBoundaryNodes(g)
+	builder.DetectGateNodes(g)
 	builder.BuildOverlayGraph(g, 1)
 
 	snap := routingengine.BuildSnapIndex(g)
