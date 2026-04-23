@@ -6,8 +6,7 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	"nav-system/src/routing"
-	"nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 
 	"github.com/google/uuid"
 )
@@ -33,12 +32,12 @@ func NewManager() *Manager {
 }
 
 // Create registers a new session for the given route and returns it.
-func (m *Manager) Create(route routing.Route) *Session {
-	return m.create(route, engine.InitialStepIndex(route), make(chan OutMsg, navigation.SessionSendBufferSize))
+func (m *Manager) Create(route routingentities.Route) *Session {
+	return m.create(route, route.InitialStepIndex(), make(chan OutMsg, navigation.SessionSendBufferSize))
 }
 
 // CreateHeadless registers a session without an attached outbound message queue.
-func (m *Manager) CreateHeadless(route routing.Route, stepIdx int) *Session {
+func (m *Manager) CreateHeadless(route routingentities.Route, stepIdx int) *Session {
 	return m.create(route, stepIdx, nil)
 }
 
@@ -82,7 +81,7 @@ func (m *Manager) Delete(id string) {
 }
 
 // AdvanceStep removes subscriptions for edges that the session has already traversed.
-func (m *Manager) AdvanceStep(sessionID string, route routing.Route, oldIdx, newIdx int) {
+func (m *Manager) AdvanceStep(sessionID string, route routingentities.Route, oldIdx, newIdx int) {
 	if newIdx <= oldIdx {
 		return
 	}
@@ -101,15 +100,15 @@ func (m *Manager) AdvanceStep(sessionID string, route routing.Route, oldIdx, new
 }
 
 // UpdateRoute replaces a session's route and refreshes edge subscriptions.
-func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
+func (m *Manager) UpdateRoute(s *Session, newRoute routingentities.Route) {
 	s.Mu.Lock()
-	oldSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
+	oldSteps := append([]routingentities.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	s.Route = newRoute
 	s.RouteRevision++
-	s.StepIdx = engine.InitialStepIndex(newRoute)
-	s.CurrentEdgeID = engine.CurrentEdgeForStep(newRoute, s.StepIdx)
+	s.StepIdx = newRoute.InitialStepIndex()
+	s.CurrentEdgeID = newRoute.CurrentEdge(s.StepIdx)
 	s.CurrentEdgeAt = now()
-	newSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
+	newSteps := append([]routingentities.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	sessionID := s.ID
 	s.Mu.Unlock()
 
@@ -131,7 +130,7 @@ func (m *Manager) ActiveSessions() []*Session {
 	return sessions
 }
 
-func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan OutMsg) *Session {
+func (m *Manager) create(route routingentities.Route, stepIdx int, sendChan chan OutMsg) *Session {
 	id := uuid.NewString()
 	if stepIdx < 0 {
 		stepIdx = 0
@@ -148,7 +147,7 @@ func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan OutMsg)
 		Route:         route,
 		RouteRevision: 1,
 		StepIdx:       stepIdx,
-		CurrentEdgeID: engine.CurrentEdgeForStep(route, stepIdx),
+		CurrentEdgeID: route.CurrentEdge(stepIdx),
 		LastPing:      now(),
 		LastReroute:   now(),
 		SendChan:      sendChan,
@@ -164,13 +163,13 @@ func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan OutMsg)
 	return session
 }
 
-func remainingStepsFrom(route routing.Route, stepIdx int) []routing.Step {
+func remainingStepsFrom(route routingentities.Route, stepIdx int) []routingentities.Step {
 	switch {
 	case stepIdx < 0:
-		return append([]routing.Step(nil), route.Steps...)
+		return append([]routingentities.Step(nil), route.Steps...)
 	case stepIdx >= len(route.Steps):
 		return nil
 	default:
-		return append([]routing.Step(nil), route.Steps[stepIdx:]...)
+		return append([]routingentities.Step(nil), route.Steps[stepIdx:]...)
 	}
 }

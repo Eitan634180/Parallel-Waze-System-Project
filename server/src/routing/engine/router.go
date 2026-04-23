@@ -2,6 +2,9 @@ package engine
 
 import (
 	"nav-system/src/graph/model"
+	rootconfig "nav-system/src/routing"
+	"nav-system/src/routing/algorithms"
+	"nav-system/src/routing/entities"
 )
 
 // WeightFunc returns the effective travel time in seconds for an edge.
@@ -23,29 +26,37 @@ func BaseWeight(e *model.Edge) float32 { return e.Weight }
 type Router struct {
 	g      *model.Graph
 	si     Snapper
-	mode   RoutingMode
+	mode   entities.RoutingMode
 	config Config
 }
 
 // NewRouter constructs a Router.
-func NewRouter(g *model.Graph, si Snapper, config Config) *Router {
-	return NewRouterWithMode(g, si, RoutingModeHierarchical, config)
+func NewRouter(g *model.Graph, si Snapper) *Router {
+	return NewRouterWithMode(g, si, entities.RoutingModeHierarchical)
 }
 
 // NewRouterWithMode constructs a Router with the provided query strategy.
-func NewRouterWithMode(g *model.Graph, si Snapper, mode RoutingMode, config Config) *Router {
+func NewRouterWithMode(g *model.Graph, si Snapper, mode entities.RoutingMode) *Router {
 	if mode == "" {
-		mode = RoutingModeHierarchical
+		mode = entities.RoutingModeHierarchical
 	}
-	return &Router{g: g, si: si, mode: mode, config: config}
+	return &Router{
+		g:    g,
+		si:   si,
+		mode: mode,
+		config: Config{
+			MaxSearchSpeedMps:       rootconfig.MaxSearchSpeedMps,
+			AlternativeRoutePenalty: rootconfig.AlternativeRoutePenalty,
+		},
+	}
 }
 
-func (r *Router) Mode() RoutingMode {
+func (r *Router) Mode() entities.RoutingMode {
 	return r.mode
 }
 
 // Compute returns up to k routes from (srcLat, srcLon) to (dstLat, dstLon).
-func (r *Router) Compute(srcLat, srcLon, dstLat, dstLon float64, k int, wf WeightFunc) []Route {
+func (r *Router) Compute(srcLat, srcLon, dstLat, dstLon float64, k int, wf WeightFunc) []entities.Route {
 	if wf == nil {
 		wf = BaseWeight
 	}
@@ -55,22 +66,22 @@ func (r *Router) Compute(srcLat, srcLon, dstLat, dstLon float64, k int, wf Weigh
 	return r.computeFromIndices(srcIdx, dstIdx, k, wf, nil)
 }
 
-func (r *Router) ComputeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc) []Route {
+func (r *Router) ComputeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc) []entities.Route {
 	if wf == nil {
 		wf = BaseWeight
 	}
 	return r.computeFromIndices(srcIdx, dstIdx, k, wf, nil)
 }
 
-func (r *Router) ComputeFromIndicesWithStats(srcIdx, dstIdx uint32, k int, wf WeightFunc) ([]Route, SearchStats) {
+func (r *Router) ComputeFromIndicesWithStats(srcIdx, dstIdx uint32, k int, wf WeightFunc) ([]entities.Route, entities.SearchStats) {
 	if wf == nil {
 		wf = BaseWeight
 	}
-	var stats SearchStats
+	var stats entities.SearchStats
 	return r.computeFromIndices(srcIdx, dstIdx, k, wf, &stats), stats
 }
 
-func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc, stats *SearchStats) []Route {
+func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc, stats *entities.SearchStats) []entities.Route {
 	if srcIdx == dstIdx {
 		return nil
 	}
@@ -85,19 +96,19 @@ func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc,
 		return weight
 	}
 
-	routes := make([]Route, 0, k)
+	routes := make([]entities.Route, 0, k)
 	for i := 0; i < k; i++ {
 		var (
-			steps            []Step
+			steps            []entities.Step
 			usedOverlayEdges []uint32
 			ok               bool
 		)
 
 		switch r.mode {
-		case RoutingModeBaseAStar:
-			steps, ok = r.fullGraphAStar(srcIdx, dstIdx, penalizedWeight, stats)
-		case RoutingModeBaseDijkstra:
-			steps, ok = r.fullGraphDijkstra(srcIdx, dstIdx, penalizedWeight, stats)
+		case entities.RoutingModeBaseAStar:
+			steps, ok = algorithms.FullGraphAStar(r.g, srcIdx, dstIdx, penalizedWeight, r.config.MaxSearchSpeedMps, stats)
+		case entities.RoutingModeBaseDijkstra:
+			steps, ok = algorithms.FullGraphDijkstra(r.g, srcIdx, dstIdx, penalizedWeight, stats)
 		default:
 			steps, usedOverlayEdges, ok = r.twoLevelSearch(srcIdx, dstIdx, penalizedWeight, overlayPenalties, stats)
 		}
@@ -119,7 +130,31 @@ func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc,
 	return routes
 }
 
-func stepsToRoute(steps []Step) Route {
+func (r *Router) LocalRepairOverlay(
+	srcIdx, dstIdx uint32,
+	maxCost float32,
+	maxHops int,
+	wf WeightFunc,
+) ([]entities.Step, bool) {
+	if wf == nil {
+		wf = BaseWeight
+	}
+	return algorithms.LocalRepairOverlay(r.g, srcIdx, dstIdx, maxCost, maxHops, r.config.MaxSearchSpeedMps, wf)
+}
+
+func (r *Router) LocalRepairOriginal(
+	srcIdx, dstIdx uint32,
+	maxCost float32,
+	maxHops int,
+	wf WeightFunc,
+) ([]entities.Step, bool) {
+	if wf == nil {
+		wf = BaseWeight
+	}
+	return algorithms.LocalRepairOriginal(r.g, srcIdx, dstIdx, maxCost, maxHops, r.config.MaxSearchSpeedMps, wf)
+}
+
+func stepsToRoute(steps []entities.Step) entities.Route {
 	var totalDistance float32
 	var totalTime float32
 	for i := range steps {
@@ -140,7 +175,7 @@ func stepsToRoute(steps []Step) Route {
 		steps[i].BaseTimeSec = cumulativeTime
 	}
 
-	return Route{
+	return entities.Route{
 		Steps:        steps,
 		TotalDistM:   totalDistance,
 		TotalTimeSec: totalTime,

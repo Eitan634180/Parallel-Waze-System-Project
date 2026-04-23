@@ -6,8 +6,8 @@ import (
 	"nav-system/src/graph/model"
 	navigationanalysis "nav-system/src/navigation/analysis"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
-	"nav-system/src/routing/engine"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -20,12 +20,12 @@ type Tracker struct {
 	Graph        *model.Graph
 	Store        *trafficstore.Store
 	Manager      *navigationsessions.Manager
-	Router       *routing.Router
-	LiveWeights  func() routing.WeightFunc
-	PrepareRoute func(routing.Route) routing.Route
+	Router       *routingengine.Router
+	LiveWeights  func() routingengine.WeightFunc
+	PrepareRoute func(routingentities.Route) routingentities.Route
 }
 
-func (t *Tracker) CreateHeadless(route routing.Route, stepIdx int, lat, lon float64) *navigationsessions.Session {
+func (t *Tracker) CreateHeadless(route routingentities.Route, stepIdx int, lat, lon float64) *navigationsessions.Session {
 	sess := t.Manager.CreateHeadless(route, stepIdx)
 	sess.Mu.Lock()
 	sess.LastLat = lat
@@ -39,7 +39,7 @@ func (t *Tracker) InitializeEdge(sess *navigationsessions.Session) {
 	sess.Mu.Lock()
 	defer sess.Mu.Unlock()
 	if sess.CurrentEdgeID == nil {
-		sess.CurrentEdgeID = engine.CurrentEdgeForStep(sess.Route, sess.StepIdx)
+		sess.CurrentEdgeID = sess.Route.CurrentEdge(sess.StepIdx)
 	}
 	if sess.CurrentEdgeID == nil {
 		return
@@ -62,7 +62,7 @@ func (t *Tracker) Destroy(sess *navigationsessions.Session) {
 func (t *Tracker) Advance(sess *navigationsessions.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeObservation) {
 	now := time.Now()
 	var advanceSessionID string
-	var advanceRoute routing.Route
+	var advanceRoute routingentities.Route
 	advanceFrom := -1
 	advanceTo := -1
 	var currentEdgeID *uint32
@@ -91,7 +91,7 @@ func (t *Tracker) Advance(sess *navigationsessions.Session, lat, lon float64, sp
 		sess.StepIdx = newIdx
 	}
 
-	nextEdgeID := engine.CurrentEdgeForStep(sess.Route, newIdx)
+	nextEdgeID := sess.Route.CurrentEdge(newIdx)
 	if edgeChanged(sess.CurrentEdgeID, nextEdgeID) {
 		if newIdx == prevIdx && sess.CurrentEdgeID != nil {
 			t.Store.LeaveEdge(model.EdgeID(*sess.CurrentEdgeID))
@@ -149,7 +149,7 @@ func (t *Tracker) SendInitialSpeedUpdates(sess *navigationsessions.Session) {
 	}
 }
 
-func normalizeStepIndex(route routing.Route, previousIndex, reportedIndex int) int {
+func normalizeStepIndex(route routingentities.Route, previousIndex, reportedIndex int) int {
 	if reportedIndex < previousIndex {
 		reportedIndex = previousIndex
 	}

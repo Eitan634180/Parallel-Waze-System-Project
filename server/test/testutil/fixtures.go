@@ -10,7 +10,7 @@ import (
 	"nav-system/src/graph/builder"
 	"nav-system/src/graph/model"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/src/simulation"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/transport"
@@ -44,14 +44,14 @@ type RouteCase struct {
 
 type BuiltGraphFixture struct {
 	Graph  *model.Graph
-	Snap   *routing.SnapIndex
-	Router *routing.Router
+	Snap   *routingengine.SnapIndex
+	Router *routingengine.Router
 }
 
 type ServerFixture struct {
 	Graph      *model.Graph
-	Snap       *routing.SnapIndex
-	Router     *routing.Router
+	Snap       *routingengine.SnapIndex
+	Router     *routingengine.Router
 	Store      *trafficstore.Store
 	Manager    *navigationsessions.Manager
 	Simulation *simulation.Manager
@@ -127,11 +127,11 @@ func BuildGraphFixture(tb testing.TB, graphName string, maxCellSize int) *BuiltG
 	builder.DetectBoundaryNodes(g)
 	builder.BuildOverlayGraph(g, 1)
 
-	snap := routing.BuildSnapIndex(g)
+	snap := routingengine.BuildSnapIndex(g)
 	return &BuiltGraphFixture{
 		Graph:  g,
 		Snap:   snap,
-		Router: routing.NewRouter(g, snap),
+		Router: routingengine.NewRouter(g, snap),
 	}
 }
 
@@ -144,7 +144,7 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 	built := BuildGraphFixture(tb, graphName, maxCellSize)
 	store := trafficstore.NewStoreWithCapacity(len(built.Graph.Edges))
 	manager := navigationsessions.NewManager()
-	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routing.WeightFunc {
+	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routingengine.WeightFunc {
 		return func(e *model.Edge) float32 {
 			return store.LiveWeight(e.ID, e.Weight)
 		}

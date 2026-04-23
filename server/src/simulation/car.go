@@ -5,8 +5,7 @@ import (
 
 	"nav-system/src/graph/model"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
-	"nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 )
@@ -14,7 +13,7 @@ import (
 type car struct {
 	mu                     sync.Mutex
 	id                     string
-	route                  routing.Route
+	route                  routingentities.Route
 	routeRevision          uint64
 	stepIdx                int
 	progressM              float32
@@ -126,7 +125,7 @@ func advanceCar(c *car, g *model.Graph, store *trafficstore.Store, dtSec float32
 	return true
 }
 
-func recordSimSpeedSample(c *car, step routing.Step, speedMps float32, g *model.Graph, store *trafficstore.Store, enabled bool) {
+func recordSimSpeedSample(c *car, step routingentities.Step, speedMps float32, g *model.Graph, store *trafficstore.Store, enabled bool) {
 	if !enabled {
 		return
 	}
@@ -190,7 +189,7 @@ func currentSpeedMps(c *car, g *model.Graph, store *trafficstore.Store) float32 
 	return speedKmh / utilities.KilometersPerHourToMps
 }
 
-func updateInterpolatedPosition(c *car, prev, cur routing.Step, legDist float32) {
+func updateInterpolatedPosition(c *car, prev, cur routingentities.Step, legDist float32) {
 	fraction := float64(c.progressM / legDist)
 	if fraction < 0 {
 		fraction = 0
@@ -222,7 +221,7 @@ func syncCarWithSession(c *car) {
 		c.progressM = 0
 		c.edgeTimeS = 0
 		c.lastObservationSampleS = 0
-		c.edgeActive = engine.CurrentEdgeForStep(sessionRoute, sessionStepIdx) != nil
+		c.edgeActive = sessionRoute.CurrentEdge(sessionStepIdx) != nil
 	}
 
 	c.lat = sessionLat

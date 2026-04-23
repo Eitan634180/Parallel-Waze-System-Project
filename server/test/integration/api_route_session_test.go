@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/test/testutil"
 )
 
@@ -20,7 +20,7 @@ func TestRouteAndSessionLifecycleOverHTTPAndWebSocket(t *testing.T) {
 	if len(routes.Routes) == 0 {
 		t.Fatal("expected at least one route from /route")
 	}
-	testutil.AssertRouteValid(t, fixture.Graph, routes.Routes[0], routing.BaseWeight)
+	testutil.AssertRouteValid(t, fixture.Graph, routes.Routes[0], routingengine.BaseWeight)
 
 	sessionID := createSession(t, server.URL, routes.Routes[0].ID)
 	conn := dialWS(t, server.URL, "/session/"+sessionID+"/ws")

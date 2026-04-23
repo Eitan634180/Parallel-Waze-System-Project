@@ -3,7 +3,7 @@ package component_test
 import (
 	"testing"
 
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/test/testutil"
 )
 
@@ -34,13 +34,13 @@ func TestRoutingEngineBuildsOverlayAndRoutesAcrossCorpus(t *testing.T) {
 			}
 
 			for _, routeCase := range cases {
-				routes := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
+				routes := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routingengine.BaseWeight)
 				if len(routes) == 0 {
 					t.Fatalf("%s: expected at least one route", routeCase.Name)
 				}
 
 				for _, route := range routes {
-					testutil.AssertRouteValid(t, fixture.Graph, route, routing.BaseWeight)
+					testutil.AssertRouteValid(t, fixture.Graph, route, routingengine.BaseWeight)
 				}
 			}
 		})

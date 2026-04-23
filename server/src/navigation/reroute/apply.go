@@ -8,8 +8,8 @@ import (
 	"nav-system/src/navigation"
 	navigationanalysis "nav-system/src/navigation/analysis"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
-	"nav-system/src/routing/engine"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -24,16 +24,16 @@ func DoReroute(
 	g *model.Graph,
 	store *trafficstore.Store,
 	mgr *navigationsessions.Manager,
-	router *routing.Router,
-	wf routing.WeightFunc,
-	prepareRoute func(routing.Route) routing.Route,
+	router *routingengine.Router,
+	wf routingengine.WeightFunc,
+	prepareRoute func(routingentities.Route) routingentities.Route,
 	now time.Time,
 	reason string,
 	oldETA *float32,
 	newETA *float32,
 ) {
 	s.Mu.RLock()
-	destination, ok := engine.Destination(s.Route)
+	destination, ok := s.Route.Destination()
 	version := SessionVersion{StepIdx: s.StepIdx, RouteRevision: s.RouteRevision}
 	s.Mu.RUnlock()
 	if !ok {
@@ -55,21 +55,21 @@ func DoReroute(
 
 func ApplyRouteUpdate(
 	s *navigationsessions.Session,
-	candidate routing.Route,
+	candidate routingentities.Route,
 	g *model.Graph,
 	store *trafficstore.Store,
 	mgr *navigationsessions.Manager,
-	prepareRoute func(routing.Route) routing.Route,
+	prepareRoute func(routingentities.Route) routingentities.Route,
 	now time.Time,
 	reason string,
 	oldETA *float32,
 	newETA *float32,
 	expectedVersion *SessionVersion,
-) routing.Route {
+) routingentities.Route {
 	candidate.CongestionAhead, candidate.CongestedEdges = navigationanalysis.RouteCongestionSummary(candidate, store, g)
 	route := prepareRoute(candidate)
 	if sessionVersionChanged(s, expectedVersion) {
-		return routing.Route{}
+		return routingentities.Route{}
 	}
 
 	replaceSessionRoute(s, route, store, mgr, now, reason)
@@ -89,7 +89,7 @@ func sessionVersionChanged(s *navigationsessions.Session, expected *SessionVersi
 	return s.StepIdx != expected.StepIdx || s.RouteRevision != expected.RouteRevision
 }
 
-func replaceSessionRoute(s *navigationsessions.Session, route routing.Route, store *trafficstore.Store, mgr *navigationsessions.Manager, now time.Time, reason string) {
+func replaceSessionRoute(s *navigationsessions.Session, route routingentities.Route, store *trafficstore.Store, mgr *navigationsessions.Manager, now time.Time, reason string) {
 	s.Mu.RLock()
 	currentEdgeID := s.CurrentEdgeID
 	s.Mu.RUnlock()

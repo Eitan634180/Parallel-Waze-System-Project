@@ -9,7 +9,7 @@ import (
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing/engine"
+
 	trafficpropagation "nav-system/src/traffic/propagation"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
@@ -166,7 +166,7 @@ func heuristicSnapshot(s *navigationsessions.Session, g *model.Graph) (heuristic
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 
-	destinationStep, ok := engine.Destination(s.Route)
+	destinationStep, ok := s.Route.Destination()
 	if !ok {
 		return heuristicSessionSnapshot{}, false
 	}

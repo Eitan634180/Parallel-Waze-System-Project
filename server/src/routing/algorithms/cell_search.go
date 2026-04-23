@@ -1,35 +1,22 @@
-package engine
+package algorithms
 
 import (
 	"nav-system/src/graph/model"
+	"nav-system/src/routing"
+	"nav-system/src/routing/entities"
 	"nav-system/src/utilities"
 )
 
-type predEntry struct {
-	prevNodeIdx uint32
-	edgeID      model.EdgeID
-}
-
-type overlayPredEntry struct {
-	prevNodeIdx uint32
-	edgeIdx     uint32
-}
-
-type seedE struct {
-	nodeIdx uint32
-	cost    float32
-}
-
-func cellDijkstra(
+func CellDijkstra(
 	g *model.Graph,
 	srcInternalIdx uint32,
 	targetIdxs []uint32,
 	cellID model.CellID,
-	wf WeightFunc,
-	stats *SearchStats,
-) (costs map[uint32]float32, pred map[uint32]predEntry) {
+	wf func(*model.Edge) float32,
+	stats *entities.SearchStats,
+) (costs map[uint32]float32, pred map[uint32]BasePredecessor) {
 	costs = make(map[uint32]float32, len(targetIdxs)+1)
-	pred = make(map[uint32]predEntry, len(targetIdxs))
+	pred = make(map[uint32]BasePredecessor, len(targetIdxs))
 
 	targetSet := make(map[uint32]struct{}, len(targetIdxs))
 	for _, idx := range targetIdxs {
@@ -44,15 +31,10 @@ func cellDijkstra(
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
-
-		// The queue may contain multiple entries for the same node with different costs.
-		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.idx]; ok && current.cost > best {
 			continue
 		}
-		if stats != nil {
-			stats.recordVisitedNode()
-		}
+		stats.RecordVisitedNode()
 
 		if _, isTarget := targetSet[current.idx]; isTarget {
 			remaining--
@@ -72,7 +54,7 @@ func cellDijkstra(
 			nextCost := current.cost + wf(edge)
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = predEntry{prevNodeIdx: current.idx, edgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
 				pq.Push(ijItem{idx: nextIdx, cost: nextCost})
 			}
 		}
@@ -81,10 +63,15 @@ func cellDijkstra(
 	return costs, pred
 }
 
-func intraSearch(g *model.Graph, srcIdx, dstIdx uint32, wf WeightFunc, stats *SearchStats) ([]Step, bool) {
+func IntraSearch(
+	g *model.Graph,
+	srcIdx, dstIdx uint32,
+	wf func(*model.Edge) float32,
+	stats *entities.SearchStats,
+) ([]entities.Step, bool) {
 	cellID := g.Nodes[srcIdx].CellID
 
-	costs, pred := cellDijkstra(g, srcIdx, []uint32{dstIdx}, cellID, wf, stats)
+	costs, pred := CellDijkstra(g, srcIdx, []uint32{dstIdx}, cellID, wf, stats)
 	if _, reached := costs[dstIdx]; !reached {
 		return nil, false
 	}
@@ -92,34 +79,29 @@ func intraSearch(g *model.Graph, srcIdx, dstIdx uint32, wf WeightFunc, stats *Se
 	return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 }
 
-func multiSourceCellDijkstra(
+func MultiSourceCellDijkstra(
 	g *model.Graph,
-	seeds []seedE,
+	seeds []Seed,
 	dstInternalIdx uint32,
 	cellID model.CellID,
-	wf WeightFunc,
-	stats *SearchStats,
-) (costs map[uint32]float32, pred map[uint32]predEntry) {
-	costs = make(map[uint32]float32, len(seeds)+multiSourceSearchCapacitySlack)
-	pred = make(map[uint32]predEntry, len(seeds)+multiSourceSearchCapacitySlack)
+	wf func(*model.Edge) float32,
+	stats *entities.SearchStats,
+) (costs map[uint32]float32, pred map[uint32]BasePredecessor) {
+	costs = make(map[uint32]float32, len(seeds)+routing.MultiSourceSearchCapacitySlack)
+	pred = make(map[uint32]BasePredecessor, len(seeds)+routing.MultiSourceSearchCapacitySlack)
 
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
 	for _, seed := range seeds {
-		costs[seed.nodeIdx] = seed.cost
-		pq.Push(ijItem{idx: seed.nodeIdx, cost: seed.cost})
+		costs[seed.NodeIdx] = seed.Cost
+		pq.Push(ijItem{idx: seed.NodeIdx, cost: seed.Cost})
 	}
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
-
-		// The queue may contain multiple entries for the same node with different costs.
-		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.idx]; ok && current.cost > best {
 			continue
 		}
-		if stats != nil {
-			stats.recordVisitedNode()
-		}
+		stats.RecordVisitedNode()
 
 		if current.idx == dstInternalIdx {
 			break
@@ -135,7 +117,7 @@ func multiSourceCellDijkstra(
 			nextCost := current.cost + wf(edge)
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = predEntry{prevNodeIdx: current.idx, edgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
 				pq.Push(ijItem{idx: nextIdx, cost: nextCost})
 			}
 		}
@@ -144,9 +126,13 @@ func multiSourceCellDijkstra(
 	return costs, pred
 }
 
-func expandCellShortcut(g *model.Graph, srcIdx, dstIdx uint32, wf WeightFunc) []Step {
+func ExpandCellShortcut(
+	g *model.Graph,
+	srcIdx, dstIdx uint32,
+	wf func(*model.Edge) float32,
+) []entities.Step {
 	cellID := g.Nodes[srcIdx].CellID
-	costs, pred := cellDijkstra(g, srcIdx, []uint32{dstIdx}, cellID, wf, nil)
+	costs, pred := CellDijkstra(g, srcIdx, []uint32{dstIdx}, cellID, wf, nil)
 	if _, reached := costs[dstIdx]; !reached {
 		return nil
 	}

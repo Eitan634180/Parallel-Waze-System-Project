@@ -7,18 +7,18 @@ import (
 	"time"
 
 	"nav-system/src/navigation"
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 
 	"github.com/gorilla/websocket"
 )
 
 type RoutePayload struct {
-	ID              string         `json:"id"`
-	Steps           []routing.Step `json:"steps"`
-	TotalDistM      float32        `json:"total_dist_m"`
-	TotalTimeSec    float32        `json:"total_time_sec"`
-	CongestionAhead bool           `json:"congestion_ahead"`
-	CongestedEdges  int            `json:"congested_edges"`
+	ID              string                 `json:"id"`
+	Steps           []routingentities.Step `json:"steps"`
+	TotalDistM      float32                `json:"total_dist_m"`
+	TotalTimeSec    float32                `json:"total_time_sec"`
+	CongestionAhead bool                   `json:"congestion_ahead"`
+	CongestedEdges  int                    `json:"congested_edges"`
 }
 
 // OutMsg is any message the server sends to the client over the WebSocket.
@@ -57,7 +57,7 @@ type NavigationDebug struct {
 type Session struct {
 	Mu            sync.RWMutex
 	ID            string
-	Route         routing.Route
+	Route         routingentities.Route
 	RouteRevision uint64
 
 	StepIdx       int

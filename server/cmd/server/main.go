@@ -18,7 +18,8 @@ import (
 	graphstore "nav-system/src/graph/store"
 	navigationsessions "nav-system/src/navigation/sessions"
 	navigationworkers "nav-system/src/navigation/workers"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/src/simulation"
 	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
@@ -39,7 +40,7 @@ func main() {
 		log.Fatalf("%s resolve listen addr: %v", serverLogPrefix, err)
 	}
 
-	routingMode, err := routing.ParseRoutingMode(resolveRoutingMode(*routingModeFlag))
+	routingMode, err := routingentities.ParseRoutingMode(resolveRoutingMode(*routingModeFlag))
 	if err != nil {
 		log.Fatalf("ParseRoutingMode: %v", err)
 	}
@@ -63,14 +64,14 @@ func main() {
 
 	log.Printf("%s building snap index", serverLogPrefix)
 	t = time.Now()
-	si := routing.BuildSnapIndex(g)
+	si := routingengine.BuildSnapIndex(g)
 	log.Printf("%s snap index ready in %s", serverLogPrefix, time.Since(t).Round(time.Millisecond))
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
 	customizer := trafficcustomization.NewCustomizer(g)
 	mgr := navigationsessions.NewManager()
-	router := routing.NewRouterWithMode(g, si, routingMode)
-	sim := simulation.NewManager(g, store, router, func() routing.WeightFunc {
+	router := routingengine.NewRouterWithMode(g, si, routingMode)
+	sim := simulation.NewManager(g, store, router, func() routingengine.WeightFunc {
 		return func(e *model.Edge) float32 {
 			return store.LiveWeight(e.ID, e.Weight)
 		}
@@ -155,7 +156,7 @@ func resolveRoutingMode(flagValue string) string {
 	); ok {
 		return value
 	}
-	return string(routing.RoutingModeHierarchical)
+	return string(routingentities.RoutingModeHierarchical)
 }
 
 func resolveDataDir(flagValue string) (string, error) {

@@ -1,4 +1,4 @@
-package engine
+package entities
 
 import (
 	"fmt"
@@ -31,7 +31,7 @@ type SearchStats struct {
 	VisitedNodes int64
 }
 
-func (s *SearchStats) recordVisitedNode() {
+func (s *SearchStats) RecordVisitedNode() {
 	if s != nil {
 		s.VisitedNodes++
 	}

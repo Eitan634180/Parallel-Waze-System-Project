@@ -7,15 +7,15 @@ import (
 	"nav-system/src/navigation"
 	navigationanalysis "nav-system/src/navigation/analysis"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
-	"nav-system/src/routing/engine"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 )
 
 type congestionContext struct {
-	currentRoute routing.Route
+	currentRoute routingentities.Route
 	currentStep  int
-	destination  routing.Step
+	destination  routingentities.Step
 	oldETA       float32
 	version      SessionVersion
 	localRepair  localRepairRequest
@@ -36,9 +36,9 @@ func AttemptCongestionReroute(
 	g *model.Graph,
 	store *trafficstore.Store,
 	mgr *navigationsessions.Manager,
-	router *routing.Router,
-	wf routing.WeightFunc,
-	prepareRoute func(routing.Route) routing.Route,
+	router *routingengine.Router,
+	wf routingengine.WeightFunc,
+	prepareRoute func(routingentities.Route) routingentities.Route,
 	now time.Time,
 ) {
 	context, ok := captureCongestionContext(s, g, store)
@@ -68,7 +68,7 @@ func captureCongestionContext(s *navigationsessions.Session, g *model.Graph, sto
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
-	destination, ok := engine.Destination(s.Route)
+	destination, ok := s.Route.Destination()
 	if !ok {
 		return congestionContext{}, false
 	}
@@ -99,12 +99,12 @@ func captureCongestionContext(s *navigationsessions.Session, g *model.Graph, sto
 
 func buildCongestionCandidate(
 	snapLat, snapLon float64,
-	router *routing.Router,
-	wf routing.WeightFunc,
+	router *routingengine.Router,
+	wf routingengine.WeightFunc,
 	context congestionContext,
-) (routing.Route, bool, bool) {
+) (routingentities.Route, bool, bool) {
 	if context.localRepair.enabled {
-		var patchSteps []routing.Step
+		var patchSteps []routingentities.Step
 		var ok bool
 		if context.localRepair.isCrossCell {
 			patchSteps, ok = router.LocalRepairOverlay(
@@ -125,20 +125,20 @@ func buildCongestionCandidate(
 		}
 
 		if ok && len(patchSteps) > 0 {
-			return engine.RebuildPatchedRoute(context.currentRoute, context.localRepair.repairStepIdx, patchSteps), true, true
+			return context.currentRoute.Patched(context.localRepair.repairStepIdx, patchSteps), true, true
 		}
 	}
 
 	routes := router.Compute(snapLat, snapLon, context.destination.Lat, context.destination.Lon, 1, wf)
 	if len(routes) == 0 {
-		return routing.Route{}, false, false
+		return routingentities.Route{}, false, false
 	}
 	return routes[0], false, true
 }
 
-func shouldAcceptCongestionCandidate(candidate routing.Route, context congestionContext, newETA float32) bool {
+func shouldAcceptCongestionCandidate(candidate routingentities.Route, context congestionContext, newETA float32) bool {
 	etaGain := context.oldETA - newETA
 	return context.oldETA > 0 &&
 		(etaGain/context.oldETA >= navigation.RerouteSpeedupMin || etaGain >= navigation.RerouteMinGainSec) &&
-		!engine.SameRemainingRoute(context.currentRoute, context.currentStep, candidate)
+		!context.currentRoute.SameRemaining(context.currentStep, candidate)
 }

@@ -9,7 +9,7 @@ import (
 	navigationsessions "nav-system/src/navigation/sessions"
 	navigationtracking "nav-system/src/navigation/tracking"
 	navigationworkers "nav-system/src/navigation/workers"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/src/simulation"
 	trafficstore "nav-system/src/traffic/store"
 	handlers "nav-system/src/transport/handlers"
@@ -21,7 +21,7 @@ type Server struct {
 	g      *model.Graph
 	store  *trafficstore.Store
 	mgr    *navigationsessions.Manager
-	router *routing.Router
+	router *routingengine.Router
 	sim    *simulation.Manager
 
 	routeCache  *handlers.RouteCache
@@ -40,7 +40,7 @@ func NewServer(
 	g *model.Graph,
 	store *trafficstore.Store,
 	mgr *navigationsessions.Manager,
-	router *routing.Router,
+	router *routingengine.Router,
 	sim *simulation.Manager,
 ) *Server {
 	s := &Server{
@@ -118,7 +118,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // liveWeightFunc builds a WeightFunc backed by the live traffic Store.
-func (s *Server) liveWeightFunc() routing.WeightFunc {
+func (s *Server) liveWeightFunc() routingengine.WeightFunc {
 	return func(e *model.Edge) float32 {
 		return s.store.LiveWeight(e.ID, e.Weight)
 	}

@@ -8,7 +8,8 @@ import (
 	navigationanalysis "nav-system/src/navigation/analysis"
 	navigationreroute "nav-system/src/navigation/reroute"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -26,9 +27,9 @@ func checkSession(
 	g *model.Graph,
 	store *trafficstore.Store,
 	mgr *navigationsessions.Manager,
-	router *routing.Router,
-	wf routing.WeightFunc,
-	prepareRoute func(routing.Route) routing.Route,
+	router *routingengine.Router,
+	wf routingengine.WeightFunc,
+	prepareRoute func(routingentities.Route) routingentities.Route,
 ) {
 	now := time.Now()
 	pushETAIfDue(s, g, store, now)

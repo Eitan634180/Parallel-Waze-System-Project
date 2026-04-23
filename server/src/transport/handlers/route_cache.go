@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 
 	"github.com/google/uuid"
 )
@@ -17,7 +17,7 @@ type RouteCache struct {
 }
 
 type routeCacheEntry struct {
-	route     routing.Route
+	route     routingentities.Route
 	createdAt time.Time
 }
 
@@ -25,7 +25,7 @@ func NewRouteCache() *RouteCache {
 	return &RouteCache{entries: make(map[string]routeCacheEntry)}
 }
 
-func (c *RouteCache) Store(route routing.Route) routing.Route {
+func (c *RouteCache) Store(route routingentities.Route) routingentities.Route {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -39,7 +39,7 @@ func (c *RouteCache) Store(route routing.Route) routing.Route {
 	return route
 }
 
-func (c *RouteCache) Get(id string) (routing.Route, bool) {
+func (c *RouteCache) Get(id string) (routingentities.Route, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -47,11 +47,11 @@ func (c *RouteCache) Get(id string) (routing.Route, bool) {
 	return entry.route, ok
 }
 
-func (c *RouteCache) GetMany(ids []string) []routing.Route {
+func (c *RouteCache) GetMany(ids []string) []routingentities.Route {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	routes := make([]routing.Route, 0, len(ids))
+	routes := make([]routingentities.Route, 0, len(ids))
 	for _, id := range ids {
 		entry, ok := c.entries[id]
 		if ok {

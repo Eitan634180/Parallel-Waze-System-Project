@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 )
 
 type geoBox struct {
@@ -21,7 +21,7 @@ type geoBox struct {
 
 const simulationBBoxMissingLog = "simulation: random spawn skipped because graph bounding box is unavailable"
 
-func (m *Manager) SpawnRoutes(routes []routing.Route, count int, minStep int) int {
+func (m *Manager) SpawnRoutes(routes []routingentities.Route, count int, minStep int) int {
 	count = normalizedCount(count)
 	if len(routes) == 0 || count <= 0 {
 		return 0
@@ -88,7 +88,7 @@ func normalizedCount(count int) int {
 	return count
 }
 
-func (m *Manager) randomRoutes(count int) []routing.Route {
+func (m *Manager) randomRoutes(count int) []routingentities.Route {
 	if m.g.BBox.IsZero() {
 		log.Printf(simulationBBoxMissingLog)
 		return nil
@@ -109,7 +109,7 @@ func (m *Manager) randomRoutes(count int) []routing.Route {
 	return routes
 }
 
-func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routing.Route {
+func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routingentities.Route {
 	if limit <= 0 {
 		return nil
 	}
@@ -118,7 +118,7 @@ func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routing.Rout
 	workerCount := minInt(maxInt(runtime.GOMAXPROCS(0), MinWorkers), attempts)
 
 	jobs := make(chan struct{}, workerCount)
-	results := make(chan routing.Route, workerCount)
+	results := make(chan routingentities.Route, workerCount)
 	stop := make(chan struct{})
 
 	var wg sync.WaitGroup
@@ -172,7 +172,7 @@ func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routing.Rout
 		close(results)
 	}()
 
-	routes := make([]routing.Route, 0, limit)
+	routes := make([]routingentities.Route, 0, limit)
 	for route := range results {
 		if len(routes) >= limit {
 			continue
@@ -187,7 +187,7 @@ func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routing.Rout
 	return routes
 }
 
-func weightedStartIndex(route routing.Route, minStep int, rng *rand.Rand) int {
+func weightedStartIndex(route routingentities.Route, minStep int, rng *rand.Rand) int {
 	maxStart := len(route.Steps) - 2
 	startIndex := minStep
 	if startIndex > maxStart {
@@ -218,7 +218,7 @@ func weightedStartIndex(route routing.Route, minStep int, rng *rand.Rand) int {
 	return maxStart
 }
 
-func routeLegWeight(route routing.Route, startIndex int) float32 {
+func routeLegWeight(route routingentities.Route, startIndex int) float32 {
 	if startIndex < 0 || startIndex+1 >= len(route.Steps) {
 		return 0
 	}

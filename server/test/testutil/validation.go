@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 )
 
 const FloatTolerance = float32(0.001)
@@ -16,14 +17,14 @@ type ValidatedRoute struct {
 	Distance  float32
 	SourceIdx uint32
 	TargetIdx uint32
-	FinalStep routing.Step
+	FinalStep routingentities.Step
 }
 
-func AssertRouteValid(tb testing.TB, g *model.Graph, route routing.Route, wf routing.WeightFunc) ValidatedRoute {
+func AssertRouteValid(tb testing.TB, g *model.Graph, route routingentities.Route, wf routingengine.WeightFunc) ValidatedRoute {
 	tb.Helper()
 
 	if wf == nil {
-		wf = routing.BaseWeight
+		wf = routingengine.BaseWeight
 	}
 	if len(route.Steps) < 2 {
 		tb.Fatalf("route must contain at least 2 steps, got %d", len(route.Steps))
@@ -77,7 +78,7 @@ func AssertRouteValid(tb testing.TB, g *model.Graph, route routing.Route, wf rou
 	}
 }
 
-func AssertRouteMatchesOracle(tb testing.TB, g *model.Graph, route routing.Route, oracle OraclePath, wf routing.WeightFunc) {
+func AssertRouteMatchesOracle(tb testing.TB, g *model.Graph, route routingentities.Route, oracle OraclePath, wf routingengine.WeightFunc) {
 	tb.Helper()
 
 	validated := AssertRouteValid(tb, g, route, wf)

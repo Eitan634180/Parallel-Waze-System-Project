@@ -1,27 +1,29 @@
-package engine
+package algorithms
 
 import (
+	"nav-system/src/graph/model"
+	"nav-system/src/routing/entities"
 	"nav-system/src/utilities"
 )
 
-// LocalRepairOverlay searches for a short overlay detour around a congested cross-cell edge.
-func (r *Router) LocalRepairOverlay(
+func LocalRepairOverlay(
+	g *model.Graph,
 	srcIdx, dstIdx uint32,
 	maxCost float32,
 	maxHops int,
-	wf WeightFunc,
-) ([]Step, bool) {
-	g := r.g
+	maxSearchSpeedMps float32,
+	wf func(*model.Edge) float32,
+) ([]entities.Step, bool) {
 	if srcIdx >= uint32(len(g.Nodes)) || dstIdx >= uint32(len(g.Nodes)) {
 		return nil, false
 	}
 	dstNode := &g.Nodes[dstIdx]
 
 	costs := make(map[uint32]float32)
-	pred := make(map[uint32]overlayPredEntry)
+	pred := make(map[uint32]OverlayPredecessor)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
+		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
 	costs[srcIdx] = 0
@@ -30,15 +32,12 @@ func (r *Router) LocalRepairOverlay(
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
-
-		// The queue may contain multiple entries for the same node with different costs.
-		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.idx]; ok && current.g > best {
 			continue
 		}
 
 		if current.idx == dstIdx {
-			steps, _, terminalIdx := walkOverlayBack(g, dstIdx, 0, pred, wf)
+			steps, terminalIdx := walkOverlayBack(g, dstIdx, pred, wf)
 			if terminalIdx != srcIdx {
 				return nil, false
 			}
@@ -70,9 +69,9 @@ func (r *Router) LocalRepairOverlay(
 			nextIdx := overlayEdge.ToNodeIdx
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = overlayPredEntry{
-					prevNodeIdx: current.idx,
-					edgeIdx:     edgeIdx,
+				pred[nextIdx] = OverlayPredecessor{
+					PrevNodeIdx: current.idx,
+					EdgeIdx:     edgeIdx,
 				}
 				pq.Push(localAstarItem{
 					idx:  nextIdx,
@@ -88,24 +87,24 @@ func (r *Router) LocalRepairOverlay(
 	return nil, false
 }
 
-// LocalRepairOriginal searches for a short detour around a congested intra-cell edge on the base graph.
-func (r *Router) LocalRepairOriginal(
+func LocalRepairOriginal(
+	g *model.Graph,
 	srcIdx, dstIdx uint32,
 	maxCost float32,
 	maxHops int,
-	wf WeightFunc,
-) ([]Step, bool) {
-	g := r.g
+	maxSearchSpeedMps float32,
+	wf func(*model.Edge) float32,
+) ([]entities.Step, bool) {
 	if srcIdx >= uint32(len(g.Nodes)) || dstIdx >= uint32(len(g.Nodes)) {
 		return nil, false
 	}
 	dstNode := &g.Nodes[dstIdx]
 
 	costs := make(map[uint32]float32)
-	pred := make(map[uint32]predEntry)
+	pred := make(map[uint32]BasePredecessor)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
+		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
 	}
 
 	costs[srcIdx] = 0
@@ -114,9 +113,6 @@ func (r *Router) LocalRepairOriginal(
 
 	for pq.Len() > 0 {
 		current := pq.Pop()
-
-		// The queue may contain multiple entries for the same node with different costs.
-		// If the popped cost is worse than our recorded best, it's an old entry and we can skip it.
 		if best, ok := costs[current.idx]; ok && current.g > best {
 			continue
 		}
@@ -147,7 +143,7 @@ func (r *Router) LocalRepairOriginal(
 			nextIdx := edge.ToNodeIdx
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = predEntry{prevNodeIdx: current.idx, edgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
 				pq.Push(localAstarItem{
 					idx:  nextIdx,
 					g:    nextCost,

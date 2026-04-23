@@ -11,12 +11,12 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/test/testutil"
 )
 
 type routeResponse struct {
-	Routes []routing.Route `json:"routes"`
+	Routes []routingentities.Route `json:"routes"`
 }
 
 type sessionResponse struct {

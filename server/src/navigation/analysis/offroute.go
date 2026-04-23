@@ -3,11 +3,11 @@ package analysis
 import (
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	"nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/src/utilities"
 )
 
-func DistanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64, g *model.Graph) float32 {
+func DistanceFromExpectedPath(route routingentities.Route, stepIdx int, lat, lon float64, g *model.Graph) float32 {
 	if len(route.Steps) == 0 {
 		return 0
 	}
@@ -26,7 +26,7 @@ func DistanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64,
 	return best
 }
 
-func distanceFromExpectedProjection(route engine.Route, stepIdx int, g *model.Graph, px, py float32) float32 {
+func distanceFromExpectedProjection(route routingentities.Route, stepIdx int, g *model.Graph, px, py float32) float32 {
 	if len(route.Steps) == 1 {
 		return distanceToRouteNode(g, route.Steps[0], px, py)
 	}
@@ -53,7 +53,7 @@ func distanceFromExpectedProjection(route engine.Route, stepIdx int, g *model.Gr
 	return 0
 }
 
-func distanceToRouteNode(g *model.Graph, step engine.Step, px, py float32) float32 {
+func distanceToRouteNode(g *model.Graph, step routingentities.Step, px, py float32) float32 {
 	node := g.Node(step.NodeIdx)
 	if node == nil {
 		return 0
@@ -61,7 +61,7 @@ func distanceToRouteNode(g *model.Graph, step engine.Step, px, py float32) float
 	return utilities.Distance(px, py, node.X, node.Y)
 }
 
-func minDistanceToSegmentRange(route engine.Route, g *model.Graph, px, py float32, start, end int) float32 {
+func minDistanceToSegmentRange(route routingentities.Route, g *model.Graph, px, py float32, start, end int) float32 {
 	best := float32(-1)
 	for idx := start; idx <= end; idx++ {
 		prev := g.Node(route.Steps[idx-1].NodeIdx)

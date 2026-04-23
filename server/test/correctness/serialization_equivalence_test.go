@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"nav-system/src/graph/store"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/test/testutil"
 )
 
@@ -25,7 +25,7 @@ func TestSerializationRoundTripPreservesRoutingResults(t *testing.T) {
 			fixture := testutil.BuildGraphFixture(t, corpus.graph, corpus.size)
 			routeCase := testutil.LoadRouteCases(t, corpus.cases)[0]
 
-			before := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
+			before := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routingengine.BaseWeight)
 			if len(before) != 1 {
 				t.Fatalf("expected 1 route before save, got %d", len(before))
 			}
@@ -39,15 +39,15 @@ func TestSerializationRoundTripPreservesRoutingResults(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadGraph: %v", err)
 			}
-			reloadedRouter := routing.NewRouter(reloadedGraph, routing.BuildSnapIndex(reloadedGraph))
+			reloadedRouter := routingengine.NewRouter(reloadedGraph, routingengine.BuildSnapIndex(reloadedGraph))
 
-			after := reloadedRouter.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
+			after := reloadedRouter.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routingengine.BaseWeight)
 			if len(after) != 1 {
 				t.Fatalf("expected 1 route after load, got %d", len(after))
 			}
 
-			beforeValidated := testutil.AssertRouteValid(t, fixture.Graph, before[0], routing.BaseWeight)
-			afterValidated := testutil.AssertRouteValid(t, reloadedGraph, after[0], routing.BaseWeight)
+			beforeValidated := testutil.AssertRouteValid(t, fixture.Graph, before[0], routingengine.BaseWeight)
+			afterValidated := testutil.AssertRouteValid(t, reloadedGraph, after[0], routingengine.BaseWeight)
 
 			if beforeValidated.SourceIdx != afterValidated.SourceIdx || beforeValidated.TargetIdx != afterValidated.TargetIdx {
 				t.Fatalf("route endpoints changed across save/load: before=%d->%d after=%d->%d", beforeValidated.SourceIdx, beforeValidated.TargetIdx, afterValidated.SourceIdx, afterValidated.TargetIdx)

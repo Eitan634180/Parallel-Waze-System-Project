@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"nav-system/src/graph/store"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/test/testutil"
 )
 
@@ -37,11 +37,11 @@ func TestGraphHopperSanity(t *testing.T) {
 		}
 		t.Fatalf("LoadGraph(%s): %v", dataDir, err)
 	}
-	router := routing.NewRouter(g, routing.BuildSnapIndex(g))
+	router := routingengine.NewRouter(g, routingengine.BuildSnapIndex(g))
 	client := &http.Client{Timeout: 15 * time.Second}
 
 	routeCase := testutil.LoadRouteCases(t, "diamond_cases.json")[0]
-	internal := router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
+	internal := router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routingengine.BaseWeight)
 	if len(internal) != 1 {
 		t.Fatalf("internal router returned %d routes, want 1", len(internal))
 	}

@@ -1,18 +1,17 @@
 package sessions
 
 import (
-	"nav-system/src/routing"
-	"nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 )
 
 // RemainingSteps returns the steps from the current position to the end.
-func (s *Session) RemainingSteps() []routing.Step {
+func (s *Session) RemainingSteps() []routingentities.Step {
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 	return s.remainingStepsLocked()
 }
 
-func (s *Session) remainingStepsLocked() []routing.Step {
+func (s *Session) remainingStepsLocked() []routingentities.Step {
 	switch {
 	case s.StepIdx < 0:
 		return s.Route.Steps
@@ -27,5 +26,5 @@ func (s *Session) remainingStepsLocked() []routing.Step {
 func (s *Session) RemainingEdges() []uint32 {
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
-	return engine.EdgeIDs(s.remainingStepsLocked())
+	return routingentities.EdgeIDs(s.remainingStepsLocked())
 }

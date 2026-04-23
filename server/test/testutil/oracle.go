@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/src/utilities"
 )
 
@@ -66,9 +66,9 @@ func BruteForceSnap(g *model.Graph, lat, lon float64) uint32 {
 	return bestIdx
 }
 
-func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routing.WeightFunc) (OraclePath, bool) {
+func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routingengine.WeightFunc) (OraclePath, bool) {
 	if wf == nil {
-		wf = routing.BaseWeight
+		wf = routingengine.BaseWeight
 	}
 	if srcIdx == dstIdx {
 		return OraclePath{NodeIdxs: []uint32{srcIdx}}, true

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
 )
 
@@ -18,8 +18,8 @@ type Manager struct {
 	mu            sync.RWMutex
 	g             *model.Graph
 	store         *trafficstore.Store
-	router        *routing.Router
-	liveWeights   func() routing.WeightFunc
+	router        *routingengine.Router
+	liveWeights   func() routingengine.WeightFunc
 	rng           *rand.Rand
 	nextID        int64
 	cars          map[string]*car
@@ -34,7 +34,7 @@ type CarSnapshot struct {
 	Lon float64 `json:"lon"`
 }
 
-func NewManager(g *model.Graph, store *trafficstore.Store, router *routing.Router, liveWeights func() routing.WeightFunc) *Manager {
+func NewManager(g *model.Graph, store *trafficstore.Store, router *routingengine.Router, liveWeights func() routingengine.WeightFunc) *Manager {
 	return &Manager{
 		g:           g,
 		store:       store,
@@ -269,9 +269,9 @@ func (m *Manager) detachCars() []carRef {
 	return refs
 }
 
-func (m *Manager) weightFunc() routing.WeightFunc {
+func (m *Manager) weightFunc() routingengine.WeightFunc {
 	if m.liveWeights != nil {
 		return m.liveWeights()
 	}
-	return routing.BaseWeight
+	return routingengine.BaseWeight
 }

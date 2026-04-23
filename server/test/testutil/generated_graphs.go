@@ -7,7 +7,7 @@ import (
 
 	"nav-system/src/graph/builder"
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
 )
 
 type GeneratedQuery struct {
@@ -18,9 +18,9 @@ type GeneratedQuery struct {
 
 type GeneratedWeightedFixture struct {
 	Graph      *model.Graph
-	Snap       *routing.SnapIndex
-	Router     *routing.Router
-	WeightFunc routing.WeightFunc
+	Snap       *routingengine.SnapIndex
+	Router     *routingengine.Router
+	WeightFunc routingengine.WeightFunc
 	NodeIDs    []model.NodeRawID
 	Queries    []GeneratedQuery
 }
@@ -86,7 +86,7 @@ func buildGeneratedCorridorFixture(tb testing.TB, spec generatedCorridorSpec) *G
 	builder.DetectBoundaryNodes(g)
 	builder.BuildOverlayGraph(g, 1)
 
-	snap := routing.BuildSnapIndex(g)
+	snap := routingengine.BuildSnapIndex(g)
 	queries := generatedQueries(spec.seed, nodeIDs, spec.queryCount, rng)
 	multipliers := generatedMultipliers(g, rng)
 	wf := generatedWeightFunc(multipliers)
@@ -94,7 +94,7 @@ func buildGeneratedCorridorFixture(tb testing.TB, spec generatedCorridorSpec) *G
 	return &GeneratedWeightedFixture{
 		Graph:      g,
 		Snap:       snap,
-		Router:     routing.NewRouter(g, snap),
+		Router:     routingengine.NewRouter(g, snap),
 		WeightFunc: wf,
 		NodeIDs:    nodeIDs,
 		Queries:    queries,
@@ -223,7 +223,7 @@ func generatedMultipliers(g *model.Graph, rng *rand.Rand) []float32 {
 	return multipliers
 }
 
-func generatedWeightFunc(multipliers []float32) routing.WeightFunc {
+func generatedWeightFunc(multipliers []float32) routingengine.WeightFunc {
 	return func(edge *model.Edge) float32 {
 		weight := edge.Weight
 		if int(edge.ID) < len(multipliers) {

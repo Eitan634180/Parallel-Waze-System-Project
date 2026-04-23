@@ -11,7 +11,8 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/graph/store"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/src/utilities"
 )
 
@@ -38,7 +39,7 @@ type CorpusCase struct {
 type Fixture struct {
 	Region string
 	Graph  *model.Graph
-	Snap   *routing.SnapIndex
+	Snap   *routingengine.SnapIndex
 	Corpus []CorpusCase
 }
 
@@ -61,7 +62,7 @@ func LoadFixture(corpusName string) (*Fixture, error) {
 	return &Fixture{
 		Region: corpusSpec.Region,
 		Graph:  graph,
-		Snap:   routing.BuildSnapIndex(graph),
+		Snap:   routingengine.BuildSnapIndex(graph),
 		Corpus: corpus,
 	}, nil
 }
@@ -80,7 +81,7 @@ func BuildCorpus(g *model.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 	}
 
 	rng := rand.New(rand.NewSource(spec.Seed))
-	router := routing.NewRouterWithMode(g, nil, routing.RoutingModeBaseAStar)
+	router := routingengine.NewRouterWithMode(g, nil, routingentities.RoutingModeBaseAStar)
 	seen := make(map[[2]uint32]struct{}, spec.Count)
 	cases := make([]CorpusCase, 0, spec.Count)
 
@@ -115,7 +116,7 @@ func BuildCorpus(g *model.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 			continue
 		}
 
-		routes := router.ComputeFromIndices(srcIdx, dstIdx, 1, routing.BaseWeight)
+		routes := router.ComputeFromIndices(srcIdx, dstIdx, 1, routingengine.BaseWeight)
 		if len(routes) == 0 {
 			continue
 		}

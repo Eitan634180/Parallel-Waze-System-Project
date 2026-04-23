@@ -2,12 +2,12 @@ package analysis
 
 import (
 	"nav-system/src/graph/model"
-	"nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 )
 
-func ComputeETA(route engine.Route, stepIdx int, lastLat, lastLon float64, g *model.Graph, store *trafficstore.Store) float32 {
+func ComputeETA(route routingentities.Route, stepIdx int, lastLat, lastLon float64, g *model.Graph, store *trafficstore.Store) float32 {
 	var total float32
 
 	for index, step := range RemainingSteps(route, stepIdx) {
@@ -31,15 +31,15 @@ func ComputeETA(route engine.Route, stepIdx int, lastLat, lastLon float64, g *mo
 	return total
 }
 
-func RemainingCongestionSummary(route engine.Route, stepIdx int, store *trafficstore.Store, g *model.Graph) (bool, int) {
+func RemainingCongestionSummary(route routingentities.Route, stepIdx int, store *trafficstore.Store, g *model.Graph) (bool, int) {
 	return StepCongestionSummary(RemainingSteps(route, stepIdx), store, g)
 }
 
-func RouteCongestionSummary(route engine.Route, store *trafficstore.Store, g *model.Graph) (bool, int) {
+func RouteCongestionSummary(route routingentities.Route, store *trafficstore.Store, g *model.Graph) (bool, int) {
 	return StepCongestionSummary(route.Steps, store, g)
 }
 
-func RemainingSteps(route engine.Route, stepIdx int) []engine.Step {
+func RemainingSteps(route routingentities.Route, stepIdx int) []routingentities.Step {
 	switch {
 	case stepIdx < 0:
 		return route.Steps
@@ -50,7 +50,7 @@ func RemainingSteps(route engine.Route, stepIdx int) []engine.Step {
 	}
 }
 
-func StepCongestionSummary(steps []engine.Step, store *trafficstore.Store, g *model.Graph) (bool, int) {
+func StepCongestionSummary(steps []routingentities.Step, store *trafficstore.Store, g *model.Graph) (bool, int) {
 	count := 0
 	for _, step := range steps {
 		if step.EdgeID == nil {
@@ -72,7 +72,7 @@ func StepCongestionSummary(steps []engine.Step, store *trafficstore.Store, g *mo
 	return count > 0, count
 }
 
-func remainingFractionOnCurrentEdge(route engine.Route, stepIdx int, lastLat, lastLon float64, step engine.Step, edge *model.Edge, g *model.Graph) float32 {
+func remainingFractionOnCurrentEdge(route routingentities.Route, stepIdx int, lastLat, lastLon float64, step routingentities.Step, edge *model.Edge, g *model.Graph) float32 {
 	if stepIdx <= 0 || stepIdx >= len(route.Steps) || edge.DistanceM <= 0 {
 		return 1
 	}

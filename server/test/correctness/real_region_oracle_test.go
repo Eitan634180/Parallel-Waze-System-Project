@@ -13,7 +13,8 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/graph/store"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/src/utilities"
 	"nav-system/test/testutil"
 )
@@ -45,8 +46,8 @@ func TestRealRegionCrossCellRoutesMatchOracle(t *testing.T) {
 		t.Run(corpusName, func(t *testing.T) {
 			spec := loadRealRegionCorpusSpec(t, corpusName)
 			graph := loadRealRegionGraph(t, spec.Region)
-			snap := routing.BuildSnapIndex(graph)
-			router := routing.NewRouterWithMode(graph, snap, routing.RoutingModeHierarchical)
+			snap := routingengine.BuildSnapIndex(graph)
+			router := routingengine.NewRouterWithMode(graph, snap, routingentities.RoutingModeHierarchical)
 			queries := buildRealRegionCrossCellCorpus(t, graph, spec)
 			if len(queries) == 0 {
 				t.Fatalf("no cross-cell queries generated for region %q", spec.Region)
@@ -55,12 +56,12 @@ func TestRealRegionCrossCellRoutesMatchOracle(t *testing.T) {
 			for _, query := range queries {
 				query := query
 				t.Run(query.Name, func(t *testing.T) {
-					oracle, ok := testutil.ShortestPath(graph, query.SrcIdx, query.DstIdx, routing.BaseWeight)
+					oracle, ok := testutil.ShortestPath(graph, query.SrcIdx, query.DstIdx, routingengine.BaseWeight)
 					if !ok {
 						t.Fatalf("oracle found no route for %s", query.Name)
 					}
 
-					routes := router.ComputeFromIndices(query.SrcIdx, query.DstIdx, 1, routing.BaseWeight)
+					routes := router.ComputeFromIndices(query.SrcIdx, query.DstIdx, 1, routingengine.BaseWeight)
 					if len(routes) != 1 {
 						t.Fatalf("expected 1 hierarchical route, got %d", len(routes))
 					}
@@ -72,10 +73,10 @@ func TestRealRegionCrossCellRoutesMatchOracle(t *testing.T) {
 	}
 }
 
-func assertRealRegionRouteMatchesOracleCost(t *testing.T, g *model.Graph, route routing.Route, oracle testutil.OraclePath) {
+func assertRealRegionRouteMatchesOracleCost(t *testing.T, g *model.Graph, route routingentities.Route, oracle testutil.OraclePath) {
 	t.Helper()
 
-	validated := testutil.AssertRouteValid(t, g, route, routing.BaseWeight)
+	validated := testutil.AssertRouteValid(t, g, route, routingengine.BaseWeight)
 	if len(oracle.NodeIdxs) == 0 {
 		t.Fatal("oracle path is empty")
 	}
@@ -111,7 +112,7 @@ func buildRealRegionCrossCellCorpus(tb testing.TB, g *model.Graph, spec realRegi
 	}
 
 	rng := rand.New(rand.NewSource(spec.Seed))
-	baseAStar := routing.NewRouterWithMode(g, nil, routing.RoutingModeBaseAStar)
+	baseAStar := routingengine.NewRouterWithMode(g, nil, routingentities.RoutingModeBaseAStar)
 	seen := make(map[[2]uint32]struct{}, spec.Count)
 	queries := make([]realRegionQuery, 0, spec.Count)
 
@@ -149,7 +150,7 @@ func buildRealRegionCrossCellCorpus(tb testing.TB, g *model.Graph, spec realRegi
 			continue
 		}
 
-		routes := baseAStar.ComputeFromIndices(srcIdx, dstIdx, 1, routing.BaseWeight)
+		routes := baseAStar.ComputeFromIndices(srcIdx, dstIdx, 1, routingengine.BaseWeight)
 		if len(routes) == 0 {
 			continue
 		}

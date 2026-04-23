@@ -2,7 +2,7 @@ package sessions
 
 import (
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 )
 
 // SubscribersOf returns a snapshot of session IDs subscribed to edgeID.
@@ -18,7 +18,7 @@ func (m *Manager) SubscribersOf(edgeID model.EdgeID) []string {
 	return ids
 }
 
-func (m *Manager) subscribeEdges(sessionID string, steps []routing.Step) {
+func (m *Manager) subscribeEdges(sessionID string, steps []routingentities.Step) {
 	for _, step := range steps {
 		if step.EdgeID == nil {
 			continue
@@ -32,7 +32,7 @@ func (m *Manager) subscribeEdges(sessionID string, steps []routing.Step) {
 	}
 }
 
-func (m *Manager) unsubscribeEdges(sessionID string, steps []routing.Step) {
+func (m *Manager) unsubscribeEdges(sessionID string, steps []routingentities.Step) {
 	for _, step := range steps {
 		if step.EdgeID == nil {
 			continue

@@ -8,7 +8,8 @@ import (
 	"nav-system/src/graph/model"
 	navigationanalysis "nav-system/src/navigation/analysis"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 	transportweb "nav-system/src/transport/web"
 	"nav-system/src/utilities"
@@ -24,7 +25,7 @@ const (
 type RouteHandler struct {
 	Graph                   *model.Graph
 	Store                   *trafficstore.Store
-	Router                  *routing.Router
+	Router                  *routingengine.Router
 	Cache                   *RouteCache
 	SlowRequestLogThreshold time.Duration
 	BaseRouteCount          int
@@ -81,7 +82,7 @@ func (h *RouteHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	transportweb.WriteJSON(w, http.StatusOK, resp)
 }
 
-func (h *RouteHandler) routeResponsePayload(route routing.Route) navigationsessions.RoutePayload {
+func (h *RouteHandler) routeResponsePayload(route routingentities.Route) navigationsessions.RoutePayload {
 	route.CongestionAhead, route.CongestedEdges = navigationanalysis.RouteCongestionSummary(route, h.Store, h.Graph)
 	route = h.Cache.Store(route)
 
@@ -95,7 +96,7 @@ func (h *RouteHandler) routeResponsePayload(route routing.Route) navigationsessi
 	}
 }
 
-func (h *RouteHandler) liveWeightFunc() routing.WeightFunc {
+func (h *RouteHandler) liveWeightFunc() routingengine.WeightFunc {
 	return func(e *model.Edge) float32 {
 		return h.Store.LiveWeight(e.ID, e.Weight)
 	}

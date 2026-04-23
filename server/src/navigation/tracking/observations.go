@@ -5,7 +5,7 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 )
 
 func (t *Tracker) recordEdgeObservations(events []EdgeObservation) {
@@ -42,7 +42,7 @@ func (t *Tracker) recordCurrentEdgeSpeedSample(edgeID *uint32, edgeAt, now time.
 	t.Store.RecordSpeedSample(eid, speedKmh, edge.Weight, edge.DistanceM)
 }
 
-func (t *Tracker) releaseTraversedEdges(route routing.Route, fromIdx, toIdx int) {
+func (t *Tracker) releaseTraversedEdges(route routingentities.Route, fromIdx, toIdx int) {
 	for i := fromIdx; i < toIdx; i++ {
 		if i < 0 || i >= len(route.Steps) {
 			continue

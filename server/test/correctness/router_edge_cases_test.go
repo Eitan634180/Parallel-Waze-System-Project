@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
 )
@@ -13,7 +14,7 @@ import (
 // route when source and destination snap to the same node.
 func TestRouterReturnsSameSourceDestinationIsNil(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
-	routes := fixture.Router.Compute(32.0000, 34.0000, 32.0000, 34.0000, 1, routing.BaseWeight)
+	routes := fixture.Router.Compute(32.0000, 34.0000, 32.0000, 34.0000, 1, routingengine.BaseWeight)
 	if len(routes) != 0 {
 		t.Fatalf("same-node route should return nil, got %d routes", len(routes))
 	}
@@ -28,14 +29,14 @@ func TestAlternativeRoutesAreDistinctPaths(t *testing.T) {
 	routes := fixture.Router.Compute(
 		routeCase.Src.Lat, routeCase.Src.Lon,
 		routeCase.Dst.Lat, routeCase.Dst.Lon,
-		2, routing.BaseWeight,
+		2, routingengine.BaseWeight,
 	)
 	if len(routes) < 2 {
 		t.Fatalf("expected at least 2 alternative routes, got %d", len(routes))
 	}
 
 	// Collect edge sets for each route.
-	edgeSet := func(route routing.Route) map[uint32]struct{} {
+	edgeSet := func(route routingentities.Route) map[uint32]struct{} {
 		m := make(map[uint32]struct{})
 		for _, step := range route.Steps {
 			if step.EdgeID != nil {
@@ -72,10 +73,10 @@ func TestAlternativeRoutesBothValid(t *testing.T) {
 	routes := fixture.Router.Compute(
 		routeCase.Src.Lat, routeCase.Src.Lon,
 		routeCase.Dst.Lat, routeCase.Dst.Lon,
-		2, routing.BaseWeight,
+		2, routingengine.BaseWeight,
 	)
 	for i, route := range routes {
-		_ = testutil.AssertRouteValid(t, fixture.Graph, route, routing.BaseWeight)
+		_ = testutil.AssertRouteValid(t, fixture.Graph, route, routingengine.BaseWeight)
 		if t.Failed() {
 			t.Fatalf("route %d failed validation", i)
 		}
@@ -113,7 +114,7 @@ func TestGridRoutesAllMatchOracle(t *testing.T) {
 			srcIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Src.Lat, routeCase.Src.Lon)
 			dstIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Dst.Lat, routeCase.Dst.Lon)
 
-			oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, routing.BaseWeight)
+			oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, routingengine.BaseWeight)
 			if !ok {
 				t.Fatalf("oracle could not find path for %s", routeCase.Name)
 			}
@@ -121,12 +122,12 @@ func TestGridRoutesAllMatchOracle(t *testing.T) {
 			routes := fixture.Router.Compute(
 				routeCase.Src.Lat, routeCase.Src.Lon,
 				routeCase.Dst.Lat, routeCase.Dst.Lon,
-				1, routing.BaseWeight,
+				1, routingengine.BaseWeight,
 			)
 			if len(routes) != 1 {
 				t.Fatalf("expected 1 route, got %d", len(routes))
 			}
-			testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, routing.BaseWeight)
+			testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, routingengine.BaseWeight)
 		})
 	}
 }
@@ -141,7 +142,7 @@ func TestRouteDistanceIsPositive(t *testing.T) {
 		routes := fixture.Router.Compute(
 			routeCase.Src.Lat, routeCase.Src.Lon,
 			routeCase.Dst.Lat, routeCase.Dst.Lon,
-			1, routing.BaseWeight,
+			1, routingengine.BaseWeight,
 		)
 		if len(routes) == 0 {
 			t.Fatalf("%s: no route returned", routeCase.Name)
@@ -166,12 +167,12 @@ func TestRouterRespectsOneWayDetours(t *testing.T) {
 	routes := fixture.Router.Compute(
 		reverseCase.Src.Lat, reverseCase.Src.Lon,
 		reverseCase.Dst.Lat, reverseCase.Dst.Lon,
-		1, routing.BaseWeight,
+		1, routingengine.BaseWeight,
 	)
 	if len(routes) != 1 {
 		t.Fatalf("expected 1 reverse detour route, got %d", len(routes))
 	}
-	validated := testutil.AssertRouteValid(t, fixture.Graph, routes[0], routing.BaseWeight)
+	validated := testutil.AssertRouteValid(t, fixture.Graph, routes[0], routingengine.BaseWeight)
 	if validated.SourceIdx != nodeIdx[3] || validated.TargetIdx != nodeIdx[1] {
 		t.Fatalf("unexpected endpoints for reverse detour route: %+v", validated)
 	}
@@ -189,7 +190,7 @@ func TestRouterRespectsOneWayDetours(t *testing.T) {
 
 func TestRouterReturnsNoRouteAcrossDisconnectedComponents(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "disconnected_graph.json", 2)
-	routes := fixture.Router.Compute(32.0000, 34.0000, 32.0110, 34.0110, 1, routing.BaseWeight)
+	routes := fixture.Router.Compute(32.0000, 34.0000, 32.0110, 34.0110, 1, routingengine.BaseWeight)
 	if len(routes) != 0 {
 		t.Fatalf("disconnected graph should not yield a route, got %d", len(routes))
 	}
@@ -201,16 +202,16 @@ func TestOneWayGraphRoutesStillMatchOracle(t *testing.T) {
 		t.Run(routeCase.Name, func(t *testing.T) {
 			srcIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Src.Lat, routeCase.Src.Lon)
 			dstIdx := testutil.BruteForceSnap(fixture.Graph, routeCase.Dst.Lat, routeCase.Dst.Lon)
-			oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, routing.BaseWeight)
+			oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, routingengine.BaseWeight)
 			if !ok {
 				t.Fatalf("oracle could not find path for %s", routeCase.Name)
 			}
 
-			routes := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
+			routes := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routingengine.BaseWeight)
 			if len(routes) != 1 {
 				t.Fatalf("expected 1 route, got %d", len(routes))
 			}
-			testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, routing.BaseWeight)
+			testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, routingengine.BaseWeight)
 		})
 	}
 }

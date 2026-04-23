@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"nav-system/src/graph/model"
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
@@ -13,9 +14,9 @@ import (
 
 func TestGeneratedStaticCorporaMatchOracleOnBaseModes(t *testing.T) {
 	seeds := []int64{11, 29, 57}
-	modes := []routing.RoutingMode{
-		routing.RoutingModeBaseAStar,
-		routing.RoutingModeBaseDijkstra,
+	modes := []routingentities.RoutingMode{
+		routingentities.RoutingModeBaseAStar,
+		routingentities.RoutingModeBaseDijkstra,
 	}
 
 	for _, seed := range seeds {
@@ -27,7 +28,7 @@ func TestGeneratedStaticCorporaMatchOracleOnBaseModes(t *testing.T) {
 				fixture,
 				testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs),
 				modes,
-				routing.BaseWeight,
+				routingengine.BaseWeight,
 			)
 		})
 	}
@@ -35,7 +36,7 @@ func TestGeneratedStaticCorporaMatchOracleOnBaseModes(t *testing.T) {
 
 func TestGeneratedStaticCrossCellCorporaMatchOracleOnHierarchicalMode(t *testing.T) {
 	seeds := []int64{11, 29, 57}
-	modes := []routing.RoutingMode{routing.RoutingModeHierarchical}
+	modes := []routingentities.RoutingMode{routingentities.RoutingModeHierarchical}
 
 	for _, seed := range seeds {
 		seed := seed
@@ -46,7 +47,7 @@ func TestGeneratedStaticCrossCellCorporaMatchOracleOnHierarchicalMode(t *testing
 				fixture,
 				crossCellQueries(fixture.Graph, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
 				modes,
-				routing.BaseWeight,
+				routingengine.BaseWeight,
 			)
 		})
 	}
@@ -54,9 +55,9 @@ func TestGeneratedStaticCrossCellCorporaMatchOracleOnHierarchicalMode(t *testing
 
 func TestGeneratedDirectedCorporaMatchOracleOnBaseModes(t *testing.T) {
 	seeds := []int64{101, 203, 307}
-	modes := []routing.RoutingMode{
-		routing.RoutingModeBaseAStar,
-		routing.RoutingModeBaseDijkstra,
+	modes := []routingentities.RoutingMode{
+		routingentities.RoutingModeBaseAStar,
+		routingentities.RoutingModeBaseDijkstra,
 	}
 
 	for _, seed := range seeds {
@@ -68,7 +69,7 @@ func TestGeneratedDirectedCorporaMatchOracleOnBaseModes(t *testing.T) {
 				fixture,
 				testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs),
 				modes,
-				routing.BaseWeight,
+				routingengine.BaseWeight,
 			)
 		})
 	}
@@ -76,7 +77,7 @@ func TestGeneratedDirectedCorporaMatchOracleOnBaseModes(t *testing.T) {
 
 func TestGeneratedDirectedCrossCellCorporaMatchOracleOnHierarchicalMode(t *testing.T) {
 	seeds := []int64{101, 203, 307}
-	modes := []routing.RoutingMode{routing.RoutingModeHierarchical}
+	modes := []routingentities.RoutingMode{routingentities.RoutingModeHierarchical}
 
 	for _, seed := range seeds {
 		seed := seed
@@ -87,7 +88,7 @@ func TestGeneratedDirectedCrossCellCorporaMatchOracleOnHierarchicalMode(t *testi
 				fixture,
 				crossCellQueries(fixture.Graph, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
 				modes,
-				routing.BaseWeight,
+				routingengine.BaseWeight,
 			)
 		})
 	}
@@ -95,9 +96,9 @@ func TestGeneratedDirectedCrossCellCorporaMatchOracleOnHierarchicalMode(t *testi
 
 func TestGeneratedCustomWeightCorporaMatchOracleOnBaseModes(t *testing.T) {
 	seeds := []int64{13, 41, 73}
-	modes := []routing.RoutingMode{
-		routing.RoutingModeBaseAStar,
-		routing.RoutingModeBaseDijkstra,
+	modes := []routingentities.RoutingMode{
+		routingentities.RoutingModeBaseAStar,
+		routingentities.RoutingModeBaseDijkstra,
 	}
 
 	for _, seed := range seeds {
@@ -117,9 +118,9 @@ func TestGeneratedCustomWeightCorporaMatchOracleOnBaseModes(t *testing.T) {
 
 func TestGeneratedTrafficCorporaMatchOracleOnBaseModes(t *testing.T) {
 	seeds := []int64{17, 61}
-	modes := []routing.RoutingMode{
-		routing.RoutingModeBaseAStar,
-		routing.RoutingModeBaseDijkstra,
+	modes := []routingentities.RoutingMode{
+		routingentities.RoutingModeBaseAStar,
+		routingentities.RoutingModeBaseDijkstra,
 	}
 
 	for _, seed := range seeds {
@@ -140,7 +141,7 @@ func TestGeneratedTrafficCorporaMatchOracleOnBaseModes(t *testing.T) {
 
 func TestGeneratedTrafficCrossCellCorporaMatchOracleOnHierarchicalMode(t *testing.T) {
 	seeds := []int64{17, 61}
-	modes := []routing.RoutingMode{routing.RoutingModeHierarchical}
+	modes := []routingentities.RoutingMode{routingentities.RoutingModeHierarchical}
 
 	for _, seed := range seeds {
 		seed := seed
@@ -162,20 +163,20 @@ func TestGeneratedLongCrossCellRoutesMatchOracle(t *testing.T) {
 	testCases := []struct {
 		name  string
 		seed  int64
-		build func(t testing.TB) (*testutil.GeneratedWeightedFixture, routing.WeightFunc)
+		build func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc)
 	}{
 		{
 			name: "hierarchical_static_long",
 			seed: 91,
-			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routing.WeightFunc) {
+			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc) {
 				fixture := testutil.BuildGeneratedWeightedFixture(t, 91, 8, 8, 12, 6)
-				return fixture, routing.BaseWeight
+				return fixture, routingengine.BaseWeight
 			},
 		},
 		{
 			name: "hierarchical_traffic_long",
 			seed: 131,
-			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routing.WeightFunc) {
+			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc) {
 				fixture := testutil.BuildGeneratedWeightedFixture(t, 131, 8, 8, 12, 6)
 				return fixture, applyGeneratedTraffic(t, fixture.Graph)
 			},
@@ -183,7 +184,7 @@ func TestGeneratedLongCrossCellRoutesMatchOracle(t *testing.T) {
 		{
 			name: "base_custom_long",
 			seed: 173,
-			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routing.WeightFunc) {
+			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc) {
 				fixture := testutil.BuildGeneratedWeightedFixture(t, 173, 8, 8, 12, 6)
 				return fixture, fixture.WeightFunc
 			},
@@ -208,8 +209,8 @@ func assertGeneratedFixtureMatchesOracle(
 	t *testing.T,
 	fixture *testutil.GeneratedWeightedFixture,
 	queries []testutil.GeneratedQuery,
-	modes []routing.RoutingMode,
-	wf routing.WeightFunc,
+	modes []routingentities.RoutingMode,
+	wf routingengine.WeightFunc,
 ) {
 	t.Helper()
 
@@ -220,7 +221,7 @@ func assertGeneratedFixtureMatchesOracle(
 
 		oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, wf)
 		for _, mode := range modes {
-			router := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
+			router := routingengine.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
 			t.Run(string(mode)+"/"+query.Name, func(t *testing.T) {
 				routes := router.ComputeFromIndices(srcIdx, dstIdx, 1, wf)
 				if !ok {
@@ -256,7 +257,7 @@ func crossCellQueries(g *model.Graph, queries []testutil.GeneratedQuery) []testu
 func longCrossCellQueries(
 	g *model.Graph,
 	nodeIDs []model.NodeRawID,
-	wf routing.WeightFunc,
+	wf routingengine.WeightFunc,
 	minEdges int,
 	limit int,
 ) []testutil.GeneratedQuery {
@@ -308,17 +309,17 @@ func longCrossCellQueries(
 	return filtered
 }
 
-func longPathModes(name string) []routing.RoutingMode {
+func longPathModes(name string) []routingentities.RoutingMode {
 	if name == "base_custom_long" {
-		return []routing.RoutingMode{
-			routing.RoutingModeBaseAStar,
-			routing.RoutingModeBaseDijkstra,
+		return []routingentities.RoutingMode{
+			routingentities.RoutingModeBaseAStar,
+			routingentities.RoutingModeBaseDijkstra,
 		}
 	}
-	return []routing.RoutingMode{routing.RoutingModeHierarchical}
+	return []routingentities.RoutingMode{routingentities.RoutingModeHierarchical}
 }
 
-func applyGeneratedTraffic(t testing.TB, g *model.Graph) routing.WeightFunc {
+func applyGeneratedTraffic(t testing.TB, g *model.Graph) routingengine.WeightFunc {
 	t.Helper()
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))

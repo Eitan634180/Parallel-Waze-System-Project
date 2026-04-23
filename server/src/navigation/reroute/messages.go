@@ -3,11 +3,11 @@ package reroute
 import (
 	"nav-system/src/graph/model"
 	navigationsessions "nav-system/src/navigation/sessions"
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
 )
 
-func buildRoutePayload(route routing.Route) navigationsessions.RoutePayload {
+func buildRoutePayload(route routingentities.Route) navigationsessions.RoutePayload {
 	return navigationsessions.RoutePayload{
 		ID:              route.ID,
 		Steps:           route.Steps,
@@ -18,7 +18,7 @@ func buildRoutePayload(route routing.Route) navigationsessions.RoutePayload {
 	}
 }
 
-func sendRerouteMessage(s *navigationsessions.Session, route routing.Route, reason string, oldETA, newETA *float32) {
+func sendRerouteMessage(s *navigationsessions.Session, route routingentities.Route, reason string, oldETA, newETA *float32) {
 	payload := buildRoutePayload(route)
 	_ = s.Send(navigationsessions.OutMsg{
 		Type:          "reroute",
