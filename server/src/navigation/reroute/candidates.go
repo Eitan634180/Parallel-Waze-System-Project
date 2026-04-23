@@ -5,9 +5,8 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	"nav-system/src/navigation/internal/routeutil"
-	navigationmanager "nav-system/src/navigation/manager"
-	navigationsession "nav-system/src/navigation/session"
+	navigationanalysis "nav-system/src/navigation/analysis"
+	navigationsessions "nav-system/src/navigation/sessions"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
@@ -32,11 +31,11 @@ type localRepairRequest struct {
 }
 
 func AttemptCongestionReroute(
-	s *navigationsession.Session,
+	s *navigationsessions.Session,
 	snapLat, snapLon float64,
 	g *model.Graph,
 	store *trafficstore.Store,
-	mgr *navigationmanager.Manager,
+	mgr *navigationsessions.Manager,
 	router *routing.Router,
 	wf routing.WeightFunc,
 	prepareRoute func(routing.Route) routing.Route,
@@ -65,7 +64,7 @@ func AttemptCongestionReroute(
 	ApplyRouteUpdate(s, candidate, g, store, mgr, prepareRoute, now, reason, &context.oldETA, &newETA, &context.version)
 }
 
-func captureCongestionContext(s *navigationsession.Session, g *model.Graph, store *trafficstore.Store) (congestionContext, bool) {
+func captureCongestionContext(s *navigationsessions.Session, g *model.Graph, store *trafficstore.Store) (congestionContext, bool) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
@@ -78,7 +77,7 @@ func captureCongestionContext(s *navigationsession.Session, g *model.Graph, stor
 		currentRoute: s.Route,
 		currentStep:  s.StepIdx,
 		destination:  destination,
-		oldETA:       routeutil.ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
+		oldETA:       navigationanalysis.ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
 		version:      SessionVersion{StepIdx: s.StepIdx, RouteRevision: s.RouteRevision},
 	}
 

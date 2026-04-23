@@ -1,12 +1,13 @@
-package monitor
+package analysis
 
 import (
 	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
 	"nav-system/src/routing/engine"
 	"nav-system/src/utilities"
 )
 
-func distanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64, g *model.Graph) float32 {
+func DistanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64, g *model.Graph) float32 {
 	if len(route.Steps) == 0 {
 		return 0
 	}
@@ -35,10 +36,10 @@ func distanceFromExpectedProjection(route engine.Route, stepIdx int, g *model.Gr
 		return distanceToRouteNode(g, route.Steps[lastIndex], px, py)
 	}
 
-	start := max(1, stepIdx-offRouteWindow)
-	end := min(len(route.Steps)-1, stepIdx+offRouteWindow)
+	start := max(1, stepIdx-navigation.OffRouteWindow)
+	end := min(len(route.Steps)-1, stepIdx+navigation.OffRouteWindow)
 	best := minDistanceToSegmentRange(route, g, px, py, start, end)
-	if best <= offRouteDistM {
+	if best <= navigation.OffRouteDistanceM {
 		return best
 	}
 

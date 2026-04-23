@@ -1,4 +1,4 @@
-package manager
+package sessions
 
 import (
 	"nav-system/src/graph/model"

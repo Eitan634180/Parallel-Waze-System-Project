@@ -5,6 +5,7 @@ import (
 	"math"
 	"runtime"
 
+	"nav-system/src/graph"
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 
@@ -43,7 +44,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 	log.Printf("%s building edges", graphBuilderLogPrefix)
 
 	// Most ways contribute two directed edges per segment.
-	estimatedEdges := len(pr.Ways) * estimatedEdgesPerWayHint
+	estimatedEdges := len(pr.Ways) * graph.EstimatedEdgesPerWayHint
 	g.Edges = make([]model.Edge, 0, estimatedEdges)
 
 	// Build adjacency per node before converting it to CSR.
@@ -55,8 +56,8 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 	}
 
 	workerCount := max(runtime.GOMAXPROCS(0), 1)
-	if workerCount < minGraphBuilderWorkers {
-		workerCount = minGraphBuilderWorkers
+	if workerCount < graph.MinGraphBuilderWorkers {
+		workerCount = graph.MinGraphBuilderWorkers
 	}
 	if len(pr.Ways) == 0 {
 		log.Printf("%s edges ready (%d directed)", graphBuilderLogPrefix, len(g.Edges))
@@ -86,7 +87,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 				end = len(pr.Ways)
 			}
 
-			localEdges := make([]pendingEdge, 0, (end-start)*pendingEdgesPerSegmentHint)
+			localEdges := make([]pendingEdge, 0, (end-start)*graph.PendingEdgesPerSegmentHint)
 
 			for i := start; i < end; i++ {
 				rw := pr.Ways[i]

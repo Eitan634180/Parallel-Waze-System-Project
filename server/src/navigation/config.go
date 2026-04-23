@@ -31,4 +31,16 @@ const (
 	RerouteReasonLocalPatch     = "local_patch"
 	RerouteReasonOffRoute       = "off_route"
 	RerouteReasonTrafficCleared = "traffic_cleared"
+
+	PartialObservationMinEdgeAge = 2 * time.Second
+
+	OptimizationJobBufferSize = 256
+	PropagationBatchChunkSize = 64
+
+	SessionSendBufferSize = 256
+	SessionWriteTimeout   = 2 * time.Second
+
+	OffRouteDistanceM  = float32(50)
+	OffRouteSanityMaxM = float32(5_000)
+	OffRouteWindow     = 2
 )

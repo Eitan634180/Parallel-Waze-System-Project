@@ -32,6 +32,17 @@ var HighwayClass = map[string]uint8{
 	"service":        RoadService,
 }
 
+const (
+	defaultMotorwaySpeedKmh     = float32(120)
+	defaultTrunkSpeedKmh        = float32(100)
+	defaultPrimarySpeedKmh      = float32(80)
+	defaultSecondarySpeedKmh    = float32(60)
+	defaultTertiarySpeedKmh     = float32(50)
+	defaultResidentialSpeedKmh  = float32(50)
+	defaultServiceSpeedKmh      = float32(20)
+	defaultUnclassifiedSpeedKmh = float32(50)
+)
+
 // DefaultSpeedKmh returns the fallback speed for a road class when maxspeed is
 // missing from the source data.
 func DefaultSpeedKmh(class uint8) float32 {

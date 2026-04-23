@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"nav-system/src/graph/model"
-	navigationmonitor "nav-system/src/navigation/monitor"
-	navigationsession "nav-system/src/navigation/session"
+	navigationanalysis "nav-system/src/navigation/analysis"
+	navigationsessions "nav-system/src/navigation/sessions"
 	"nav-system/src/routing"
 	trafficstore "nav-system/src/traffic/store"
 	transportweb "nav-system/src/transport/web"
@@ -40,7 +40,7 @@ type routeRequest struct {
 }
 
 type routeResponse struct {
-	Routes []navigationsession.RoutePayload `json:"routes"`
+	Routes []navigationsessions.RoutePayload `json:"routes"`
 }
 
 func (h *RouteHandler) Handle(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +73,7 @@ func (h *RouteHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := routeResponse{Routes: make([]navigationsession.RoutePayload, 0, len(routes))}
+	resp := routeResponse{Routes: make([]navigationsessions.RoutePayload, 0, len(routes))}
 	for _, route := range routes {
 		resp.Routes = append(resp.Routes, h.routeResponsePayload(route))
 	}
@@ -81,11 +81,11 @@ func (h *RouteHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	transportweb.WriteJSON(w, http.StatusOK, resp)
 }
 
-func (h *RouteHandler) routeResponsePayload(route routing.Route) navigationsession.RoutePayload {
-	route.CongestionAhead, route.CongestedEdges = navigationmonitor.RouteCongestionSummary(route, h.Store, h.Graph)
+func (h *RouteHandler) routeResponsePayload(route routing.Route) navigationsessions.RoutePayload {
+	route.CongestionAhead, route.CongestedEdges = navigationanalysis.RouteCongestionSummary(route, h.Store, h.Graph)
 	route = h.Cache.Store(route)
 
-	return navigationsession.RoutePayload{
+	return navigationsessions.RoutePayload{
 		ID:              route.ID,
 		Steps:           route.Steps,
 		TotalDistM:      route.TotalDistM,

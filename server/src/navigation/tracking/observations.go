@@ -1,9 +1,10 @@
-package tracker
+package tracking
 
 import (
 	"time"
 
 	"nav-system/src/graph/model"
+	"nav-system/src/navigation"
 	"nav-system/src/routing"
 )
 
@@ -24,7 +25,7 @@ func (t *Tracker) recordEdgeObservations(events []EdgeObservation) {
 }
 
 func (t *Tracker) recordCurrentEdgeSpeedSample(edgeID *uint32, edgeAt, now time.Time, speedKmh float32) {
-	if edgeID == nil || speedKmh <= 0 || edgeAt.IsZero() || now.Sub(edgeAt) < partialObservationMinEdgeAge {
+	if edgeID == nil || speedKmh <= 0 || edgeAt.IsZero() || now.Sub(edgeAt) < navigation.PartialObservationMinEdgeAge {
 		return
 	}
 

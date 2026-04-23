@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 
+	"nav-system/src/graph"
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 )
@@ -75,7 +76,7 @@ func PartitionCells(g *model.Graph, maxCellSize int) {
 		spawn(right, rng)
 	}
 
-	rng := rand.New(rand.NewSource(partitionSeed))
+	rng := rand.New(rand.NewSource(graph.PartitionSeed))
 	wg.Add(1)
 	bisect(allNodeIdxs, rng)
 	wg.Wait()
@@ -115,9 +116,9 @@ func inertialFlowBisect(g *model.Graph, nodeIdxs []uint32, rng *rand.Rand, pool 
 		return 0
 	})
 
-	q := n / inertialFlowQuartileDiv
-	if q < minInertialFlowQuartile {
-		q = minInertialFlowQuartile
+	q := n / graph.InertialFlowQuartileDiv
+	if q < graph.MinInertialFlowQuartile {
+		q = graph.MinInertialFlowQuartile
 	}
 
 	localIdxPtr := pool.Get().(*[]int)
@@ -126,8 +127,8 @@ func inertialFlowBisect(g *model.Graph, nodeIdxs []uint32, rng *rand.Rand, pool 
 		localIdx[s.idx] = i
 	}
 
-	s, t := n, n+flowSinkNodeOffset
-	fn := utilities.NewFlowNet(n + flowTerminalNodeCount)
+	s, t := n, n+graph.FlowSinkNodeOffset
+	fn := utilities.NewFlowNet(n + graph.FlowTerminalNodeCount)
 
 	for i := 0; i < q; i++ {
 		fn.AddEdge(s, localIdx[scores[i].idx], n)
@@ -200,14 +201,14 @@ func addUndirectedSubsetEdges(fn *utilities.FlowNet, g *model.Graph, nodeIdxs []
 	slices.Sort(seen)
 
 	prev := seen[0]
-	fn.AddEdge(int(prev>>32), int(uint32(prev)), unitFlowCapacity)
-	fn.AddEdge(int(uint32(prev)), int(prev>>32), unitFlowCapacity)
+	fn.AddEdge(int(prev>>32), int(uint32(prev)), graph.UnitFlowCapacity)
+	fn.AddEdge(int(uint32(prev)), int(prev>>32), graph.UnitFlowCapacity)
 
 	for i := 1; i < len(seen); i++ {
 		curr := seen[i]
 		if curr != prev {
-			fn.AddEdge(int(curr>>32), int(uint32(curr)), unitFlowCapacity)
-			fn.AddEdge(int(uint32(curr)), int(curr>>32), unitFlowCapacity)
+			fn.AddEdge(int(curr>>32), int(uint32(curr)), graph.UnitFlowCapacity)
+			fn.AddEdge(int(uint32(curr)), int(curr>>32), graph.UnitFlowCapacity)
 			prev = curr
 		}
 	}

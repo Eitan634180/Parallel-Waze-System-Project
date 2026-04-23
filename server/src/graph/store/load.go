@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"nav-system/src/graph"
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 
@@ -121,7 +122,7 @@ func loadNodes(path string) ([]model.Node, error) {
 		return nil, err
 	}
 	defer f.Close()
-	br := bufio.NewReaderSize(f, fileBufferSize)
+	br := bufio.NewReaderSize(f, graph.FileBufferSize)
 
 	nodes := make([]model.Node, count)
 	for i := range nodes {
@@ -140,7 +141,7 @@ func loadEdges(path string) ([]model.Edge, error) {
 		return nil, err
 	}
 	defer f.Close()
-	br := bufio.NewReaderSize(f, fileBufferSize)
+	br := bufio.NewReaderSize(f, graph.FileBufferSize)
 
 	edges := make([]model.Edge, count)
 	for i := range edges {
@@ -168,7 +169,7 @@ func loadBaseAdj(path string) (model.AdjacencyList, error) {
 		return model.AdjacencyList{}, err
 	}
 	defer f.Close()
-	br := bufio.NewReaderSize(f, fileBufferSize)
+	br := bufio.NewReaderSize(f, graph.FileBufferSize)
 
 	offsets := make([]uint32, offsetCount)
 	for i := range offsets {
@@ -200,7 +201,7 @@ func loadCells(path string) ([]model.Cell, error) {
 		return nil, err
 	}
 	defer f.Close()
-	br := bufio.NewReaderSize(f, fileBufferSize)
+	br := bufio.NewReaderSize(f, graph.FileBufferSize)
 
 	cells := make([]model.Cell, count)
 	for i := range cells {
@@ -231,7 +232,7 @@ func loadBoundary(path string) ([]uint32, error) {
 		return nil, err
 	}
 	defer f.Close()
-	br := bufio.NewReaderSize(f, fileBufferSize)
+	br := bufio.NewReaderSize(f, graph.FileBufferSize)
 
 	nodes := make([]uint32, count)
 	for i := range nodes {
@@ -250,7 +251,7 @@ func loadOverlayAdj(path string) (model.OverlayAdjList, error) {
 		return model.OverlayAdjList{}, err
 	}
 	defer f.Close()
-	br := bufio.NewReaderSize(f, fileBufferSize)
+	br := bufio.NewReaderSize(f, graph.FileBufferSize)
 
 	offsets := make([]uint32, offsetCount)
 	for i := range offsets {
@@ -292,7 +293,7 @@ func loadMeta(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	br := bufio.NewReaderSize(f, fileBufferSize)
+	br := bufio.NewReaderSize(f, graph.FileBufferSize)
 	var m graphMeta
 	if err := json.NewDecoder(br).Decode(&m); err != nil {
 		return err

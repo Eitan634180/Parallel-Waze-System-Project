@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	navigationmanager "nav-system/src/navigation/manager"
-	navigationsession "nav-system/src/navigation/session"
-	navigationtracker "nav-system/src/navigation/tracker"
+	navigationsessions "nav-system/src/navigation/sessions"
+	navigationtracking "nav-system/src/navigation/tracking"
 	transportweb "nav-system/src/transport/web"
 
 	"github.com/gorilla/websocket"
@@ -24,8 +23,8 @@ const (
 )
 
 type SessionHandler struct {
-	Manager                       *navigationmanager.Manager
-	Tracker                       *navigationtracker.Tracker
+	Manager                       *navigationsessions.Manager
+	Tracker                       *navigationtracking.Tracker
 	RouteCache                    *RouteCache
 	OriginAllowed                 func(string) bool
 	SlowSessionCreateLogThreshold time.Duration
@@ -188,7 +187,7 @@ func (h *SessionHandler) handleWS(w http.ResponseWriter, r *http.Request, sessio
 	}
 }
 
-func attachSessionConnection(sess *navigationsession.Session, conn *websocket.Conn) (*websocket.Conn, bool) {
+func attachSessionConnection(sess *navigationsessions.Session, conn *websocket.Conn) (*websocket.Conn, bool) {
 	sess.Mu.Lock()
 	defer sess.Mu.Unlock()
 
@@ -198,7 +197,7 @@ func attachSessionConnection(sess *navigationsession.Session, conn *websocket.Co
 	return oldConn, needsEdgeInit
 }
 
-func detachSessionConnection(sess *navigationsession.Session, conn *websocket.Conn) (bool, *uint32) {
+func detachSessionConnection(sess *navigationsessions.Session, conn *websocket.Conn) (bool, *uint32) {
 	sess.Mu.Lock()
 	defer sess.Mu.Unlock()
 
@@ -211,10 +210,10 @@ func detachSessionConnection(sess *navigationsession.Session, conn *websocket.Co
 	return true, currentEdgeID
 }
 
-func (h *SessionHandler) processPing(sess *navigationsession.Session, msg sessionPingMessage) {
-	observations := make([]navigationtracker.EdgeObservation, len(msg.EdgeEvents))
+func (h *SessionHandler) processPing(sess *navigationsessions.Session, msg sessionPingMessage) {
+	observations := make([]navigationtracking.EdgeObservation, len(msg.EdgeEvents))
 	for i, event := range msg.EdgeEvents {
-		observations[i] = navigationtracker.EdgeObservation{
+		observations[i] = navigationtracking.EdgeObservation{
 			EdgeID:      event.EdgeID,
 			ObservedSec: event.ObservedSec,
 		}

@@ -9,7 +9,7 @@ import (
 
 	"nav-system/src/graph/builder"
 	"nav-system/src/graph/model"
-	navigationmanager "nav-system/src/navigation/manager"
+	navigationsessions "nav-system/src/navigation/sessions"
 	"nav-system/src/routing"
 	"nav-system/src/simulation"
 	trafficstore "nav-system/src/traffic/store"
@@ -53,7 +53,7 @@ type ServerFixture struct {
 	Snap       *routing.SnapIndex
 	Router     *routing.Router
 	Store      *trafficstore.Store
-	Manager    *navigationmanager.Manager
+	Manager    *navigationsessions.Manager
 	Simulation *simulation.Manager
 	Server     *transport.Server
 }
@@ -138,9 +138,12 @@ func BuildGraphFixture(tb testing.TB, graphName string, maxCellSize int) *BuiltG
 func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *ServerFixture {
 	tb.Helper()
 
+	tb.Setenv("NAV_SEARCH_UPSTREAM_URL", "https://example.test/search")
+	tb.Setenv("NAV_SEARCH_USER_AGENT", "nav-system-tests/1.0")
+
 	built := BuildGraphFixture(tb, graphName, maxCellSize)
 	store := trafficstore.NewStoreWithCapacity(len(built.Graph.Edges))
-	manager := navigationmanager.NewManager()
+	manager := navigationsessions.NewManager()
 	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routing.WeightFunc {
 		return func(e *model.Edge) float32 {
 			return store.LiveWeight(e.ID, e.Weight)

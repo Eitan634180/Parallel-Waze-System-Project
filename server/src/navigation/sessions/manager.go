@@ -1,11 +1,11 @@
-package manager
+package sessions
 
 import (
 	"sync"
 	"time"
 
 	"nav-system/src/graph/model"
-	navigationsession "nav-system/src/navigation/session"
+	"nav-system/src/navigation"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 
@@ -20,30 +20,30 @@ var (
 // Manager owns all active sessions and the reverse edge-to-session index.
 type Manager struct {
 	mu              sync.RWMutex
-	sessions        map[string]*navigationsession.Session
+	sessions        map[string]*Session
 	edgeSubscribers map[model.EdgeID]map[string]struct{}
 }
 
 // NewManager creates an empty Manager.
 func NewManager() *Manager {
 	return &Manager{
-		sessions:        make(map[string]*navigationsession.Session),
+		sessions:        make(map[string]*Session),
 		edgeSubscribers: make(map[model.EdgeID]map[string]struct{}),
 	}
 }
 
 // Create registers a new session for the given route and returns it.
-func (m *Manager) Create(route routing.Route) *navigationsession.Session {
-	return m.create(route, engine.InitialStepIndex(route), make(chan navigationsession.OutMsg, sessionSendBufferSize))
+func (m *Manager) Create(route routing.Route) *Session {
+	return m.create(route, engine.InitialStepIndex(route), make(chan OutMsg, navigation.SessionSendBufferSize))
 }
 
 // CreateHeadless registers a session without an attached outbound message queue.
-func (m *Manager) CreateHeadless(route routing.Route, stepIdx int) *navigationsession.Session {
+func (m *Manager) CreateHeadless(route routing.Route, stepIdx int) *Session {
 	return m.create(route, stepIdx, nil)
 }
 
 // Get retrieves a session by ID.
-func (m *Manager) Get(id string) *navigationsession.Session {
+func (m *Manager) Get(id string) *Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.sessions[id]
@@ -101,7 +101,7 @@ func (m *Manager) AdvanceStep(sessionID string, route routing.Route, oldIdx, new
 }
 
 // UpdateRoute replaces a session's route and refreshes edge subscriptions.
-func (m *Manager) UpdateRoute(s *navigationsession.Session, newRoute routing.Route) {
+func (m *Manager) UpdateRoute(s *Session, newRoute routing.Route) {
 	s.Mu.Lock()
 	oldSteps := append([]routing.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	s.Route = newRoute
@@ -120,18 +120,18 @@ func (m *Manager) UpdateRoute(s *navigationsession.Session, newRoute routing.Rou
 	m.subscribeEdges(sessionID, newSteps)
 }
 
-func (m *Manager) ActiveSessions() []*navigationsession.Session {
+func (m *Manager) ActiveSessions() []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	sessions := make([]*navigationsession.Session, 0, len(m.sessions))
+	sessions := make([]*Session, 0, len(m.sessions))
 	for _, session := range m.sessions {
 		sessions = append(sessions, session)
 	}
 	return sessions
 }
 
-func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan navigationsession.OutMsg) *navigationsession.Session {
+func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan OutMsg) *Session {
 	id := uuid.NewString()
 	if stepIdx < 0 {
 		stepIdx = 0
@@ -143,7 +143,7 @@ func (m *Manager) create(route routing.Route, stepIdx int, sendChan chan navigat
 		stepIdx = 0
 	}
 
-	session := &navigationsession.Session{
+	session := &Session{
 		ID:            id,
 		Route:         route,
 		RouteRevision: 1,

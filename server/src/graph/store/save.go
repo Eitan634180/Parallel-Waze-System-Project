@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"nav-system/src/graph"
 	"nav-system/src/graph/model"
 
 	"golang.org/x/sync/errgroup"
@@ -80,7 +81,7 @@ func saveNodes(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	bw := bufio.NewWriterSize(f, fileBufferSize)
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
 	if err := writeHeader(bw, uint64(len(g.Nodes))); err != nil {
 		return err
@@ -100,7 +101,7 @@ func saveEdges(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	bw := bufio.NewWriterSize(f, fileBufferSize)
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
 	if err := writeHeader(bw, uint64(len(g.Edges))); err != nil {
 		return err
@@ -129,7 +130,7 @@ func saveBaseAdj(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	bw := bufio.NewWriterSize(f, fileBufferSize)
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
 	if err := writeHeader(bw, uint64(len(g.BaseAdj.Offsets))); err != nil {
 		return err
@@ -156,7 +157,7 @@ func saveCells(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	bw := bufio.NewWriterSize(f, fileBufferSize)
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
 	if err := writeHeader(bw, uint64(len(g.Cells))); err != nil {
 		return err
@@ -184,7 +185,7 @@ func saveBoundary(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	bw := bufio.NewWriterSize(f, fileBufferSize)
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
 	if err := writeHeader(bw, uint64(len(g.BoundaryBaseIdxs))); err != nil {
 		return err
@@ -203,7 +204,7 @@ func saveOverlayAdj(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	bw := bufio.NewWriterSize(f, fileBufferSize)
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
 	if err := writeHeader(bw, uint64(len(g.OverlayAdj.Offsets))); err != nil {
 		return err
@@ -234,7 +235,7 @@ func saveMeta(g *model.Graph, path string) error {
 		return err
 	}
 	defer f.Close()
-	bw := bufio.NewWriterSize(f, fileBufferSize)
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 	if err := json.NewEncoder(bw).Encode(graphMeta{BBox: g.BBox}); err != nil {
 		return err
 	}

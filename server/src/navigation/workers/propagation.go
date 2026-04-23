@@ -1,4 +1,4 @@
-package monitor
+package workers
 
 import (
 	"context"
@@ -8,8 +8,7 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	navigationmanager "nav-system/src/navigation/manager"
-	navigationsession "nav-system/src/navigation/session"
+	navigationsessions "nav-system/src/navigation/sessions"
 	"nav-system/src/routing/engine"
 	trafficpropagation "nav-system/src/traffic/propagation"
 	trafficstore "nav-system/src/traffic/store"
@@ -23,7 +22,7 @@ type heuristicSessionSnapshot struct {
 	eta         float32
 }
 
-func RunPropagation(ctx context.Context, mgr *navigationmanager.Manager, store *trafficstore.Store, g *model.Graph) {
+func RunPropagation(ctx context.Context, mgr *navigationsessions.Manager, store *trafficstore.Store, g *model.Graph) {
 	ticker := time.NewTicker(navigation.PropagationInterval)
 	defer ticker.Stop()
 
@@ -37,7 +36,7 @@ func RunPropagation(ctx context.Context, mgr *navigationmanager.Manager, store *
 	}
 }
 
-func propagate(ctx context.Context, mgr *navigationmanager.Manager, store *trafficstore.Store, g *model.Graph) {
+func propagate(ctx context.Context, mgr *navigationsessions.Manager, store *trafficstore.Store, g *model.Graph) {
 	changedEdges := store.DirtySnapshot()
 	improvedEdges := trafficpropagation.ImprovedEdges(changedEdges)
 	if len(improvedEdges) > 0 {
@@ -51,7 +50,7 @@ func propagate(ctx context.Context, mgr *navigationmanager.Manager, store *traff
 
 func flagBetterRoutes(
 	ctx context.Context,
-	sessions []*navigationsession.Session,
+	sessions []*navigationsessions.Session,
 	improvedEdges []trafficstore.ChangedEdge,
 	store *trafficstore.Store,
 	g *model.Graph,
@@ -79,12 +78,12 @@ func flagBetterRoutes(
 				default:
 				}
 
-				start := int(next.Add(propagationBatchChunkSize) - propagationBatchChunkSize)
+				start := int(next.Add(navigation.PropagationBatchChunkSize) - navigation.PropagationBatchChunkSize)
 				if start >= len(sessions) {
 					return
 				}
 
-				end := start + propagationBatchChunkSize
+				end := start + navigation.PropagationBatchChunkSize
 				if end > len(sessions) {
 					end = len(sessions)
 				}
@@ -103,7 +102,7 @@ func flagBetterRoutes(
 	wg.Wait()
 }
 
-func broadcastSpeedUpdate(mgr *navigationmanager.Manager, edgeID model.EdgeID, recommendedSpeed float32) {
+func broadcastSpeedUpdate(mgr *navigationsessions.Manager, edgeID model.EdgeID, recommendedSpeed float32) {
 	edgeIDValue := uint32(edgeID)
 	recommendedSpeedValue := recommendedSpeed
 
@@ -113,7 +112,7 @@ func broadcastSpeedUpdate(mgr *navigationmanager.Manager, edgeID model.EdgeID, r
 			continue
 		}
 
-		_ = sess.Send(navigationsession.OutMsg{
+		_ = sess.Send(navigationsessions.OutMsg{
 			Type:                "speed_update",
 			EdgeID:              &edgeIDValue,
 			RecommendedSpeedKmh: &recommendedSpeedValue,
@@ -121,13 +120,13 @@ func broadcastSpeedUpdate(mgr *navigationmanager.Manager, edgeID model.EdgeID, r
 	}
 }
 
-func sessionHasConnection(s *navigationsession.Session) bool {
+func sessionHasConnection(s *navigationsessions.Session) bool {
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 	return s.Conn != nil
 }
 
-func flagBetterRouteIfHelpful(s *navigationsession.Session, improvedEdges []trafficstore.ChangedEdge, store *trafficstore.Store, g *model.Graph) {
+func flagBetterRouteIfHelpful(s *navigationsessions.Session, improvedEdges []trafficstore.ChangedEdge, store *trafficstore.Store, g *model.Graph) {
 	snapshot, ok := heuristicSnapshot(s, g)
 	if !ok {
 		return
@@ -163,7 +162,7 @@ func flagBetterRouteIfHelpful(s *navigationsession.Session, improvedEdges []traf
 	}
 }
 
-func heuristicSnapshot(s *navigationsession.Session, g *model.Graph) (heuristicSessionSnapshot, bool) {
+func heuristicSnapshot(s *navigationsessions.Session, g *model.Graph) (heuristicSessionSnapshot, bool) {
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 

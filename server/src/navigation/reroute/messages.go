@@ -2,13 +2,13 @@ package reroute
 
 import (
 	"nav-system/src/graph/model"
-	navigationsession "nav-system/src/navigation/session"
+	navigationsessions "nav-system/src/navigation/sessions"
 	"nav-system/src/routing"
 	trafficstore "nav-system/src/traffic/store"
 )
 
-func buildRoutePayload(route routing.Route) navigationsession.RoutePayload {
-	return navigationsession.RoutePayload{
+func buildRoutePayload(route routing.Route) navigationsessions.RoutePayload {
+	return navigationsessions.RoutePayload{
 		ID:              route.ID,
 		Steps:           route.Steps,
 		TotalDistM:      route.TotalDistM,
@@ -18,9 +18,9 @@ func buildRoutePayload(route routing.Route) navigationsession.RoutePayload {
 	}
 }
 
-func sendRerouteMessage(s *navigationsession.Session, route routing.Route, reason string, oldETA, newETA *float32) {
+func sendRerouteMessage(s *navigationsessions.Session, route routing.Route, reason string, oldETA, newETA *float32) {
 	payload := buildRoutePayload(route)
-	_ = s.Send(navigationsession.OutMsg{
+	_ = s.Send(navigationsessions.OutMsg{
 		Type:          "reroute",
 		Route:         &payload,
 		RerouteReason: &reason,
@@ -29,7 +29,7 @@ func sendRerouteMessage(s *navigationsession.Session, route routing.Route, reaso
 	})
 }
 
-func sendCurrentSpeedHints(s *navigationsession.Session, store *trafficstore.Store, g *model.Graph) {
+func sendCurrentSpeedHints(s *navigationsessions.Session, store *trafficstore.Store, g *model.Graph) {
 	for _, edgeID32 := range s.RemainingEdges() {
 		edgeID := model.EdgeID(edgeID32)
 		edge, ok := g.Edge(edgeID)
@@ -44,7 +44,7 @@ func sendCurrentSpeedHints(s *navigationsession.Session, store *trafficstore.Sto
 
 		edgeIDValue := uint32(edgeID)
 		recommendedValue := recommended
-		_ = s.Send(navigationsession.OutMsg{
+		_ = s.Send(navigationsessions.OutMsg{
 			Type:                "speed_update",
 			EdgeID:              &edgeIDValue,
 			RecommendedSpeedKmh: &recommendedValue,

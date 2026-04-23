@@ -1,4 +1,4 @@
-package session
+package sessions
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"nav-system/src/navigation"
 	"nav-system/src/routing"
 
 	"github.com/gorilla/websocket"
@@ -105,7 +106,7 @@ func (s *Session) WritePump(ctx context.Context, conn *websocket.Conn) {
 		case <-ctx.Done():
 			return
 		case msg := <-s.SendChan:
-			conn.SetWriteDeadline(time.Now().Add(sessionWriteTimeout))
+			conn.SetWriteDeadline(time.Now().Add(navigation.SessionWriteTimeout))
 			if err := conn.WriteJSON(msg); err != nil {
 				conn.Close()
 				return

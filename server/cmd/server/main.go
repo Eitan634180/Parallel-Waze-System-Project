@@ -16,8 +16,8 @@ import (
 
 	"nav-system/src/graph/model"
 	graphstore "nav-system/src/graph/store"
-	navigationmanager "nav-system/src/navigation/manager"
-	navigationmonitor "nav-system/src/navigation/monitor"
+	navigationsessions "nav-system/src/navigation/sessions"
+	navigationworkers "nav-system/src/navigation/workers"
 	"nav-system/src/routing"
 	"nav-system/src/simulation"
 	trafficcustomization "nav-system/src/traffic/customization"
@@ -68,7 +68,7 @@ func main() {
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
 	customizer := trafficcustomization.NewCustomizer(g)
-	mgr := navigationmanager.NewManager()
+	mgr := navigationsessions.NewManager()
 	router := routing.NewRouterWithMode(g, si, routingMode)
 	sim := simulation.NewManager(g, store, router, func() routing.WeightFunc {
 		return func(e *model.Edge) float32 {
@@ -93,7 +93,7 @@ func main() {
 	go trafficstore.Worker(ctx, store)
 	go customizer.Run(ctx, store)
 	go mgr.RunExpiry(ctx)
-	go navigationmonitor.RunPropagation(ctx, mgr, store, g)
+	go navigationworkers.RunPropagation(ctx, mgr, store, g)
 	go srv.RunOptimizationSweep(ctx)
 	go srv.RunRouteCacheGC(ctx)
 	go sim.Run(ctx)

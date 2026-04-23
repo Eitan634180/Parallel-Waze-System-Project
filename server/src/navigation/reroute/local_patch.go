@@ -3,11 +3,11 @@ package reroute
 import (
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	navigationsession "nav-system/src/navigation/session"
+	navigationsessions "nav-system/src/navigation/sessions"
 	trafficstore "nav-system/src/traffic/store"
 )
 
-func checkLocalRepairTriggerLocked(s *navigationsession.Session, store *trafficstore.Store, g *model.Graph) (bool, int, float32, bool) {
+func checkLocalRepairTriggerLocked(s *navigationsessions.Session, store *trafficstore.Store, g *model.Graph) (bool, int, float32, bool) {
 	start := s.StepIdx
 	if start < 1 {
 		start = 1

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"nav-system/src/graph"
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 )
@@ -112,7 +113,7 @@ func DetectBoundaryNodes(g *model.Graph) {
 		}
 	}
 
-	g.BoundaryBaseIdxs = make([]uint32, 0, boundaryNodeCapacityHint)
+	g.BoundaryBaseIdxs = make([]uint32, 0, graph.BoundaryNodeCapacityHint)
 	g.BoundaryNodeIdx = make([]int32, len(g.Nodes))
 	for i := range g.BoundaryNodeIdx {
 		g.BoundaryNodeIdx[i] = -1

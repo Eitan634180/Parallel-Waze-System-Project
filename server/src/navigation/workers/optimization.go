@@ -1,4 +1,4 @@
-package monitor
+package workers
 
 import (
 	"context"
@@ -7,10 +7,9 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	"nav-system/src/navigation/internal/routeutil"
-	navigationmanager "nav-system/src/navigation/manager"
+	navigationanalysis "nav-system/src/navigation/analysis"
 	navigationreroute "nav-system/src/navigation/reroute"
-	navigationsession "nav-system/src/navigation/session"
+	navigationsessions "nav-system/src/navigation/sessions"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
@@ -25,14 +24,14 @@ type optimizationContext struct {
 
 func RunOptimizationSweep(
 	ctx context.Context,
-	mgr *navigationmanager.Manager,
+	mgr *navigationsessions.Manager,
 	g *model.Graph,
 	store *trafficstore.Store,
 	router *routing.Router,
 	wf routing.WeightFunc,
 	prepareRoute func(routing.Route) routing.Route,
 ) {
-	jobs := make(chan *navigationsession.Session, optimizationJobBufferSize)
+	jobs := make(chan *navigationsessions.Session, navigation.OptimizationJobBufferSize)
 
 	for i := 0; i < navigation.OptimizationWorkerLimit; i++ {
 		go optimizationWorker(ctx, jobs, mgr, g, store, router, wf, prepareRoute)
@@ -55,8 +54,8 @@ func RunOptimizationSweep(
 
 func optimizationWorker(
 	ctx context.Context,
-	jobs <-chan *navigationsession.Session,
-	mgr *navigationmanager.Manager,
+	jobs <-chan *navigationsessions.Session,
+	mgr *navigationsessions.Manager,
 	g *model.Graph,
 	store *trafficstore.Store,
 	router *routing.Router,
@@ -102,7 +101,7 @@ func optimizationWorker(
 	}
 }
 
-func tryQueueOptimization(jobs chan<- *navigationsession.Session, sess *navigationsession.Session) {
+func tryQueueOptimization(jobs chan<- *navigationsessions.Session, sess *navigationsessions.Session) {
 	sess.Mu.Lock()
 	if !sess.CheckBetterRoute || sess.OptimizationQueued {
 		sess.Mu.Unlock()
@@ -121,7 +120,7 @@ func tryQueueOptimization(jobs chan<- *navigationsession.Session, sess *navigati
 	}
 }
 
-func beginOptimizationWork(sess *navigationsession.Session) bool {
+func beginOptimizationWork(sess *navigationsessions.Session) bool {
 	sess.Mu.Lock()
 	defer sess.Mu.Unlock()
 
@@ -134,14 +133,14 @@ func beginOptimizationWork(sess *navigationsession.Session) bool {
 	return true
 }
 
-func finishOptimizationWork(sess *navigationsession.Session) {
+func finishOptimizationWork(sess *navigationsessions.Session) {
 	sess.Mu.Lock()
 	sess.OptimizationQueued = false
 	sess.Mu.Unlock()
 }
 
 func optimizationCandidate(
-	s *navigationsession.Session,
+	s *navigationsessions.Session,
 	g *model.Graph,
 	store *trafficstore.Store,
 	router *routing.Router,
@@ -155,7 +154,7 @@ func optimizationCandidate(
 	}
 
 	context := optimizationContext{
-		oldETA:  routeutil.ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
+		oldETA:  navigationanalysis.ComputeETA(s.Route, s.StepIdx, s.LastLat, s.LastLon, g, store),
 		route:   s.Route,
 		stepIdx: s.StepIdx,
 		version: navigationreroute.SessionVersion{StepIdx: s.StepIdx, RouteRevision: s.RouteRevision},
@@ -176,7 +175,7 @@ func optimizationCandidate(
 	return context, routes[0], true
 }
 
-func shouldAcceptOptimizationCandidate(s *navigationsession.Session, candidate routing.Route, context optimizationContext, newETA float32) bool {
+func shouldAcceptOptimizationCandidate(s *navigationsessions.Session, candidate routing.Route, context optimizationContext, newETA float32) bool {
 	s.Mu.RLock()
 	tooSoon := time.Since(s.LastReroute) < navigation.RerouteCooldown
 	stale := s.StepIdx != context.version.StepIdx || s.RouteRevision != context.version.RouteRevision

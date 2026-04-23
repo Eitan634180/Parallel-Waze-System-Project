@@ -1,12 +1,11 @@
-package tracker
+package tracking
 
 import (
 	"time"
 
 	"nav-system/src/graph/model"
-	navigationmanager "nav-system/src/navigation/manager"
-	navigationmonitor "nav-system/src/navigation/monitor"
-	navigationsession "nav-system/src/navigation/session"
+	navigationanalysis "nav-system/src/navigation/analysis"
+	navigationsessions "nav-system/src/navigation/sessions"
 	"nav-system/src/routing"
 	"nav-system/src/routing/engine"
 	trafficstore "nav-system/src/traffic/store"
@@ -20,13 +19,13 @@ type EdgeObservation struct {
 type Tracker struct {
 	Graph        *model.Graph
 	Store        *trafficstore.Store
-	Manager      *navigationmanager.Manager
+	Manager      *navigationsessions.Manager
 	Router       *routing.Router
 	LiveWeights  func() routing.WeightFunc
 	PrepareRoute func(routing.Route) routing.Route
 }
 
-func (t *Tracker) CreateHeadless(route routing.Route, stepIdx int, lat, lon float64) *navigationsession.Session {
+func (t *Tracker) CreateHeadless(route routing.Route, stepIdx int, lat, lon float64) *navigationsessions.Session {
 	sess := t.Manager.CreateHeadless(route, stepIdx)
 	sess.Mu.Lock()
 	sess.LastLat = lat
@@ -36,7 +35,7 @@ func (t *Tracker) CreateHeadless(route routing.Route, stepIdx int, lat, lon floa
 	return sess
 }
 
-func (t *Tracker) InitializeEdge(sess *navigationsession.Session) {
+func (t *Tracker) InitializeEdge(sess *navigationsessions.Session) {
 	sess.Mu.Lock()
 	defer sess.Mu.Unlock()
 	if sess.CurrentEdgeID == nil {
@@ -49,7 +48,7 @@ func (t *Tracker) InitializeEdge(sess *navigationsession.Session) {
 	t.Store.EnterEdge(model.EdgeID(*sess.CurrentEdgeID))
 }
 
-func (t *Tracker) Destroy(sess *navigationsession.Session) {
+func (t *Tracker) Destroy(sess *navigationsessions.Session) {
 	sess.Mu.Lock()
 	currentEdgeID := sess.CurrentEdgeID
 	sess.CurrentEdgeID = nil
@@ -60,7 +59,7 @@ func (t *Tracker) Destroy(sess *navigationsession.Session) {
 	t.Manager.Delete(sess.ID)
 }
 
-func (t *Tracker) Advance(sess *navigationsession.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeObservation) {
+func (t *Tracker) Advance(sess *navigationsessions.Session, lat, lon float64, speedKmh float32, stepIdx int, edgeEvents []EdgeObservation) {
 	now := time.Now()
 	var advanceSessionID string
 	var advanceRoute routing.Route
@@ -115,7 +114,7 @@ func (t *Tracker) Advance(sess *navigationsession.Session, lat, lon float64, spe
 
 	t.recordCurrentEdgeSpeedSample(currentEdgeID, currentEdgeAt, now, speedKmh)
 
-	navigationmonitor.Check(
+	checkSession(
 		sess,
 		lat, lon,
 		t.Graph,
@@ -125,11 +124,11 @@ func (t *Tracker) Advance(sess *navigationsession.Session, lat, lon float64, spe
 		t.LiveWeights(),
 		t.PrepareRoute,
 	)
-	debug := navigationmonitor.DebugSnapshot(sess, speedKmh)
-	_ = sess.Send(navigationsession.OutMsg{Type: "debug_update", Debug: &debug})
+	debug := navigationanalysis.DebugSnapshot(sess, speedKmh)
+	_ = sess.Send(navigationsessions.OutMsg{Type: "debug_update", Debug: &debug})
 }
 
-func (t *Tracker) SendInitialSpeedUpdates(sess *navigationsession.Session) {
+func (t *Tracker) SendInitialSpeedUpdates(sess *navigationsessions.Session) {
 	for _, edgeID32 := range sess.RemainingEdges() {
 		eid := model.EdgeID(edgeID32)
 		edge, ok := t.Graph.Edge(eid)
@@ -142,7 +141,7 @@ func (t *Tracker) SendInitialSpeedUpdates(sess *navigationsession.Session) {
 		}
 		edgeIDVal := uint32(eid)
 		recSpeedVal := recSpeed
-		_ = sess.Send(navigationsession.OutMsg{
+		_ = sess.Send(navigationsessions.OutMsg{
 			Type:                "speed_update",
 			EdgeID:              &edgeIDVal,
 			RecommendedSpeedKmh: &recSpeedVal,

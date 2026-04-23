@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"nav-system/src/graph/model"
-	navigationmanager "nav-system/src/navigation/manager"
-	navigationmonitor "nav-system/src/navigation/monitor"
-	navigationtracker "nav-system/src/navigation/tracker"
+	navigationsessions "nav-system/src/navigation/sessions"
+	navigationtracking "nav-system/src/navigation/tracking"
+	navigationworkers "nav-system/src/navigation/workers"
 	"nav-system/src/routing"
 	"nav-system/src/simulation"
 	trafficstore "nav-system/src/traffic/store"
@@ -20,7 +20,7 @@ import (
 type Server struct {
 	g      *model.Graph
 	store  *trafficstore.Store
-	mgr    *navigationmanager.Manager
+	mgr    *navigationsessions.Manager
 	router *routing.Router
 	sim    *simulation.Manager
 
@@ -39,7 +39,7 @@ type Server struct {
 func NewServer(
 	g *model.Graph,
 	store *trafficstore.Store,
-	mgr *navigationmanager.Manager,
+	mgr *navigationsessions.Manager,
 	router *routing.Router,
 	sim *simulation.Manager,
 ) *Server {
@@ -79,7 +79,7 @@ func NewServer(
 	s.sessions = &handlers.SessionHandler{
 		Manager:    mgr,
 		RouteCache: s.routeCache,
-		Tracker: &navigationtracker.Tracker{
+		Tracker: &navigationtracking.Tracker{
 			Graph:        g,
 			Store:        store,
 			Manager:      mgr,
@@ -125,7 +125,7 @@ func (s *Server) liveWeightFunc() routing.WeightFunc {
 }
 
 func (s *Server) RunOptimizationSweep(ctx context.Context) {
-	navigationmonitor.RunOptimizationSweep(ctx, s.mgr, s.g, s.store, s.router, s.liveWeightFunc(), s.routeCache.Store)
+	navigationworkers.RunOptimizationSweep(ctx, s.mgr, s.g, s.store, s.router, s.liveWeightFunc(), s.routeCache.Store)
 }
 
 func (s *Server) RunRouteCacheGC(ctx context.Context) {

@@ -1,4 +1,4 @@
-package routeutil
+package analysis
 
 import (
 	"nav-system/src/graph/model"

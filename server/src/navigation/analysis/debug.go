@@ -1,10 +1,11 @@
-package monitor
+package analysis
 
 import (
-	navigationsession "nav-system/src/navigation/session"
+	"nav-system/src/navigation"
+	navigationsessions "nav-system/src/navigation/sessions"
 )
 
-func DebugSnapshot(s *navigationsession.Session, speedKmh float32) navigationsession.NavigationDebug {
+func DebugSnapshot(s *navigationsessions.Session, speedKmh float32) navigationsessions.NavigationDebug {
 	s.Mu.RLock()
 	defer s.Mu.RUnlock()
 
@@ -14,12 +15,12 @@ func DebugSnapshot(s *navigationsession.Session, speedKmh float32) navigationses
 		currentEdgeID = &edgeID
 	}
 
-	debug := navigationsession.NavigationDebug{
+	debug := navigationsessions.NavigationDebug{
 		SessionID:          s.ID,
 		StepIndex:          s.StepIdx,
 		CurrentEdgeID:      currentEdgeID,
 		OffRouteDistanceM:  s.LastOffRouteDistanceM,
-		OffRouteThresholdM: offRouteDistM,
+		OffRouteThresholdM: navigation.OffRouteDistanceM,
 		OffRouteViolations: s.OffRouteViolations,
 		CongestionAhead:    s.LastCongestionAhead,
 		CongestedEdges:     s.LastCongestedEdges,
