@@ -49,12 +49,6 @@ func SaveGraph(g *model.Graph, dir string) error {
 		return nil
 	})
 	eg.Go(func() error {
-		if err := saveBoundary(g, filepath.Join(dir, boundaryFileName)); err != nil {
-			return fmt.Errorf("boundary: %w", err)
-		}
-		return nil
-	})
-	eg.Go(func() error {
 		if err := saveOverlayAdj(g, filepath.Join(dir, overlayAdjFileName)); err != nil {
 			return fmt.Errorf("overlay_adj: %w", err)
 		}
@@ -88,7 +82,7 @@ func saveNodes(g *model.Graph, path string) error {
 	}
 	for i := range g.Nodes {
 		n := &g.Nodes[i]
-		if err := writeFixed(bw, nodeBin{n.ID, n.Lat, n.Lon, n.X, n.Y, n.CellID}); err != nil {
+		if err := writeFixed(bw, nodeBin{n.Lat, n.Lon, n.X, n.Y, n.CellID}); err != nil {
 			return err
 		}
 	}
@@ -115,7 +109,6 @@ func saveEdges(g *model.Graph, path string) error {
 			BaseWeight:  e.BaseWeight,
 			DistanceM:   e.DistanceM,
 			SpeedKmh:    e.SpeedKmh,
-			RoadClass:   e.RoadClass,
 			Flags:       e.Flags,
 		}); err != nil {
 			return err
@@ -164,9 +157,6 @@ func saveCells(g *model.Graph, path string) error {
 	}
 	for i := range g.Cells {
 		c := &g.Cells[i]
-		if err := writeUint32(bw, c.ID); err != nil {
-			return err
-		}
 		if err := writeUint32(bw, uint32(len(c.BoundaryNodeIdxs))); err != nil {
 			return err
 		}
@@ -174,25 +164,6 @@ func saveCells(g *model.Graph, path string) error {
 			if err := writeUint32(bw, idx); err != nil {
 				return err
 			}
-		}
-	}
-	return bw.Flush()
-}
-
-func saveBoundary(g *model.Graph, path string) error {
-	f, err := createFile(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
-
-	if err := writeHeader(bw, uint64(len(g.BoundaryBaseIdxs))); err != nil {
-		return err
-	}
-	for _, idx := range g.BoundaryBaseIdxs {
-		if err := writeUint32(bw, idx); err != nil {
-			return err
 		}
 	}
 	return bw.Flush()
@@ -218,14 +189,11 @@ func saveOverlayAdj(g *model.Graph, path string) error {
 		return err
 	}
 	for _, e := range g.Overlay.OverlayEdges {
-		cc := crossCellFalse
-		if e.IsCrossCell {
-			cc = crossCellTrue
-		}
-		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeIdx, e.ToNodeIdx, e.Weight, e.DistanceM, cc, [3]byte{}}); err != nil {
+		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeIdx, e.ToNodeIdx, e.Weight}); err != nil {
 			return err
 		}
 	}
+
 	return bw.Flush()
 }
 

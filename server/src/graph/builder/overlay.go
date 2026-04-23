@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"nav-system/src/graph"
 	"nav-system/src/graph/model"
 	"nav-system/src/utilities"
 )
@@ -36,7 +35,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		go func() {
 			defer wg.Done()
 			for ci := range jobs {
-				results <- cellResult{edges: computeCellOverlayEdges(g, &g.Cells[ci], cellNodes[ci])}
+				results <- cellResult{edges: computeCellOverlayEdges(g, model.CellID(ci), &g.Cells[ci], cellNodes[ci])}
 			}
 		}()
 	}
@@ -52,7 +51,14 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		close(results)
 	}()
 
-	adjFrom := make([][]model.OverlayEdge, len(g.BoundaryBaseIdxs))
+	boundaryCount := 0
+	for _, bIdx := range g.BoundaryNodeIdx {
+		if bIdx != -1 {
+			boundaryCount++
+		}
+	}
+
+	adjFrom := make([][]model.OverlayEdge, boundaryCount)
 	totalEdges := 0
 	for result := range results {
 		for _, edge := range result.edges {
@@ -65,20 +71,20 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		}
 	}
 
-	offsets := make([]uint32, len(g.BoundaryBaseIdxs)+1)
+	offsets := make([]uint32, boundaryCount+1)
 	edges := make([]model.OverlayEdge, 0, totalEdges)
 	for i, neighbours := range adjFrom {
 		offsets[i] = uint32(len(edges))
 		edges = append(edges, neighbours...)
 	}
-	offsets[len(g.BoundaryBaseIdxs)] = uint32(len(edges))
+	offsets[boundaryCount] = uint32(len(edges))
 
 	g.Overlay = model.OverlayGraph{Mu: &sync.RWMutex{}, Offsets: offsets, OverlayEdges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
 		cellBuilderLogPrefix,
 		totalEdges,
-		countCrossCell(edges),
-		totalEdges-countCrossCell(edges),
+		countCrossCell(g, edges),
+		totalEdges-countCrossCell(g, edges),
 	)
 
 	return elapsed
@@ -113,34 +119,33 @@ func DetectBoundaryNodes(g *model.Graph) {
 		}
 	}
 
-	g.BoundaryBaseIdxs = make([]uint32, 0, graph.BoundaryNodeCapacityHint)
 	g.BoundaryNodeIdx = make([]int32, len(g.Nodes))
 	for i := range g.BoundaryNodeIdx {
 		g.BoundaryNodeIdx[i] = -1
 	}
 	cellBoundary := make(map[model.CellID][]uint32)
 
+	boundaryCount := 0
 	for i, node := range g.Nodes {
 		if !isBoundary[i] {
 			continue
 		}
-		bIdx := uint32(len(g.BoundaryBaseIdxs))
-		g.BoundaryBaseIdxs = append(g.BoundaryBaseIdxs, uint32(i))
-		g.BoundaryNodeIdx[i] = int32(bIdx)
+		g.BoundaryNodeIdx[i] = int32(boundaryCount)
+		boundaryCount++
 		cellBoundary[node.CellID] = append(cellBoundary[node.CellID], uint32(i))
 	}
 
 	for i := range g.Cells {
-		g.Cells[i].BoundaryNodeIdxs = cellBoundary[g.Cells[i].ID]
+		g.Cells[i].BoundaryNodeIdxs = cellBoundary[model.CellID(i)]
 	}
 
-	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, len(g.BoundaryBaseIdxs))
+	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, boundaryCount)
 }
 
-func countCrossCell(edges []model.OverlayEdge) int {
+func countCrossCell(g *model.Graph, edges []model.OverlayEdge) int {
 	n := 0
 	for _, e := range edges {
-		if e.IsCrossCell {
+		if g.Nodes[e.FromNodeIdx].CellID != g.Nodes[e.ToNodeIdx].CellID {
 			n++
 		}
 	}
@@ -148,7 +153,7 @@ func countCrossCell(edges []model.OverlayEdge) int {
 }
 
 // computeCellOverlayEdges emits cross-cell edges and intra-cell shortcuts for one cell.
-func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []uint32) []model.OverlayEdge {
+func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Cell, cellNodeIdxs []uint32) []model.OverlayEdge {
 	var result []model.OverlayEdge
 
 	for _, fromIdx := range cell.BoundaryNodeIdxs {
@@ -160,7 +165,7 @@ func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []ui
 			e := &g.Edges[eid]
 			toIdx := e.ToNodeIdx
 
-			if g.Nodes[toIdx].CellID == cell.ID {
+			if g.Nodes[toIdx].CellID == cellID {
 				continue
 			}
 			if g.BoundaryNodeIdx[toIdx] == -1 {
@@ -170,8 +175,6 @@ func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []ui
 				FromNodeIdx: fromIdx,
 				ToNodeIdx:   toIdx,
 				Weight:      e.BaseWeight,
-				DistanceM:   e.DistanceM,
-				IsCrossCell: true,
 			})
 		}
 	}
@@ -199,8 +202,6 @@ func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []ui
 				FromNodeIdx: srcIdx,
 				ToNodeIdx:   dstIdx,
 				Weight:      d.weight,
-				DistanceM:   d.distM,
-				IsCrossCell: false,
 			})
 		}
 	}
@@ -210,14 +211,13 @@ func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []ui
 
 type distInfo struct {
 	weight float32
-	distM  float32
 }
 
 // cellDijkstra runs Dijkstra inside one cell and returns settled boundary
 // distances from the source boundary node.
 func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell []bool) map[uint32]distInfo {
 	dist := make(map[uint32]distInfo)
-	dist[srcIdx] = distInfo{0, 0}
+	dist[srcIdx] = distInfo{0}
 	targetSet := make(map[uint32]struct{}, len(boundaryNodes))
 	for _, idx := range boundaryNodes {
 		targetSet[idx] = struct{}{}
@@ -253,9 +253,8 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell 
 				continue
 			}
 			newW := best.weight + e.BaseWeight
-			newD := best.distM + e.DistanceM
 			if existing, hasDist := dist[toIdx]; !hasDist || newW < existing.weight {
-				dist[toIdx] = distInfo{newW, newD}
+				dist[toIdx] = distInfo{newW}
 				pq.Push(dijkstraItem{idx: toIdx, weight: newW})
 			}
 		}

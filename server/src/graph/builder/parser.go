@@ -14,9 +14,12 @@ import (
 	"github.com/paulmach/osm/osmpbf"
 )
 
+// NodeRawID is an OSM node ID.
+type NodeRawID = uint64
+
 // RawNode holds the coordinates of an input node referenced by at least one routable way.
 type RawNode struct {
-	ID  uint64
+	ID  NodeRawID
 	Lat float64
 	Lon float64
 }
@@ -24,7 +27,7 @@ type RawNode struct {
 // RawWay holds the parsed fields of an input way relevant for routing.
 type RawWay struct {
 	ID        uint64
-	NodeRefs  []uint64
+	NodeRefs  []NodeRawID
 	RoadClass uint8
 	IsOneWay  bool
 	MaxSpeed  float32 // 0 means "use default for road class"
@@ -32,7 +35,7 @@ type RawWay struct {
 
 // ParseResult is the normalized graph-building input produced by source parsers.
 type ParseResult struct {
-	Nodes map[uint64]*RawNode // keyed by source node ID
+	Nodes map[NodeRawID]*RawNode // keyed by source node ID
 	Ways  []*RawWay
 }
 

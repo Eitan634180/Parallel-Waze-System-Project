@@ -50,7 +50,7 @@ func PartitionCells(g *model.Graph, maxCellSize int) {
 			for _, idx := range nodeIdxs {
 				cellAssign[idx] = cid
 			}
-			g.Cells = append(g.Cells, model.Cell{ID: cid})
+			g.Cells = append(g.Cells, model.Cell{})
 			mu.Unlock()
 			return
 		}

@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '..', '..');
 const serverDir = path.join(root, 'server');
 
-const requiredGraphFiles = ['nodes.bin', 'edges.bin', 'base_adj.bin', 'cells.bin', 'boundary.bin', 'overlay_adj.bin'];
+const requiredGraphFiles = ['nodes.bin', 'edges.bin', 'base_adj.bin', 'cells.bin', 'overlay_adj.bin'];
 
 
 

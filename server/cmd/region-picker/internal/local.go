@@ -14,7 +14,6 @@ var requiredBinFiles = []string{
 	"edges.bin",
 	"base_adj.bin",
 	"cells.bin",
-	"boundary.bin",
 	"overlay_adj.bin",
 }
 

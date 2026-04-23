@@ -15,9 +15,9 @@ import (
 const graphBuilderLogPrefix = "graph-builder:"
 
 // BuildBaseGraph constructs the base graph from parsed OSM nodes and ways.
-func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
+func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error) {
 	g := &model.Graph{}
-	nodeIdx := make(map[model.NodeRawID]uint32, len(pr.Nodes))
+	nodeIdx := make(map[NodeRawID]uint32, len(pr.Nodes))
 
 	log.Printf("%s building nodes", graphBuilderLogPrefix)
 
@@ -26,7 +26,6 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 		idx := uint32(len(g.Nodes))
 		nodeIdx[rn.ID] = idx
 		g.Nodes = append(g.Nodes, model.Node{
-			ID:  rn.ID,
 			Lat: rn.Lat,
 			Lon: rn.Lon,
 		})
@@ -64,7 +63,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 		log.Printf("%s building base adjacency", graphBuilderLogPrefix)
 		g.Base = buildCSR(adjTmp, len(g.Edges))
 		log.Printf("%s base adjacency ready", graphBuilderLogPrefix)
-		return g, nil
+		return g, nodeIdx, nil
 	}
 	if workerCount > len(pr.Ways) {
 		workerCount = len(pr.Ways)
@@ -125,7 +124,6 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 							BaseWeight:  weightSec,
 							DistanceM:   distM,
 							SpeedKmh:    speedKmh,
-							RoadClass:   rw.RoadClass,
 							Flags:       flags,
 						},
 					})
@@ -139,7 +137,6 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 								BaseWeight:  weightSec,
 								DistanceM:   distM,
 								SpeedKmh:    speedKmh,
-								RoadClass:   rw.RoadClass,
 								Flags:       flags,
 							},
 						})
@@ -172,7 +169,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 	g.Base = buildCSR(adjTmp, len(g.Edges))
 	log.Printf("%s base adjacency ready", graphBuilderLogPrefix)
 
-	return g, nil
+	return g, nodeIdx, nil
 }
 
 // buildCSR converts per-node edge slices into a CSR adjacency list.

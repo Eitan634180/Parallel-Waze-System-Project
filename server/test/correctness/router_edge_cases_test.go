@@ -89,7 +89,7 @@ func TestTrafficCongestedEdgeRaisesLiveWeight(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
 	store := trafficstore.NewStore()
 
-	edgeID := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
+	edgeID := testutil.FindEdgeID(t, fixture, 2, 4)
 	baseWeight := fixture.Graph.Edges[edgeID].BaseWeight
 
 	// Record 50 observations at 5× the base time to saturate the EWMA.
@@ -161,7 +161,7 @@ func TestRouteDistanceIsPositive(t *testing.T) {
 func TestRouterRespectsOneWayDetours(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "one_way_detour_graph.json", 2)
 	routeCases := testutil.LoadRouteCases(t, "one_way_detour_cases.json")
-	nodeIdx := fixture.Graph.BuildNodeIdxMap()
+	nodeIdx := fixture.NodeIdx
 
 	reverseCase := routeCases[1]
 	routes := fixture.Router.Compute(

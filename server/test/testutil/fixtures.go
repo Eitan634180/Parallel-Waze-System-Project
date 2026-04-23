@@ -43,9 +43,10 @@ type RouteCase struct {
 }
 
 type BuiltGraphFixture struct {
-	Graph  *model.Graph
-	Snap   *routingengine.SnapIndex
-	Router *routingengine.Router
+	Graph   *model.Graph
+	Snap    *routingengine.SnapIndex
+	Router  *routingengine.Router
+	NodeIdx map[builder.NodeRawID]uint32
 }
 
 type ServerFixture struct {
@@ -82,10 +83,10 @@ func LoadParseResultFixture(tb testing.TB, name string) *builder.ParseResult {
 	tb.Helper()
 
 	fixture := loadJSONFixture[graphFixture](tb, filepath.Join(testdataRoot(), "synthetic", name))
-	nodes := make(map[uint64]*builder.RawNode, len(fixture.Nodes))
+	nodes := make(map[builder.NodeRawID]*builder.RawNode, len(fixture.Nodes))
 	for _, node := range fixture.Nodes {
-		nodes[node.ID] = &builder.RawNode{
-			ID:  node.ID,
+		nodes[builder.NodeRawID(node.ID)] = &builder.RawNode{
+			ID:  builder.NodeRawID(node.ID),
 			Lat: node.Lat,
 			Lon: node.Lon,
 		}
@@ -93,7 +94,10 @@ func LoadParseResultFixture(tb testing.TB, name string) *builder.ParseResult {
 
 	ways := make([]*builder.RawWay, 0, len(fixture.Ways))
 	for _, way := range fixture.Ways {
-		refs := append([]uint64(nil), way.NodeRefs...)
+		refs := make([]builder.NodeRawID, len(way.NodeRefs))
+		for i, ref := range way.NodeRefs {
+			refs[i] = builder.NodeRawID(ref)
+		}
 		ways = append(ways, &builder.RawWay{
 			ID:        way.ID,
 			NodeRefs:  refs,
@@ -118,7 +122,7 @@ func BuildGraphFixture(tb testing.TB, graphName string, maxCellSize int) *BuiltG
 	tb.Helper()
 
 	parseResult := LoadParseResultFixture(tb, graphName)
-	g, err := builder.BuildBaseGraph(parseResult)
+	g, nodeIdx, err := builder.BuildBaseGraph(parseResult)
 	if err != nil {
 		tb.Fatalf("BuildGraph(%s): %v", graphName, err)
 	}
@@ -129,9 +133,10 @@ func BuildGraphFixture(tb testing.TB, graphName string, maxCellSize int) *BuiltG
 
 	snap := routingengine.BuildSnapIndex(g)
 	return &BuiltGraphFixture{
-		Graph:  g,
-		Snap:   snap,
-		Router: routingengine.NewRouter(g, snap),
+		Graph:   g,
+		Snap:    snap,
+		Router:  routingengine.NewRouter(g, snap),
+		NodeIdx: nodeIdx,
 	}
 }
 
@@ -162,21 +167,20 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 	}
 }
 
-func FindEdgeID(tb testing.TB, g *model.Graph, fromID, toID model.NodeRawID) model.EdgeID {
+func FindEdgeID(tb testing.TB, fixture *BuiltGraphFixture, fromID, toID builder.NodeRawID) model.EdgeID {
 	tb.Helper()
 
-	nodeIdx := g.BuildNodeIdxMap()
-	fromIdx, ok := nodeIdx[fromID]
+	fromIdx, ok := fixture.NodeIdx[fromID]
 	if !ok {
 		tb.Fatalf("from node %d not found", fromID)
 	}
-	toIdx, ok := nodeIdx[toID]
+	toIdx, ok := fixture.NodeIdx[toID]
 	if !ok {
 		tb.Fatalf("to node %d not found", toID)
 	}
 
-	for _, edgeID := range g.Base.Neighbours(fromIdx) {
-		if g.Edges[edgeID].ToNodeIdx == toIdx {
+	for _, edgeID := range fixture.Graph.Base.Neighbours(fromIdx) {
+		if fixture.Graph.Edges[edgeID].ToNodeIdx == toIdx {
 			return edgeID
 		}
 	}

@@ -13,7 +13,7 @@ func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	store := trafficstore.NewStoreWithCapacity(len(fixture.Graph.Edges))
 	customizer := trafficstore.NewCustomizer(fixture.Graph)
 
-	congestedEdge := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
+	congestedEdge := testutil.FindEdgeID(t, fixture, 2, 4)
 	baseWeight := fixture.Graph.Edges[congestedEdge].BaseWeight
 	store.RecordObservation(congestedEdge, baseWeight*40, baseWeight)
 	customizer.Customize(store)
@@ -36,8 +36,7 @@ func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	}
 
 	testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, liveWeight)
-	nodeIdx := fixture.Graph.BuildNodeIdxMap()
-	if len(routes[0].Steps) < 3 || routes[0].Steps[1].NodeIdx != nodeIdx[3] {
+	if len(routes[0].Steps) < 3 || routes[0].Steps[1].NodeIdx != fixture.NodeIdx[3] {
 		t.Fatalf("expected congestion to divert route through node 3, got %+v", routes[0].Steps)
 	}
 }

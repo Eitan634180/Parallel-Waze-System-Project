@@ -11,8 +11,7 @@ type Graph struct {
 	Base    BaseGraph
 	Overlay OverlayGraph
 
-	BoundaryNodeIdx  []int32
-	BoundaryBaseIdxs []uint32
+	BoundaryNodeIdx []int32
 
 	BBox             BoundingBox
 	ProjectionRefLat float64
@@ -41,16 +40,8 @@ func (o *OverlayGraph) Neighbours(idx uint32) []OverlayEdge {
 	return o.OverlayEdges[o.Offsets[idx]:o.Offsets[idx+1]]
 }
 
-// BuildNodeIdxMap returns a map from OSM NodeID to internal node index.
-func (g *Graph) BuildNodeIdxMap() map[NodeRawID]uint32 {
-	m := make(map[NodeRawID]uint32, len(g.Nodes))
-	for i, n := range g.Nodes {
-		m[n.ID] = uint32(i)
-	}
-	return m
-}
-
 func (g *Graph) Edge(id EdgeID) (*Edge, bool) {
+
 	if int(id) < 0 || int(id) >= len(g.Edges) {
 		return nil, false
 	}

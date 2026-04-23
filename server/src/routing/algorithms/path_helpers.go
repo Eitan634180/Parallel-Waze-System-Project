@@ -39,15 +39,8 @@ func walkOverlayBack(
 
 		prevIdx := predecessor.PrevNodeIdx
 
-		g.Overlay.Mu.RLock()
-		if int(predecessor.EdgeIdx) >= len(g.Overlay.OverlayEdges) {
-			g.Overlay.Mu.RUnlock()
-			return nil, ^uint32(0)
-		}
-		overlayEdge := g.Overlay.OverlayEdges[predecessor.EdgeIdx]
-		g.Overlay.Mu.RUnlock()
 
-		if overlayEdge.IsCrossCell {
+		if g.Nodes[prevIdx].CellID != g.Nodes[current].CellID {
 			edgeID, _, timeSec := baseEdgeBetween(g, prevIdx, current, wf)
 			steps = append(steps, nodeToStep(g, current, edgeID, g.Edges[edgeID].DistanceM, timeSec))
 		} else {

@@ -59,7 +59,7 @@ func main() {
 		serverLogPrefix,
 		time.Since(t).Round(time.Millisecond),
 		len(g.Nodes), len(g.Edges), len(g.Cells),
-		len(g.BoundaryBaseIdxs), len(g.Overlay.OverlayEdges))
+		len(g.Overlay.Offsets)-1, len(g.Overlay.OverlayEdges))
 
 	log.Printf("%s building snap index", serverLogPrefix)
 	t = time.Now()

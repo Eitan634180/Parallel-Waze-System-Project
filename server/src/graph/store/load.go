@@ -61,14 +61,6 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		return nil
 	})
 
-	eg.Go(func() error {
-		boundaryBaseIdxs, err := loadBoundary(filepath.Join(dir, boundaryFileName))
-		if err != nil {
-			return fmt.Errorf("boundary: %w", err)
-		}
-		g.BoundaryBaseIdxs = boundaryBaseIdxs
-		return nil
-	})
 
 	eg.Go(func() error {
 		overlayAdj, err := loadOverlayAdj(filepath.Join(dir, overlayAdjFileName))
@@ -94,8 +86,21 @@ func LoadGraph(dir string) (*model.Graph, error) {
 	for i := range g.BoundaryNodeIdx {
 		g.BoundaryNodeIdx[i] = -1
 	}
-	for i, idx := range g.BoundaryBaseIdxs {
-		g.BoundaryNodeIdx[idx] = int32(i)
+	
+	boundaryCount := 0
+	for i := range g.Nodes {
+		fromCellID := g.Nodes[i].CellID
+		isBoundary := false
+		for _, eid := range g.Base.Neighbours(uint32(i)) {
+			if g.Nodes[g.Edges[eid].ToNodeIdx].CellID != fromCellID {
+				isBoundary = true
+				break
+			}
+		}
+		if isBoundary {
+			g.BoundaryNodeIdx[i] = int32(boundaryCount)
+			boundaryCount++
+		}
 	}
 
 	if g.BBox.IsZero() {
@@ -110,7 +115,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		len(g.Nodes),
 		len(g.Edges),
 		len(g.Cells),
-		len(g.BoundaryBaseIdxs),
+		len(g.Overlay.Offsets)-1,
 		len(g.Overlay.OverlayEdges),
 	)
 	return g, nil
@@ -130,7 +135,7 @@ func loadNodes(path string) ([]model.Node, error) {
 		if err := binary.Read(br, le, &b); err != nil {
 			return nil, err
 		}
-		nodes[i] = model.Node{ID: b.ID, Lat: b.Lat, Lon: b.Lon, X: b.X, Y: b.Y, CellID: b.CellID}
+		nodes[i] = model.Node{Lat: b.Lat, Lon: b.Lon, X: b.X, Y: b.Y, CellID: b.CellID}
 	}
 	return nodes, nil
 }
@@ -156,9 +161,9 @@ func loadEdges(path string) ([]model.Edge, error) {
 			BaseWeight:  b.BaseWeight,
 			DistanceM:   b.DistanceM,
 			SpeedKmh:    b.SpeedKmh,
-			RoadClass:   b.RoadClass,
 			Flags:       b.Flags,
 		}
+
 	}
 	return edges, nil
 }
@@ -205,10 +210,6 @@ func loadCells(path string) ([]model.Cell, error) {
 
 	cells := make([]model.Cell, count)
 	for i := range cells {
-		id, err := readUint32(br)
-		if err != nil {
-			return nil, err
-		}
 		bc, err := readUint32(br)
 		if err != nil {
 			return nil, err
@@ -221,29 +222,11 @@ func loadCells(path string) ([]model.Cell, error) {
 			}
 			boundary[j] = v
 		}
-		cells[i] = model.Cell{ID: id, BoundaryNodeIdxs: boundary}
+		cells[i] = model.Cell{BoundaryNodeIdxs: boundary}
 	}
 	return cells, nil
 }
 
-func loadBoundary(path string) ([]uint32, error) {
-	f, count, err := openFile(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	br := bufio.NewReaderSize(f, graph.FileBufferSize)
-
-	nodes := make([]uint32, count)
-	for i := range nodes {
-		v, err := readUint32(br)
-		if err != nil {
-			return nil, err
-		}
-		nodes[i] = v
-	}
-	return nodes, nil
-}
 
 func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 	f, offsetCount, err := openFile(path)
@@ -276,9 +259,9 @@ func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 			FromNodeIdx: b.FromNodeIdx,
 			ToNodeIdx:   b.ToNodeIdx,
 			Weight:      b.Weight,
-			DistanceM:   b.DistanceM,
-			IsCrossCell: b.IsCrossCell != 0,
 		}
+
+
 	}
 	return model.OverlayGraph{
 		Mu:           &sync.RWMutex{},

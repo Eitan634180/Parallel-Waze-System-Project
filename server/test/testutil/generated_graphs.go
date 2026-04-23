@@ -12,8 +12,8 @@ import (
 
 type GeneratedQuery struct {
 	Name      string
-	SrcNodeID model.NodeRawID
-	DstNodeID model.NodeRawID
+	SrcNodeID builder.NodeRawID
+	DstNodeID builder.NodeRawID
 }
 
 type GeneratedWeightedFixture struct {
@@ -21,7 +21,8 @@ type GeneratedWeightedFixture struct {
 	Snap       *routingengine.SnapIndex
 	Router     *routingengine.Router
 	WeightFunc routingengine.WeightFunc
-	NodeIDs    []model.NodeRawID
+	NodeIDs    []builder.NodeRawID
+	NodeIdx    map[builder.NodeRawID]uint32
 	Queries    []GeneratedQuery
 }
 
@@ -77,7 +78,7 @@ func buildGeneratedCorridorFixture(tb testing.TB, spec generatedCorridorSpec) *G
 
 	rng := rand.New(rand.NewSource(spec.seed))
 	parseResult, nodeIDs := generatedGridParseResult(spec, rng)
-	g, err := builder.BuildBaseGraph(parseResult)
+	g, nodeIdx, err := builder.BuildBaseGraph(parseResult)
 	if err != nil {
 		tb.Fatalf("BuildGraph(seed=%d): %v", spec.seed, err)
 	}
@@ -97,13 +98,14 @@ func buildGeneratedCorridorFixture(tb testing.TB, spec generatedCorridorSpec) *G
 		Router:     routingengine.NewRouter(g, snap),
 		WeightFunc: wf,
 		NodeIDs:    nodeIDs,
+		NodeIdx:    nodeIdx,
 		Queries:    queries,
 	}
 }
 
-func generatedGridParseResult(spec generatedCorridorSpec, rng *rand.Rand) (*builder.ParseResult, []model.NodeRawID) {
-	nodes := make(map[uint64]*builder.RawNode, spec.width*spec.height)
-	nodeIDs := make([]model.NodeRawID, 0, spec.width*spec.height)
+func generatedGridParseResult(spec generatedCorridorSpec, rng *rand.Rand) (*builder.ParseResult, []builder.NodeRawID) {
+	nodes := make(map[builder.NodeRawID]*builder.RawNode, spec.width*spec.height)
+	nodeIDs := make([]builder.NodeRawID, 0, spec.width*spec.height)
 
 	const (
 		baseLat = 32.0
@@ -176,7 +178,7 @@ func generatedGridParseResult(spec generatedCorridorSpec, rng *rand.Rand) (*buil
 	}, nodeIDs
 }
 
-func generatedQueries(seed int64, nodeIDs []model.NodeRawID, queryCount int, rng *rand.Rand) []GeneratedQuery {
+func generatedQueries(seed int64, nodeIDs []builder.NodeRawID, queryCount int, rng *rand.Rand) []GeneratedQuery {
 	queries := make([]GeneratedQuery, 0, queryCount)
 	for i := 0; i < queryCount; i++ {
 		srcNode := nodeIDs[rng.Intn(len(nodeIDs))]
@@ -195,7 +197,7 @@ func generatedQueries(seed int64, nodeIDs []model.NodeRawID, queryCount int, rng
 	return queries
 }
 
-func ExhaustiveGeneratedQueries(nodeIDs []model.NodeRawID) []GeneratedQuery {
+func ExhaustiveGeneratedQueries(nodeIDs []builder.NodeRawID) []GeneratedQuery {
 	queries := make([]GeneratedQuery, 0, len(nodeIDs)*(len(nodeIDs)-1))
 	for _, srcNodeID := range nodeIDs {
 		for _, dstNodeID := range nodeIDs {

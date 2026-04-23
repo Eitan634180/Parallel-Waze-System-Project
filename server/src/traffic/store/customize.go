@@ -96,8 +96,8 @@ func (c *Customizer) Customize(store *Store) {
 	}
 
 	if coverage >= traffic.FullAffectedCellsDirtyCoverage {
-		for _, cell := range g.Cells {
-			affectedCellIDs = append(affectedCellIDs, cell.ID)
+		for i := range g.Cells {
+			affectedCellIDs = append(affectedCellIDs, model.CellID(i))
 		}
 	} else {
 		cellSeen := make([]bool, len(g.Cells))
@@ -286,7 +286,7 @@ func liveWeightFromSnapshot(weights []float32, id model.EdgeID, baseSec float32)
 func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	index := &customizationIndex{
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
-		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.BoundaryBaseIdxs)),
+		shortcutTargetsByBoundary:  make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
@@ -296,7 +296,7 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	defer g.Overlay.Mu.RUnlock()
 
 	for overlayEdgeIdx, overlayEdge := range g.Overlay.OverlayEdges {
-		if !overlayEdge.IsCrossCell {
+		if g.Nodes[overlayEdge.FromNodeIdx].CellID == g.Nodes[overlayEdge.ToNodeIdx].CellID {
 			fromBoundaryIdx := g.BoundaryNodeIdx[overlayEdge.FromNodeIdx]
 			if fromBoundaryIdx != -1 {
 				index.shortcutTargetsByBoundary[fromBoundaryIdx] = append(

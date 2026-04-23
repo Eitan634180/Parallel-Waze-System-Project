@@ -8,6 +8,7 @@ import (
 	routingengine "nav-system/src/routing/engine"
 	routingentities "nav-system/src/routing/entities"
 	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/graph/builder"
 	"nav-system/test/testutil"
 )
 
@@ -44,7 +45,7 @@ func TestGeneratedStaticCrossCellCorporaMatchOracleOnHierarchicalMode(t *testing
 			assertGeneratedFixtureMatchesOracle(
 				t,
 				fixture,
-				crossCellQueries(fixture.Graph, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
+				crossCellQueries(fixture, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
 				modes,
 				routingengine.BaseWeight,
 			)
@@ -85,7 +86,7 @@ func TestGeneratedDirectedCrossCellCorporaMatchOracleOnHierarchicalMode(t *testi
 			assertGeneratedFixtureMatchesOracle(
 				t,
 				fixture,
-				crossCellQueries(fixture.Graph, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
+				crossCellQueries(fixture, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
 				modes,
 				routingengine.BaseWeight,
 			)
@@ -150,7 +151,7 @@ func TestGeneratedTrafficCrossCellCorporaMatchOracleOnHierarchicalMode(t *testin
 			assertGeneratedFixtureMatchesOracle(
 				t,
 				fixture,
-				crossCellQueries(fixture.Graph, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
+				crossCellQueries(fixture, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
 				modes,
 				liveWeight,
 			)
@@ -195,7 +196,7 @@ func TestGeneratedLongCrossCellRoutesMatchOracle(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture, wf := tc.build(t)
 			modes := longPathModes(tc.name)
-			queries := longCrossCellQueries(fixture.Graph, fixture.NodeIDs, wf, 12, 48)
+			queries := longCrossCellQueries(fixture, fixture.NodeIDs, wf, 12, 48)
 			if len(queries) == 0 {
 				t.Fatal("expected long cross-cell queries")
 			}
@@ -213,10 +214,9 @@ func assertGeneratedFixtureMatchesOracle(
 ) {
 	t.Helper()
 
-	nodeIdx := fixture.Graph.BuildNodeIdxMap()
 	for _, query := range queries {
-		srcIdx := nodeIdx[query.SrcNodeID]
-		dstIdx := nodeIdx[query.DstNodeID]
+		srcIdx := fixture.NodeIdx[query.SrcNodeID]
+		dstIdx := fixture.NodeIdx[query.DstNodeID]
 
 		oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, wf)
 		for _, mode := range modes {
@@ -239,13 +239,12 @@ func assertGeneratedFixtureMatchesOracle(
 	}
 }
 
-func crossCellQueries(g *model.Graph, queries []testutil.GeneratedQuery) []testutil.GeneratedQuery {
-	nodeIdx := g.BuildNodeIdxMap()
+func crossCellQueries(fixture *testutil.GeneratedWeightedFixture, queries []testutil.GeneratedQuery) []testutil.GeneratedQuery {
 	filtered := make([]testutil.GeneratedQuery, 0, len(queries))
 	for _, query := range queries {
-		srcIdx := nodeIdx[query.SrcNodeID]
-		dstIdx := nodeIdx[query.DstNodeID]
-		if g.Nodes[srcIdx].CellID == g.Nodes[dstIdx].CellID {
+		srcIdx := fixture.NodeIdx[query.SrcNodeID]
+		dstIdx := fixture.NodeIdx[query.DstNodeID]
+		if fixture.Graph.Nodes[srcIdx].CellID == fixture.Graph.Nodes[dstIdx].CellID {
 			continue
 		}
 		filtered = append(filtered, query)
@@ -254,24 +253,23 @@ func crossCellQueries(g *model.Graph, queries []testutil.GeneratedQuery) []testu
 }
 
 func longCrossCellQueries(
-	g *model.Graph,
-	nodeIDs []model.NodeRawID,
+	fixture *testutil.GeneratedWeightedFixture,
+	nodeIDs []builder.NodeRawID,
 	wf routingengine.WeightFunc,
 	minEdges int,
 	limit int,
 ) []testutil.GeneratedQuery {
-	all := crossCellQueries(g, testutil.ExhaustiveGeneratedQueries(nodeIDs))
+	all := crossCellQueries(fixture, testutil.ExhaustiveGeneratedQueries(nodeIDs))
 	type scoredQuery struct {
 		query testutil.GeneratedQuery
 		edges int
 	}
 
-	nodeIdx := g.BuildNodeIdxMap()
 	scored := make([]scoredQuery, 0, len(all))
 	for _, query := range all {
-		srcIdx := nodeIdx[query.SrcNodeID]
-		dstIdx := nodeIdx[query.DstNodeID]
-		oracle, ok := testutil.ShortestPath(g, srcIdx, dstIdx, wf)
+		srcIdx := fixture.NodeIdx[query.SrcNodeID]
+		dstIdx := fixture.NodeIdx[query.DstNodeID]
+		oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, wf)
 		if !ok || len(oracle.EdgeIDs) < minEdges {
 			continue
 		}

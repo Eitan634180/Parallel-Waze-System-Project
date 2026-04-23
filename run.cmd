@@ -63,5 +63,5 @@ exit
 
 :ready
 if "%~1"=="" exit /b 1
-for %%F in (nodes edges base_adj cells boundary overlay_adj) do if not exist "%~1\%%F.bin" exit /b 1
+for %%F in (nodes edges base_adj cells overlay_adj) do if not exist "%~1\%%F.bin" exit /b 1
 exit /b 0

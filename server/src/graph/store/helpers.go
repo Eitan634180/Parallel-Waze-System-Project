@@ -11,13 +11,12 @@ import (
 
 const (
 	fileMagic   = "NAVI"
-	fileVersion = uint16(4)
+	fileVersion = uint16(11)
 
 	nodesFileName      = "nodes.bin"
 	edgesFileName      = "edges.bin"
 	baseAdjFileName    = "base_adj.bin"
 	cellsFileName      = "cells.bin"
-	boundaryFileName   = "boundary.bin"
 	overlayAdjFileName = "overlay_adj.bin"
 	metaFileName       = "meta.json"
 
@@ -31,7 +30,6 @@ const (
 var le = binary.LittleEndian
 
 type nodeBin struct {
-	ID     uint64
 	Lat    float64
 	Lon    float64
 	X      float32
@@ -46,18 +44,14 @@ type edgeBin struct {
 	BaseWeight  float32
 	DistanceM   float32
 	SpeedKmh    float32
-	RoadClass   uint8
 	Flags       uint8
-	Pad         [2]byte
+	Pad         [3]byte
 }
 
 type overlayEdgeBin struct {
 	FromNodeIdx uint32
 	ToNodeIdx   uint32
 	Weight      float32
-	DistanceM   float32
-	IsCrossCell uint8
-	Pad         [3]byte
 }
 
 type graphMeta struct {

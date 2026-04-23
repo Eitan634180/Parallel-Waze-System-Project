@@ -65,7 +65,7 @@ func main() {
 
 	log.Printf("%s building base graph", builderLogPrefix)
 	t = time.Now()
-	g, err := builder.BuildBaseGraph(pr)
+	g, _, err := builder.BuildBaseGraph(pr)
 	if err != nil {
 		log.Fatalf("BuildGraph: %v", err)
 	}
@@ -82,7 +82,7 @@ func main() {
 	t = time.Now()
 	builder.DetectBoundaryNodes(g)
 	log.Printf("%s boundary nodes ready in %s (%d nodes)",
-		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.BoundaryBaseIdxs))
+		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Overlay.Offsets)-1)
 
 	log.Printf("%s using GOMAXPROCS=%d", builderLogPrefix, parallelism)
 	log.Printf("%s building overlay graph", builderLogPrefix)
@@ -103,7 +103,7 @@ func main() {
 		len(g.Nodes),
 		len(g.Edges),
 		len(g.Cells),
-		len(g.BoundaryBaseIdxs),
+		len(g.Overlay.Offsets)-1,
 		len(g.Overlay.OverlayEdges),
 	)
 }
