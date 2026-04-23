@@ -153,7 +153,7 @@ func loadEdges(path string) ([]model.Edge, error) {
 			ID:          b.ID,
 			FromNodeIdx: b.FromNodeIdx,
 			ToNodeIdx:   b.ToNodeIdx,
-			Weight:      b.Weight,
+			BaseWeight:  b.BaseWeight,
 			DistanceM:   b.DistanceM,
 			SpeedKmh:    b.SpeedKmh,
 			RoadClass:   b.RoadClass,

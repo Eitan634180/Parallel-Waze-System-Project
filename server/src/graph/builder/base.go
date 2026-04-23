@@ -122,7 +122,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 						e: model.Edge{
 							FromNodeIdx: n1idx,
 							ToNodeIdx:   n2idx,
-							Weight:      weightSec,
+							BaseWeight:  weightSec,
 							DistanceM:   distM,
 							SpeedKmh:    speedKmh,
 							RoadClass:   rw.RoadClass,
@@ -136,7 +136,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 							e: model.Edge{
 								FromNodeIdx: n2idx,
 								ToNodeIdx:   n1idx,
-								Weight:      weightSec,
+								BaseWeight:  weightSec,
 								DistanceM:   distM,
 								SpeedKmh:    speedKmh,
 								RoadClass:   rw.RoadClass,

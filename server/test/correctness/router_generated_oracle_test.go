@@ -327,17 +327,17 @@ func applyGeneratedTraffic(t testing.TB, g *model.Graph) routingengine.WeightFun
 		edge := &g.Edges[edgeID]
 		switch edgeID % 4 {
 		case 0:
-			store.RecordObservation(edge.ID, edge.Weight*1.35, edge.Weight)
+			store.RecordObservation(edge.ID, edge.BaseWeight*1.35, edge.BaseWeight)
 		case 1:
-			store.RecordObservation(edge.ID, edge.Weight*1.8, edge.Weight)
+			store.RecordObservation(edge.ID, edge.BaseWeight*1.8, edge.BaseWeight)
 		case 2:
-			store.RecordObservation(edge.ID, edge.Weight*2.25, edge.Weight)
+			store.RecordObservation(edge.ID, edge.BaseWeight*2.25, edge.BaseWeight)
 		}
 	}
 
 	customizer.Customize(store)
 	return func(edge *model.Edge) float32 {
-		return store.LiveWeight(edge.ID, edge.Weight)
+		return store.LiveWeight(edge.ID, edge.BaseWeight)
 	}
 }
 

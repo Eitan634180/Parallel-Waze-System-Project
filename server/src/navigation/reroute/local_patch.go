@@ -25,8 +25,8 @@ func checkLocalRepairTriggerLocked(s *navigationsessions.Session, store *traffic
 			continue
 		}
 
-		liveWeight := store.LiveWeight(edgeID, edge.Weight)
-		if liveWeight < edge.Weight*navigation.SevereCongestionMultiplier || liveWeight-edge.Weight < navigation.SevereCongestionMinDelay {
+		liveWeight := store.LiveWeight(edgeID, edge.BaseWeight)
+		if liveWeight < edge.BaseWeight*navigation.SevereCongestionMultiplier || liveWeight-edge.BaseWeight < navigation.SevereCongestionMinDelay {
 			continue
 		}
 

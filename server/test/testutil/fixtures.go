@@ -146,7 +146,7 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 	manager := navigationsessions.NewManager()
 	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routingengine.WeightFunc {
 		return func(e *model.Edge) float32 {
-			return store.LiveWeight(e.ID, e.Weight)
+			return store.LiveWeight(e.ID, e.BaseWeight)
 		}
 	})
 	srv := transport.NewServer(built.Graph, store, manager, built.Router, simManager)

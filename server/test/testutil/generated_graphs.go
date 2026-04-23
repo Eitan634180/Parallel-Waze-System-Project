@@ -225,7 +225,7 @@ func generatedMultipliers(g *model.Graph, rng *rand.Rand) []float32 {
 
 func generatedWeightFunc(multipliers []float32) routingengine.WeightFunc {
 	return func(edge *model.Edge) float32 {
-		weight := edge.Weight
+		weight := edge.BaseWeight
 		if int(edge.ID) < len(multipliers) {
 			weight *= multipliers[int(edge.ID)]
 		}

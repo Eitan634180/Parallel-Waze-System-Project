@@ -155,7 +155,7 @@ func flagBetterRouteIfHelpful(s *navigationsessions.Session, improvedEdges []tra
 		distEdgeToDestination := utilities.Distance(toNode.X, toNode.Y, snapshot.destination.X, snapshot.destination.Y)
 		idealETA :=
 			(distCarToEdge / navigation.MaxHeuristicSpeedMps) +
-				store.LiveWeight(changed.EdgeID, edge.Weight) +
+				store.LiveWeight(changed.EdgeID, edge.BaseWeight) +
 				(distEdgeToDestination / navigation.MaxHeuristicSpeedMps)
 
 		if idealETA < snapshot.eta {

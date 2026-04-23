@@ -24,7 +24,7 @@ type Edge struct {
 	ID          EdgeID
 	FromNodeIdx uint32
 	ToNodeIdx   uint32
-	Weight      float32
+	BaseWeight  float32
 	DistanceM   float32
 	SpeedKmh    float32
 	RoadClass   uint8

@@ -169,7 +169,7 @@ func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []ui
 			result = append(result, model.OverlayEdge{
 				FromNodeIdx: fromIdx,
 				ToNodeIdx:   toIdx,
-				Weight:      e.Weight,
+				Weight:      e.BaseWeight,
 				DistanceM:   e.DistanceM,
 				IsCrossCell: true,
 			})
@@ -252,7 +252,7 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell 
 			if !inCell[toIdx] {
 				continue
 			}
-			newW := best.weight + e.Weight
+			newW := best.weight + e.BaseWeight
 			newD := best.distM + e.DistanceM
 			if existing, hasDist := dist[toIdx]; !hasDist || newW < existing.weight {
 				dist[toIdx] = distInfo{newW, newD}

@@ -98,7 +98,7 @@ func (h *RouteHandler) routeResponsePayload(route routingentities.Route) navigat
 
 func (h *RouteHandler) liveWeightFunc() routingengine.WeightFunc {
 	return func(e *model.Edge) float32 {
-		return h.Store.LiveWeight(e.ID, e.Weight)
+		return h.Store.LiveWeight(e.ID, e.BaseWeight)
 	}
 }
 

@@ -20,7 +20,7 @@ type Config struct {
 }
 
 // BaseWeight is a WeightFunc that always returns the static edge weight.
-func BaseWeight(e *model.Edge) float32 { return e.Weight }
+func BaseWeight(e *model.Edge) float32 { return e.BaseWeight }
 
 // Router holds graph reference and provides route computation.
 type Router struct {

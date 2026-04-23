@@ -675,10 +675,10 @@ func parseWorkerCounts(raw string) []int {
 func seedDirtyStore(g *model.Graph, store *trafficstore.Store) int {
 	dirtyEdges := 0
 	for _, edge := range g.Edges {
-		if edge.Weight <= 0 {
+		if edge.BaseWeight <= 0 {
 			continue
 		}
-		store.RecordObservation(edge.ID, edge.Weight*customizationObservedRatio, edge.Weight)
+		store.RecordObservation(edge.ID, edge.BaseWeight*customizationObservedRatio, edge.BaseWeight)
 		dirtyEdges++
 	}
 	return dirtyEdges

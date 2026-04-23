@@ -89,8 +89,8 @@ func advanceCar(c *car, g *model.Graph, store *trafficstore.Store, dtSec float32
 			eid := model.EdgeID(*cur.EdgeID)
 			if c.session != nil {
 				c.pendingEdgeEvents = append(c.pendingEdgeEvents, EdgeTravel{EdgeID: uint32(eid), ObservedSec: c.edgeTimeS})
-			} else if edge, ok := g.Edge(eid); ok && edge.Weight > 0 && c.edgeTimeS > 0 {
-				store.RecordObservation(eid, c.edgeTimeS, edge.Weight)
+			} else if edge, ok := g.Edge(eid); ok && edge.BaseWeight > 0 && c.edgeTimeS > 0 {
+				store.RecordObservation(eid, c.edgeTimeS, edge.BaseWeight)
 				store.LeaveEdge(eid)
 			}
 			c.edgeActive = false
@@ -138,11 +138,11 @@ func recordSimSpeedSample(c *car, step routingentities.Step, speedMps float32, g
 
 	eid := model.EdgeID(*step.EdgeID)
 	edge, ok := g.Edge(eid)
-	if !ok || edge.Weight <= 0 || edge.DistanceM <= 0 {
+	if !ok || edge.BaseWeight <= 0 || edge.DistanceM <= 0 {
 		return
 	}
 
-	store.RecordSpeedSample(eid, speedMps*utilities.KilometersPerHourToMps, edge.Weight, edge.DistanceM)
+	store.RecordSpeedSample(eid, speedMps*utilities.KilometersPerHourToMps, edge.BaseWeight, edge.DistanceM)
 	c.lastObservationSampleS = c.edgeTimeS
 }
 

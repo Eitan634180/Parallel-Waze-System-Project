@@ -90,7 +90,7 @@ func TestTrafficCongestedEdgeRaisesLiveWeight(t *testing.T) {
 	store := trafficstore.NewStore()
 
 	edgeID := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
-	baseWeight := fixture.Graph.Edges[edgeID].Weight
+	baseWeight := fixture.Graph.Edges[edgeID].BaseWeight
 
 	// Record 50 observations at 5× the base time to saturate the EWMA.
 	for i := 0; i < 50; i++ {

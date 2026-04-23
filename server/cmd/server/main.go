@@ -72,7 +72,7 @@ func main() {
 	router := routingengine.NewRouterWithMode(g, si, routingMode)
 	sim := simulation.NewManager(g, store, router, func() routingengine.WeightFunc {
 		return func(e *model.Edge) float32 {
-			return store.LiveWeight(e.ID, e.Weight)
+			return store.LiveWeight(e.ID, e.BaseWeight)
 		}
 	})
 	log.Printf("%s routing mode: %s", serverLogPrefix, routingMode)

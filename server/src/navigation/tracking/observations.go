@@ -16,11 +16,11 @@ func (t *Tracker) recordEdgeObservations(events []EdgeObservation) {
 		}
 
 		edge := &t.Graph.Edges[edgeID]
-		if edge.Weight <= 0 {
+		if edge.BaseWeight <= 0 {
 			continue
 		}
 
-		t.Store.RecordObservation(edgeID, event.ObservedSec, edge.Weight)
+		t.Store.RecordObservation(edgeID, event.ObservedSec, edge.BaseWeight)
 	}
 }
 
@@ -35,11 +35,11 @@ func (t *Tracker) recordCurrentEdgeSpeedSample(edgeID *uint32, edgeAt, now time.
 	}
 
 	edge := &t.Graph.Edges[eid]
-	if edge.Weight <= 0 || edge.DistanceM <= 0 {
+	if edge.BaseWeight <= 0 || edge.DistanceM <= 0 {
 		return
 	}
 
-	t.Store.RecordSpeedSample(eid, speedKmh, edge.Weight, edge.DistanceM)
+	t.Store.RecordSpeedSample(eid, speedKmh, edge.BaseWeight, edge.DistanceM)
 }
 
 func (t *Tracker) releaseTraversedEdges(route routingentities.Route, fromIdx, toIdx int) {

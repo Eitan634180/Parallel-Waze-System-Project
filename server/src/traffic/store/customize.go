@@ -128,7 +128,7 @@ func (c *Customizer) Customize(store *Store) {
 
 		updates = append(updates, overlayWeightUpdate{
 			edgeIdx: overlayEdgeIdx,
-			weight:  liveWeightFromSnapshot(weights, edgeID, g.Edges[edgeID].Weight),
+			weight:  liveWeightFromSnapshot(weights, edgeID, g.Edges[edgeID].BaseWeight),
 		})
 	}
 
@@ -267,7 +267,7 @@ func liveCellDijkstra(
 				continue
 			}
 
-			newCost := best + liveWeightFromSnapshot(weights, eid, e.Weight)
+			newCost := best + liveWeightFromSnapshot(weights, eid, e.BaseWeight)
 			if existing, has := scratch.cost(e.ToNodeIdx); !has || newCost < existing {
 				scratch.set(e.ToNodeIdx, newCost)
 				scratch.heap.Push(livePQItem{idx: e.ToNodeIdx, cost: newCost})

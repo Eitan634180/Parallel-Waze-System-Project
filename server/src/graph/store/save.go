@@ -112,7 +112,7 @@ func saveEdges(g *model.Graph, path string) error {
 			ID:          e.ID,
 			FromNodeIdx: e.FromNodeIdx,
 			ToNodeIdx:   e.ToNodeIdx,
-			Weight:      e.Weight,
+			BaseWeight:  e.BaseWeight,
 			DistanceM:   e.DistanceM,
 			SpeedKmh:    e.SpeedKmh,
 			RoadClass:   e.RoadClass,

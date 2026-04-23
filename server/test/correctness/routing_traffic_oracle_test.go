@@ -14,12 +14,12 @@ func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	customizer := trafficstore.NewCustomizer(fixture.Graph)
 
 	congestedEdge := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
-	baseWeight := fixture.Graph.Edges[congestedEdge].Weight
+	baseWeight := fixture.Graph.Edges[congestedEdge].BaseWeight
 	store.RecordObservation(congestedEdge, baseWeight*40, baseWeight)
 	customizer.Customize(store)
 
 	liveWeight := func(edge *model.Edge) float32 {
-		return store.LiveWeight(edge.ID, edge.Weight)
+		return store.LiveWeight(edge.ID, edge.BaseWeight)
 	}
 
 	routeCase := testutil.LoadRouteCases(t, "diamond_cases.json")[0]

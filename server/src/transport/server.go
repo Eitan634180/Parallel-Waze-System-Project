@@ -120,7 +120,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // liveWeightFunc builds a WeightFunc backed by the live traffic Store.
 func (s *Server) liveWeightFunc() routingengine.WeightFunc {
 	return func(e *model.Edge) float32 {
-		return s.store.LiveWeight(e.ID, e.Weight)
+		return s.store.LiveWeight(e.ID, e.BaseWeight)
 	}
 }
 

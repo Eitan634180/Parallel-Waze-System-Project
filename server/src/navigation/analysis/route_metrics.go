@@ -22,7 +22,7 @@ func ComputeETA(route routingentities.Route, stepIdx int, lastLat, lastLon float
 			continue
 		}
 
-		weight := store.LiveWeight(edgeID, edge.Weight)
+		weight := store.LiveWeight(edgeID, edge.BaseWeight)
 		if index == 0 {
 			weight *= remainingFractionOnCurrentEdge(route, stepIdx, lastLat, lastLon, step, edge, g)
 		}
@@ -64,8 +64,8 @@ func StepCongestionSummary(steps []routingentities.Step, store *trafficstore.Sto
 			continue
 		}
 
-		liveWeight := store.LiveWeight(edgeID, edge.Weight)
-		if liveWeight >= edge.Weight*traffic.CongestionThreshold {
+		liveWeight := store.LiveWeight(edgeID, edge.BaseWeight)
+		if liveWeight >= edge.BaseWeight*traffic.CongestionThreshold {
 			count++
 		}
 	}
