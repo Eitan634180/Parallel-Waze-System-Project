@@ -4,15 +4,15 @@ import "sync"
 
 // Graph contains the base graph, partition metadata, and overlay graph.
 type Graph struct {
-	Nodes   []Node
-	Edges   []Edge
-	BaseAdj AdjacencyList
-	Cells   []Cell
+	Nodes []Node
+	Edges []Edge
+	Cells []Cell
+
+	BaseAdj    AdjacencyList
+	OverlayAdj OverlayAdjList
 
 	BoundaryNodeIdx  []int32
 	BoundaryBaseIdxs []uint32
-
-	OverlayAdj OverlayAdjList
 
 	BBox             BoundingBox
 	ProjectionRefLat float64

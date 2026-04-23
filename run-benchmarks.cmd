@@ -2,183 +2,111 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 set "ROOT=%~dp0"
-call "%ROOT%load-env.cmd" "%ROOT%project.env.test"
-if errorlevel 1 exit /b %ERRORLEVEL%
+if not exist "%ROOT%project.env.test" (echo Env file not found: %ROOT%project.env.test & exit /b 1)
+for /f "usebackq eol=# tokens=1* delims==" %%A in ("%ROOT%project.env.test") do if not "%%~A"=="" set "%%~A=%%~B"
 
 set "SERVER_DIR=%ROOT%server"
-set "CACHE_DIR=%ROOT%.cache"
-set "GOCACHE_DIR=%CACHE_DIR%\go-bench"
-set "BIN_DIR=%CACHE_DIR%\bin"
+set "BIN_DIR=%ROOT%bin"
 set "OUT_DIR=%ROOT%.benchmarks"
-set "BUILD_WORK_DIR=%CACHE_DIR%\bench-build"
-set "TARGET=%~1"
+set "BUILD_WORK_DIR=%ROOT%tmp\bench-build"
 set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
 set "BENCHMARK_EXE=%BIN_DIR%\benchmark.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder-bench.exe"
 set "SERVER_SCALE_SCRIPT=%ROOT%server-scale.ps1"
 
-if "%TARGET%"=="" set "TARGET=all"
+for %%D in ("%BIN_DIR%" "%OUT_DIR%" "%OUT_DIR%\server-scale" "%OUT_DIR%\build-scale" "%OUT_DIR%\overlay-scale" "%OUT_DIR%\customization-scale" "%BUILD_WORK_DIR%") do if not exist "%%~D" mkdir "%%~D"
 
-if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
-if not exist "%GOCACHE_DIR%" mkdir "%GOCACHE_DIR%"
-if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
-if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
-if not exist "%OUT_DIR%\server-scale" mkdir "%OUT_DIR%\server-scale"
-if not exist "%OUT_DIR%\build-scale" mkdir "%OUT_DIR%\build-scale"
-if not exist "%OUT_DIR%\overlay-scale" mkdir "%OUT_DIR%\overlay-scale"
-if not exist "%OUT_DIR%\customization-scale" mkdir "%OUT_DIR%\customization-scale"
-if not exist "%BUILD_WORK_DIR%" mkdir "%BUILD_WORK_DIR%"
-
-if /I "%TARGET%"=="compare-static" goto :cmp
-if /I "%TARGET%"=="server-scale" goto :server_scale
-if /I "%TARGET%"=="build-scale" goto :build_scale
-if /I "%TARGET%"=="overlay-scale" goto :overlay_scale
-if /I "%TARGET%"=="customization-scale" goto :customization_scale
-if /I "%TARGET%"=="all" goto :all
-if /I "%TARGET%"=="help" goto :help
-
-echo Unknown target: %TARGET%
+:menu
 echo.
-goto :help
+echo ====================================================
+echo               Select a Benchmark Target
+echo ====================================================
+echo   1. all                 - Run every benchmark target
+echo   2. compare-static      - Run hierarchical vs base
+echo   3. server-scale        - Benchmark /route throughput
+echo   4. build-scale         - Benchmark map-builder
+echo   5. overlay-scale       - Benchmark BuildOverlayGraph
+echo   6. customization-scale - Benchmark customization
+echo ====================================================
+echo.
+choice /C 123456 /N /M "Enter your choice (1-6): "
+
+if errorlevel 6 goto :customization-scale
+if errorlevel 5 goto :overlay-scale
+if errorlevel 4 goto :build-scale
+if errorlevel 3 goto :server-scale
+if errorlevel 2 goto :compare-static
+if errorlevel 1 goto :all
 
 :ready
-set "CHECK_DIR=%~1"
-if not defined CHECK_DIR exit /b 1
-if not exist "%CHECK_DIR%\nodes.bin" exit /b 1
-if not exist "%CHECK_DIR%\edges.bin" exit /b 1
-if not exist "%CHECK_DIR%\base_adj.bin" exit /b 1
-if not exist "%CHECK_DIR%\cells.bin" exit /b 1
-if not exist "%CHECK_DIR%\boundary.bin" exit /b 1
-if not exist "%CHECK_DIR%\overlay_adj.bin" exit /b 1
-exit /b 0
-
-:ensure_go
-where go >nul 2>nul
-if errorlevel 1 (
-  echo Go was not found in PATH.
-  exit /b 1
-)
+if "%~1"=="" exit /b 1
+for %%F in (nodes edges base_adj cells boundary overlay_adj) do if not exist "%~1\%%F.bin" exit /b 1
 exit /b 0
 
 :build_tools
-call :ensure_go
-if errorlevel 1 exit /b %ERRORLEVEL%
+where go >nul 2>nul || (echo Go was not found in PATH. & exit /b 1)
 pushd "%SERVER_DIR%"
-set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
-go build -buildvcs=false -o "%SERVER_EXE%" .\cmd\server
-if errorlevel 1 (
-  popd
-  exit /b %ERRORLEVEL%
-)
-go build -buildvcs=false -o "%BUILDER_EXE%" .\cmd\map-builder
-if errorlevel 1 (
-  popd
-  exit /b %ERRORLEVEL%
-)
-go build -buildvcs=false -o "%BENCHMARK_EXE%" .\cmd\benchmark
-set "EXIT_CODE=%ERRORLEVEL%"
-popd
-exit /b %EXIT_CODE%
+go build -buildvcs=false -o "%SERVER_EXE%" .\cmd\server || (popd & exit /b 1)
+go build -buildvcs=false -o "%BUILDER_EXE%" .\cmd\map-builder || (popd & exit /b 1)
+go build -buildvcs=false -o "%BENCHMARK_EXE%" .\cmd\benchmark || (popd & exit /b 1)
+popd & exit /b 0
 
-:write_report
+:compare-static
+call :build_tools || exit /b 1
+pushd "%SERVER_DIR%"
+set "CGO_ENABLED=0"
+go test ./test/benchmark -run TestBenchmarkCorpusMatchesBaseAStarStatic -bench BenchmarkRouterCompareStatic -benchmem -count %TEST_BENCH_REPEAT_COUNT% -timeout %TEST_BENCH_GO_TEST_TIMEOUT% > "%OUT_DIR%\compare-static.txt" 2>&1
+set "ERR=!ERRORLEVEL!" & popd
+if "!ERR!"=="0" "%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
+exit /b !ERR!
+
+:server-scale
+call :build_tools || exit /b 1
+for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
+  echo Running server-scale for mode=%TEST_BENCH_ROUTING_MODE% GOMAXPROCS=%%P
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%SERVER_SCALE_SCRIPT%" -ServerExe "%SERVER_EXE%" -ServerWorkdir "%SERVER_DIR%" -GOMAXPROCS %%P -StartupWaitSec %TEST_BENCH_SERVER_STARTUP_WAIT_SEC% -BenchmarkExe "%BENCHMARK_EXE%" -Out "%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P" || exit /b 1
+)
 "%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
 exit /b %ERRORLEVEL%
 
-:cmp
-call :build_tools
-if errorlevel 1 exit /b %ERRORLEVEL%
-pushd "%SERVER_DIR%"
-set "GOCACHE=%GOCACHE_DIR%"
-set "CGO_ENABLED=0"
-go test ./test/benchmark -run TestBenchmarkCorpusMatchesBaseAStarStatic -bench BenchmarkRouterCompareStatic -benchmem -count %TEST_BENCH_REPEAT_COUNT% -timeout %TEST_BENCH_GO_TEST_TIMEOUT% > "%OUT_DIR%\compare-static.txt" 2>&1
-set "EXIT_CODE=%ERRORLEVEL%"
-popd
-if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
-call :write_report
-exit /b %ERRORLEVEL%
-
-:server_scale
-call :build_tools
-if errorlevel 1 exit /b %ERRORLEVEL%
-for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
-  echo Running server-scale for mode=%TEST_BENCH_ROUTING_MODE% GOMAXPROCS=%%P
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%SERVER_SCALE_SCRIPT%" -ServerExe "%SERVER_EXE%" -ServerWorkdir "%SERVER_DIR%" -GOMAXPROCS %%P -StartupWaitSec %TEST_BENCH_SERVER_STARTUP_WAIT_SEC% -BenchmarkExe "%BENCHMARK_EXE%" -Out "%OUT_DIR%\server-scale\%TEST_BENCH_ROUTING_MODE%-p%%P"
-  if errorlevel 1 exit /b !ERRORLEVEL!
-)
-call :write_report
-exit /b %ERRORLEVEL%
-
-:build_scale
-call :build_tools
-if errorlevel 1 exit /b %ERRORLEVEL%
+:build-scale
+call :build_tools || exit /b 1
 for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
   echo Running build-scale for GOMAXPROCS=%%P
   pushd "%SERVER_DIR%"
-  set "GOCACHE=%GOCACHE_DIR%"
-  set "CGO_ENABLED=0"
-  set "GOMAXPROCS=%%P"
+  set "CGO_ENABLED=0" & set "GOMAXPROCS=%%P"
   "%BUILDER_EXE%" --out "%BUILD_WORK_DIR%\p%%P" > "%OUT_DIR%\build-scale\p%%P.log" 2>&1
-  set "EXIT_CODE=!ERRORLEVEL!"
-  popd
-  if not "!EXIT_CODE!"=="0" exit /b !EXIT_CODE!
+  set "ERR=!ERRORLEVEL!" & popd
+  if not "!ERR!"=="0" exit /b !ERR!
 )
-call :write_report
+"%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
 exit /b %ERRORLEVEL%
 
-:overlay_scale
-call :build_tools
-if errorlevel 1 exit /b %ERRORLEVEL%
+:overlay-scale
+call :build_tools || exit /b 1
 echo Running overlay-scale for workers=%TEST_BENCH_GOMAXPROCS%
 pushd "%SERVER_DIR%"
-set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
 "%BENCHMARK_EXE%" overlay-build > "%OUT_DIR%\overlay-scale\summary.log" 2>&1
-set "EXIT_CODE=!ERRORLEVEL!"
-popd
-if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
-call :write_report
-exit /b %ERRORLEVEL%
+set "ERR=!ERRORLEVEL!" & popd
+if "!ERR!"=="0" "%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
+exit /b !ERR!
 
-:customization_scale
-call :build_tools
-if errorlevel 1 exit /b %ERRORLEVEL%
+:customization-scale
+call :build_tools || exit /b 1
 echo Running customization-scale for workers=%TEST_BENCH_GOMAXPROCS%
 pushd "%SERVER_DIR%"
-set "GOCACHE=%GOCACHE_DIR%"
 set "CGO_ENABLED=0"
 "%BENCHMARK_EXE%" overlay-customization > "%OUT_DIR%\customization-scale\summary.log" 2>&1
-set "EXIT_CODE=!ERRORLEVEL!"
-popd
-if not "%EXIT_CODE%"=="0" exit /b %EXIT_CODE%
-call :write_report
-exit /b %ERRORLEVEL%
+set "ERR=!ERRORLEVEL!" & popd
+if "!ERR!"=="0" "%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
+exit /b !ERR!
 
 :all
-call "%~f0" compare-static
-if errorlevel 1 exit /b %ERRORLEVEL%
-call "%~f0" server-scale
-if errorlevel 1 exit /b %ERRORLEVEL%
-call "%~f0" build-scale
-if errorlevel 1 exit /b %ERRORLEVEL%
-call "%~f0" overlay-scale
-if errorlevel 1 exit /b %ERRORLEVEL%
-call "%~f0" customization-scale
-if errorlevel 1 exit /b %ERRORLEVEL%
+call :compare-static || exit /b 1
+call :server-scale || exit /b 1
+call :build-scale || exit /b 1
+call :overlay-scale || exit /b 1
+call :customization-scale || exit /b 1
 exit /b 0
-
-:help
-echo Usage:
-echo   run-benchmarks.cmd [target]
-echo.
-echo Targets:
-echo   compare-static  Run hierarchical vs base-astar/base-dijkstra static benchmarks
-echo   server-scale    Benchmark /route throughput as GOMAXPROCS increases
-echo   build-scale     Benchmark map-builder throughput as GOMAXPROCS increases
-echo   overlay-scale   Benchmark BuildOverlayGraph over a saved graph as GOMAXPROCS increases
-echo   customization-scale Benchmark overlay customization throughput as GOMAXPROCS increases
-echo   all             Run every benchmark target
-echo   help            Show this help
-echo.
-echo Reports are written under .\.benchmarks
-exit /b 1

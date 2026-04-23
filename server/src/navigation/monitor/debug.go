@@ -1,7 +1,6 @@
 package monitor
 
 import (
-	navigationoffroute "nav-system/src/navigation/internal/offroute"
 	navigationsession "nav-system/src/navigation/session"
 )
 
@@ -20,7 +19,7 @@ func DebugSnapshot(s *navigationsession.Session, speedKmh float32) navigationses
 		StepIndex:          s.StepIdx,
 		CurrentEdgeID:      currentEdgeID,
 		OffRouteDistanceM:  s.LastOffRouteDistanceM,
-		OffRouteThresholdM: navigationoffroute.OffRouteDistM,
+		OffRouteThresholdM: offRouteDistM,
 		OffRouteViolations: s.OffRouteViolations,
 		CongestionAhead:    s.LastCongestionAhead,
 		CongestedEdges:     s.LastCongestedEdges,

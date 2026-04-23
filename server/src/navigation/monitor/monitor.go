@@ -5,7 +5,6 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
-	navigationoffroute "nav-system/src/navigation/internal/offroute"
 	"nav-system/src/navigation/internal/routeutil"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationreroute "nav-system/src/navigation/reroute"
@@ -73,13 +72,13 @@ func refreshRouteAssessment(s *navigationsession.Session, snapLat, snapLon float
 	defer s.Mu.Unlock()
 
 	assessment := routeAssessment{}
-	assessment.offRouteDistanceM = navigationoffroute.DistanceFromExpectedPath(s.Route, s.StepIdx, snapLat, snapLon, g)
+	assessment.offRouteDistanceM = distanceFromExpectedPath(s.Route, s.StepIdx, snapLat, snapLon, g)
 	s.LastOffRouteDistanceM = assessment.offRouteDistanceM
 
 	switch {
-	case assessment.offRouteDistanceM > navigationoffroute.OffRouteSanityMaxM:
+	case assessment.offRouteDistanceM > offRouteSanityMaxM:
 		s.OffRouteViolations = 0
-	case assessment.offRouteDistanceM > navigationoffroute.OffRouteDistM:
+	case assessment.offRouteDistanceM > offRouteDistM:
 		s.OffRouteViolations++
 	default:
 		s.OffRouteViolations = 0
@@ -91,8 +90,8 @@ func refreshRouteAssessment(s *navigationsession.Session, snapLat, snapLon float
 
 	assessment.allowReroute = now.Sub(s.LastReroute) >= navigation.RerouteCooldown
 	assessment.shouldRerouteNow =
-		assessment.offRouteDistanceM <= navigationoffroute.OffRouteSanityMaxM &&
-			assessment.offRouteDistanceM > navigationoffroute.OffRouteDistM &&
+		assessment.offRouteDistanceM <= offRouteSanityMaxM &&
+			assessment.offRouteDistanceM > offRouteDistM &&
 			s.OffRouteViolations >= navigation.OffRouteStrikes
 
 	return assessment

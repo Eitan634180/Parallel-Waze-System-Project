@@ -1,13 +1,10 @@
-/.cache/
+/bin/
 /.tmp/
 /server/*.exe
 /server/data/.last-region
 /server/data/geofabrik-index.json
 /server/data/map/**
-/server/.gocache/
 /test/node_modules/
 /test/playwright-report/
 /test/test-results/
 /.benchmarks/
-/.gocache/
-/server/.cache/

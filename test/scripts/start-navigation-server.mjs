@@ -9,10 +9,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '..', '..');
 const serverDir = path.join(root, 'server');
-const cacheDir = path.join(root, '.cache', 'playwright-go-build');
+
 const requiredGraphFiles = ['nodes.bin', 'edges.bin', 'base_adj.bin', 'cells.bin', 'boundary.bin', 'overlay_adj.bin'];
 
-mkdirSync(cacheDir, { recursive: true });
+
 
 function isReadyRegion(dir) {
   if (!dir) {
@@ -51,7 +51,6 @@ const child = spawn(
     env: {
       ...process.env,
       CGO_ENABLED: '0',
-      GOCACHE: cacheDir,
       NAV_SERVER_ADDR: testConfig.server.listenAddr,
     },
   },

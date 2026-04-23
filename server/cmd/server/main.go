@@ -16,7 +16,6 @@ import (
 
 	"nav-system/src/graph/model"
 	graphstore "nav-system/src/graph/store"
-	"nav-system/src/mapdata"
 	navigationmanager "nav-system/src/navigation/manager"
 	navigationmonitor "nav-system/src/navigation/monitor"
 	"nav-system/src/routing"
@@ -48,30 +47,6 @@ func main() {
 	resolvedDataDir, err := resolveDataDir(*dataDir)
 	if err != nil {
 		log.Fatalf("%s resolve data dir: %v", serverLogPrefix, err)
-	}
-
-	if resolvedDataDir == "" {
-		mapRoot, err := resolveMapRoot()
-		if err != nil {
-			log.Fatalf("%s resolve map root: %v", serverLogPrefix, err)
-		}
-		availableRegions, err := mapdata.ListReady(mapRoot)
-		if err != nil {
-			log.Fatalf("scanning map directory: %v", err)
-		}
-		switch len(availableRegions) {
-		case 0:
-			log.Fatalf("%s no preprocessed regions found in %s. Run region-picker first.", serverLogPrefix, mapRoot)
-		case 1:
-			resolvedDataDir = availableRegions[0].Dir
-			log.Printf("%s auto-selected region: %s", serverLogPrefix, availableRegions[0].ID)
-		default:
-			log.Printf("%s multiple regions available in %s:", serverLogPrefix, mapRoot)
-			for _, r := range availableRegions {
-				log.Printf("%s   %s", serverLogPrefix, r.ID)
-			}
-			log.Fatalf("%s specify --data <dir> to choose a region", serverLogPrefix)
-		}
 	}
 
 	log.Printf("%s loading graph from %s", serverLogPrefix, resolvedDataDir)
@@ -197,7 +172,7 @@ func resolveDataDir(flagValue string) (string, error) {
 		}
 		return utilities.ResolveMapPath(mapRoot, value), nil
 	}
-	return "", nil
+	return "", fmt.Errorf("NAV_SERVER_DATA_DIR or DEV_REGION_DIR or TEST_REGION_DIR must be set")
 }
 
 func resolveMapRoot() (string, error) {

@@ -1,4 +1,4 @@
-package offroute
+package monitor
 
 import (
 	"nav-system/src/graph/model"
@@ -6,7 +6,7 @@ import (
 	"nav-system/src/utilities"
 )
 
-func DistanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64, g *model.Graph) float32 {
+func distanceFromExpectedPath(route engine.Route, stepIdx int, lat, lon float64, g *model.Graph) float32 {
 	if len(route.Steps) == 0 {
 		return 0
 	}
@@ -35,10 +35,10 @@ func distanceFromExpectedProjection(route engine.Route, stepIdx int, g *model.Gr
 		return distanceToRouteNode(g, route.Steps[lastIndex], px, py)
 	}
 
-	start := max(1, stepIdx-OffRouteWindow)
-	end := min(len(route.Steps)-1, stepIdx+OffRouteWindow)
+	start := max(1, stepIdx-offRouteWindow)
+	end := min(len(route.Steps)-1, stepIdx+offRouteWindow)
 	best := minDistanceToSegmentRange(route, g, px, py, start, end)
-	if best <= OffRouteDistM {
+	if best <= offRouteDistM {
 		return best
 	}
 
