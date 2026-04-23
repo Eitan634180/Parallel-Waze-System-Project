@@ -111,6 +111,7 @@ func TestGeneratedCustomWeightCorporaMatchOracleOnBaseModes(t *testing.T) {
 				testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs),
 				modes,
 				fixture.WeightFunc,
+				nil,
 			)
 		})
 	}
@@ -127,13 +128,14 @@ func TestGeneratedTrafficCorporaMatchOracleOnBaseModes(t *testing.T) {
 		seed := seed
 		t.Run(testName("traffic", seed), func(t *testing.T) {
 			fixture := testutil.BuildGeneratedWeightedFixture(t, seed, 5, 5, 12, 5)
-			liveWeight := applyGeneratedTraffic(t, fixture.Graph)
+			liveTraffic := applyGeneratedTraffic(t, fixture.Graph)
 			assertGeneratedFixtureMatchesOracle(
 				t,
 				fixture,
 				testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs),
 				modes,
-				liveWeight,
+				liveTraffic.weight,
+				liveTraffic.configure,
 			)
 		})
 	}
@@ -147,13 +149,14 @@ func TestGeneratedTrafficCrossCellCorporaMatchOracleOnHierarchicalMode(t *testin
 		seed := seed
 		t.Run(testName("hier_traffic", seed), func(t *testing.T) {
 			fixture := testutil.BuildGeneratedWeightedFixture(t, seed, 5, 5, 12, 5)
-			liveWeight := applyGeneratedTraffic(t, fixture.Graph)
+			liveTraffic := applyGeneratedTraffic(t, fixture.Graph)
 			assertGeneratedFixtureMatchesOracle(
 				t,
 				fixture,
 				crossCellQueries(fixture, testutil.ExhaustiveGeneratedQueries(fixture.NodeIDs)),
 				modes,
-				liveWeight,
+				liveTraffic.weight,
+				liveTraffic.configure,
 			)
 		})
 	}
@@ -163,30 +166,31 @@ func TestGeneratedLongCrossCellRoutesMatchOracle(t *testing.T) {
 	testCases := []struct {
 		name  string
 		seed  int64
-		build func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc)
+		build func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc, func(*routingengine.Router))
 	}{
 		{
 			name: "hierarchical_static_long",
 			seed: 91,
-			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc) {
+			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc, func(*routingengine.Router)) {
 				fixture := testutil.BuildGeneratedWeightedFixture(t, 91, 8, 8, 12, 6)
-				return fixture, routingengine.BaseWeight
+				return fixture, routingengine.BaseWeight, nil
 			},
 		},
 		{
 			name: "hierarchical_traffic_long",
 			seed: 131,
-			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc) {
+			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc, func(*routingengine.Router)) {
 				fixture := testutil.BuildGeneratedWeightedFixture(t, 131, 8, 8, 12, 6)
-				return fixture, applyGeneratedTraffic(t, fixture.Graph)
+				liveTraffic := applyGeneratedTraffic(t, fixture.Graph)
+				return fixture, liveTraffic.weight, liveTraffic.configure
 			},
 		},
 		{
 			name: "base_custom_long",
 			seed: 173,
-			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc) {
+			build: func(t testing.TB) (*testutil.GeneratedWeightedFixture, routingengine.WeightFunc, func(*routingengine.Router)) {
 				fixture := testutil.BuildGeneratedWeightedFixture(t, 173, 8, 8, 12, 6)
-				return fixture, fixture.WeightFunc
+				return fixture, fixture.WeightFunc, nil
 			},
 		},
 	}
@@ -194,13 +198,13 @@ func TestGeneratedLongCrossCellRoutesMatchOracle(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			fixture, wf := tc.build(t)
+			fixture, wf, configure := tc.build(t)
 			modes := longPathModes(tc.name)
 			queries := longCrossCellQueries(fixture, fixture.NodeIDs, wf, 12, 48)
 			if len(queries) == 0 {
 				t.Fatal("expected long cross-cell queries")
 			}
-			assertGeneratedFixtureMatchesOracle(t, fixture, queries, modes, wf)
+			assertGeneratedFixtureMatchesOracle(t, fixture, queries, modes, wf, configure)
 		})
 	}
 }
@@ -211,6 +215,7 @@ func assertGeneratedFixtureMatchesOracle(
 	queries []testutil.GeneratedQuery,
 	modes []routingentities.RoutingMode,
 	wf routingengine.WeightFunc,
+	configure ...func(*routingengine.Router),
 ) {
 	t.Helper()
 
@@ -221,6 +226,9 @@ func assertGeneratedFixtureMatchesOracle(
 		oracle, ok := testutil.ShortestPath(fixture.Graph, srcIdx, dstIdx, wf)
 		for _, mode := range modes {
 			router := routingengine.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
+			if len(configure) > 0 && configure[0] != nil {
+				configure[0](router)
+			}
 			t.Run(string(mode)+"/"+query.Name, func(t *testing.T) {
 				routes := router.ComputeFromIndices(srcIdx, dstIdx, 1, wf)
 				if !ok {
@@ -316,10 +324,16 @@ func longPathModes(name string) []routingentities.RoutingMode {
 	return []routingentities.RoutingMode{routingentities.RoutingModeHierarchical}
 }
 
-func applyGeneratedTraffic(t testing.TB, g *model.Graph) routingengine.WeightFunc {
+type liveTrafficWeights struct {
+	weight    routingengine.WeightFunc
+	configure func(*routingengine.Router)
+}
+
+func applyGeneratedTraffic(t testing.TB, g *model.Graph) liveTrafficWeights {
 	t.Helper()
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
+	store.InitOverlayWeights(g.Overlay.OverlayEdges)
 	customizer := trafficstore.NewCustomizer(g)
 	for edgeID := range g.Edges {
 		edge := &g.Edges[edgeID]
@@ -334,8 +348,15 @@ func applyGeneratedTraffic(t testing.TB, g *model.Graph) routingengine.WeightFun
 	}
 
 	customizer.Customize(store)
-	return func(edge *model.Edge) float32 {
-		return store.LiveWeight(edge.ID, edge.BaseWeight)
+	return liveTrafficWeights{
+		weight: func(edge *model.Edge) float32 {
+			return store.LiveWeight(edge.ID, edge.BaseWeight)
+		},
+		configure: func(router *routingengine.Router) {
+			router.SetOverlayWeightFunc(func(edgeIdx uint32, staticWeight float32) float32 {
+				return store.OverlayWeight(edgeIdx, staticWeight)
+			})
+		},
 	}
 }
 

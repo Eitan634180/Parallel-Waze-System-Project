@@ -333,6 +333,7 @@ func runOverlayCustomization(args []string) {
 	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.Overlay.Offsets)-1, len(g.Edges))
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
+	store.InitOverlayWeights(g.Overlay.OverlayEdges)
 	customizer := trafficstore.NewCustomizer(g)
 	dirtyEdges := seedDirtyStore(g, store)
 	log.Printf("%s store ready (%d dirty edges)", customizationBenchLogPrefix, dirtyEdges)

@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"nav-system/src/graph"
 	"nav-system/src/graph/model"
@@ -264,7 +263,6 @@ func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 
 	}
 	return model.OverlayGraph{
-		Mu:           &sync.RWMutex{},
 		Offsets:      offsets,
 		OverlayEdges: edges,
 	}, nil

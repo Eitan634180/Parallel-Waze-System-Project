@@ -48,7 +48,7 @@ func (r *Router) twoLevelSearch(
 		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
 	}
 
-	overlayCosts, overlayPred := algorithms.OverlayAStar(g, overlaySeeds, dstBoundarySet, heuristic, overlayPenalties, stats)
+	overlayCosts, overlayPred := algorithms.OverlayAStar(g, overlaySeeds, dstBoundarySet, heuristic, r.overlayWeight, overlayPenalties, stats)
 
 	seeds := make([]algorithms.Seed, 0, len(dstBoundary))
 	for _, idx := range dstBoundary {

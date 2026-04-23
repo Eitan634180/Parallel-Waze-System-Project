@@ -1,7 +1,5 @@
 package model
 
-import "sync"
-
 // Graph contains the base graph, partition metadata, and overlay graph.
 type Graph struct {
 	Nodes []Node
@@ -25,7 +23,6 @@ type BaseGraph struct {
 
 // OverlayGraph stores outgoing overlay edges in CSR form over boundary nodes.
 type OverlayGraph struct {
-	Mu           *sync.RWMutex
 	Offsets      []uint32
 	OverlayEdges []OverlayEdge
 }

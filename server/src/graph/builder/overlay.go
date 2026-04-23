@@ -79,7 +79,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	}
 	offsets[boundaryCount] = uint32(len(edges))
 
-	g.Overlay = model.OverlayGraph{Mu: &sync.RWMutex{}, Offsets: offsets, OverlayEdges: edges}
+	g.Overlay = model.OverlayGraph{Offsets: offsets, OverlayEdges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
 		cellBuilderLogPrefix,
 		totalEdges,

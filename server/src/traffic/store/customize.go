@@ -169,11 +169,7 @@ func (c *Customizer) Customize(store *Store) {
 		updates = append(updates, result.updates...)
 	}
 
-	g.Overlay.Mu.Lock()
-	for _, update := range updates {
-		g.Overlay.OverlayEdges[update.edgeIdx].Weight = update.weight
-	}
-	g.Overlay.Mu.Unlock()
+	store.applyOverlayUpdates(updates)
 
 	elapsed := time.Since(start)
 	if elapsed >= traffic.SlowCustomizationLogThreshold {
@@ -291,9 +287,6 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
 	}
-
-	g.Overlay.Mu.RLock()
-	defer g.Overlay.Mu.RUnlock()
 
 	for overlayEdgeIdx, overlayEdge := range g.Overlay.OverlayEdges {
 		if g.Nodes[overlayEdge.FromNodeIdx].CellID == g.Nodes[overlayEdge.ToNodeIdx].CellID {

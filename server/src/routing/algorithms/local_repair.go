@@ -13,6 +13,7 @@ func LocalRepairOverlay(
 	maxHops int,
 	maxSearchSpeedMps float32,
 	wf func(*model.Edge) float32,
+	overlayWeight func(uint32, float32) float32,
 ) ([]entities.Step, bool) {
 	if srcIdx >= uint32(len(g.Nodes)) || dstIdx >= uint32(len(g.Nodes)) {
 		return nil, false
@@ -53,7 +54,6 @@ func LocalRepairOverlay(
 			continue
 		}
 
-		g.Overlay.Mu.RLock()
 		baseEdgeIdx := g.Overlay.Offsets[boundaryIdx]
 		for i, overlayEdge := range g.Overlay.Neighbours(uint32(boundaryIdx)) {
 			edgeIdx := baseEdgeIdx + uint32(i)
@@ -61,7 +61,7 @@ func LocalRepairOverlay(
 				continue
 			}
 
-			nextCost := current.g + overlayEdge.Weight
+			nextCost := current.g + overlayWeight(edgeIdx, overlayEdge.Weight)
 			if nextCost > maxCost {
 				continue
 			}
@@ -81,7 +81,6 @@ func LocalRepairOverlay(
 				})
 			}
 		}
-		g.Overlay.Mu.RUnlock()
 	}
 
 	return nil, false

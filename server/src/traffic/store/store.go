@@ -13,6 +13,7 @@ import (
 type Store struct {
 	metaMu sync.Mutex
 	data   atomic.Pointer[storeData]
+	overlay atomic.Pointer[overlayData]
 
 	prev        []float32 // multiplier at last propagation snapshot
 	prevDensity []int32   // density at last propagation snapshot
@@ -30,6 +31,10 @@ type Store struct {
 type storeData struct {
 	weight  []atomic.Uint32
 	density []atomic.Int32
+}
+
+type overlayData struct {
+	weight []atomic.Uint32
 }
 
 func NewStore() *Store {
@@ -133,4 +138,11 @@ func loadDensity(data *storeData, id model.EdgeID) int32 {
 
 func storeWeight(data *storeData, id model.EdgeID, weight float32) {
 	data.weight[id].Store(math.Float32bits(weight))
+}
+
+func loadOverlayWeight(data *overlayData, edgeIdx uint32, fallback float32) float32 {
+	if data == nil || int(edgeIdx) >= len(data.weight) {
+		return fallback
+	}
+	return math.Float32frombits(data.weight[edgeIdx].Load())
 }

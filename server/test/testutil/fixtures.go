@@ -148,6 +148,10 @@ func BuildServerFixture(tb testing.TB, graphName string, maxCellSize int) *Serve
 
 	built := BuildGraphFixture(tb, graphName, maxCellSize)
 	store := trafficstore.NewStoreWithCapacity(len(built.Graph.Edges))
+	store.InitOverlayWeights(built.Graph.Overlay.OverlayEdges)
+	built.Router.SetOverlayWeightFunc(func(edgeIdx uint32, staticWeight float32) float32 {
+		return store.OverlayWeight(edgeIdx, staticWeight)
+	})
 	manager := navigationsessions.NewManager()
 	simManager := simulation.NewManager(built.Graph, store, built.Router, func() routingengine.WeightFunc {
 		return func(e *model.Edge) float32 {

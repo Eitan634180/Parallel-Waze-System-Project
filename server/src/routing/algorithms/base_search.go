@@ -103,6 +103,7 @@ func OverlayAStar(
 	injectionCosts map[uint32]float32,
 	dstSet map[uint32]struct{},
 	heuristic func(uint32) float32,
+	overlayWeight func(uint32, float32) float32,
 	penalties map[uint32]float32,
 	stats *entities.SearchStats,
 ) (costs map[uint32]float32, pred map[uint32]OverlayPredecessor) {
@@ -138,11 +139,10 @@ func OverlayAStar(
 			continue
 		}
 
-		g.Overlay.Mu.RLock()
 		baseEdgeIdx := g.Overlay.Offsets[boundaryIdx]
 		for i, overlayEdge := range g.Overlay.Neighbours(uint32(boundaryIdx)) {
 			edgeIdx := baseEdgeIdx + uint32(i)
-			weight := overlayEdge.Weight
+			weight := overlayWeight(edgeIdx, overlayEdge.Weight)
 			if penalty, ok := penalties[edgeIdx]; ok {
 				weight *= penalty
 			}
@@ -162,7 +162,6 @@ func OverlayAStar(
 				})
 			}
 		}
-		g.Overlay.Mu.RUnlock()
 	}
 
 	return costs, pred

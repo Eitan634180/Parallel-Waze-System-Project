@@ -9,6 +9,7 @@ import (
 
 // WeightFunc returns the effective travel time in seconds for an edge.
 type WeightFunc func(e *model.Edge) float32
+type OverlayWeightFunc func(edgeIdx uint32, staticWeight float32) float32
 
 type Snapper interface {
 	Snap(lat, lon float64) uint32
@@ -22,12 +23,16 @@ type Config struct {
 // BaseWeight is a WeightFunc that always returns the static edge weight.
 func BaseWeight(e *model.Edge) float32 { return e.BaseWeight }
 
+// BaseOverlayWeight returns the static overlay weight.
+func BaseOverlayWeight(_ uint32, staticWeight float32) float32 { return staticWeight }
+
 // Router holds graph reference and provides route computation.
 type Router struct {
 	g      *model.Graph
 	si     Snapper
 	mode   entities.RoutingMode
 	config Config
+	overlayWeight OverlayWeightFunc
 }
 
 // NewRouter constructs a Router.
@@ -44,6 +49,7 @@ func NewRouterWithMode(g *model.Graph, si Snapper, mode entities.RoutingMode) *R
 		g:    g,
 		si:   si,
 		mode: mode,
+		overlayWeight: BaseOverlayWeight,
 		config: Config{
 			MaxSearchSpeedMps:       rootconfig.MaxSearchSpeedMps,
 			AlternativeRoutePenalty: rootconfig.AlternativeRoutePenalty,
@@ -53,6 +59,13 @@ func NewRouterWithMode(g *model.Graph, si Snapper, mode entities.RoutingMode) *R
 
 func (r *Router) Mode() entities.RoutingMode {
 	return r.mode
+}
+
+func (r *Router) SetOverlayWeightFunc(overlayWeight OverlayWeightFunc) {
+	if overlayWeight == nil {
+		overlayWeight = BaseOverlayWeight
+	}
+	r.overlayWeight = overlayWeight
 }
 
 // Compute returns up to k routes from (srcLat, srcLon) to (dstLat, dstLon).
@@ -139,7 +152,7 @@ func (r *Router) LocalRepairOverlay(
 	if wf == nil {
 		wf = BaseWeight
 	}
-	return algorithms.LocalRepairOverlay(r.g, srcIdx, dstIdx, maxCost, maxHops, r.config.MaxSearchSpeedMps, wf)
+	return algorithms.LocalRepairOverlay(r.g, srcIdx, dstIdx, maxCost, maxHops, r.config.MaxSearchSpeedMps, wf, r.overlayWeight)
 }
 
 func (r *Router) LocalRepairOriginal(
