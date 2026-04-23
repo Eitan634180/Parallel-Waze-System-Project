@@ -29,7 +29,7 @@ func TestRoutingEngineBuildsOverlayAndRoutesAcrossCorpus(t *testing.T) {
 			if len(fixture.Graph.BoundaryBaseIdxs) == 0 {
 				t.Fatal("expected boundary nodes to be detected")
 			}
-			if len(fixture.Graph.OverlayAdj.OverlayEdges) == 0 {
+			if len(fixture.Graph.Overlay.OverlayEdges) == 0 {
 				t.Fatal("expected overlay graph to contain edges")
 			}
 

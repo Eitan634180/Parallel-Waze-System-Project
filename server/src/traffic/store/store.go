@@ -6,15 +6,10 @@ import (
 	"sync/atomic"
 
 	"nav-system/src/graph/model"
+	"nav-system/src/traffic"
 )
 
-type storeData struct {
-	weight  []atomic.Uint32
-	density []atomic.Int32
-}
-
 // Store holds the live traffic state for every edge that has been observed.
-// The zero value is valid via lazy ensure allocations; use NewStore() for clarity.
 type Store struct {
 	metaMu sync.Mutex
 	data   atomic.Pointer[storeData]
@@ -32,14 +27,11 @@ type Store struct {
 	snapshotDedup []bool
 }
 
-// ChangedEdge describes an edge whose live state changed since the last snapshot.
-type ChangedEdge struct {
-	EdgeID        model.EdgeID
-	OldMultiplier float32
-	NewMultiplier float32
+type storeData struct {
+	weight  []atomic.Uint32
+	density []atomic.Int32
 }
 
-// NewStore creates an empty Store.
 func NewStore() *Store {
 	return &Store{}
 }
@@ -64,31 +56,13 @@ func newStoreData(edgeCount int) *storeData {
 	return data
 }
 
-func loadWeight(data *storeData, id model.EdgeID) float32 {
-	if data == nil || int(id) >= len(data.weight) {
-		return 1.0
-	}
-	return math.Float32frombits(data.weight[id].Load())
-}
-
-func loadDensity(data *storeData, id model.EdgeID) int32 {
-	if data == nil || int(id) >= len(data.density) {
-		return 0
-	}
-	return data.density[id].Load()
-}
-
-func storeWeight(data *storeData, id model.EdgeID, weight float32) {
-	data.weight[id].Store(math.Float32bits(weight))
-}
-
 func (s *Store) ensureLocked(id model.EdgeID) *storeData {
 	data := s.data.Load()
 	if data != nil && int(id) < len(data.weight) {
 		return data
 	}
 
-	newLen := int(id)*storeGrowthMultiplier + storeGrowthPadding
+	newLen := int(id)*traffic.StoreGrowthMultiplier + traffic.StoreGrowthPadding
 	if newLen <= int(id) {
 		newLen = int(id) + 1
 	}
@@ -141,4 +115,22 @@ func (s *Store) resizeLocked(newLen int) {
 	newSnapshotDedup := make([]bool, newLen)
 	copy(newSnapshotDedup, s.snapshotDedup)
 	s.snapshotDedup = newSnapshotDedup
+}
+
+func loadWeight(data *storeData, id model.EdgeID) float32 {
+	if data == nil || int(id) >= len(data.weight) {
+		return 1.0
+	}
+	return math.Float32frombits(data.weight[id].Load())
+}
+
+func loadDensity(data *storeData, id model.EdgeID) int32 {
+	if data == nil || int(id) >= len(data.density) {
+		return 0
+	}
+	return data.density[id].Load()
+}
+
+func storeWeight(data *storeData, id model.EdgeID, weight float32) {
+	data.weight[id].Store(math.Float32bits(weight))
 }

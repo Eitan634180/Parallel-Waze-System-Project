@@ -53,9 +53,9 @@ func LocalRepairOverlay(
 			continue
 		}
 
-		g.OverlayAdj.Mu.RLock()
-		baseEdgeIdx := g.OverlayAdj.Offsets[boundaryIdx]
-		for i, overlayEdge := range g.OverlayAdj.Neighbours(uint32(boundaryIdx)) {
+		g.Overlay.Mu.RLock()
+		baseEdgeIdx := g.Overlay.Offsets[boundaryIdx]
+		for i, overlayEdge := range g.Overlay.Neighbours(uint32(boundaryIdx)) {
 			edgeIdx := baseEdgeIdx + uint32(i)
 			if current.idx == srcIdx && overlayEdge.ToNodeIdx == dstIdx {
 				continue
@@ -81,7 +81,7 @@ func LocalRepairOverlay(
 				})
 			}
 		}
-		g.OverlayAdj.Mu.RUnlock()
+		g.Overlay.Mu.RUnlock()
 	}
 
 	return nil, false
@@ -129,7 +129,7 @@ func LocalRepairOriginal(
 			continue
 		}
 
-		for _, edgeID := range g.BaseAdj.Neighbours(current.idx) {
+		for _, edgeID := range g.Base.Neighbours(current.idx) {
 			edge := &g.Edges[edgeID]
 			if current.idx == srcIdx && edge.ToNodeIdx == dstIdx {
 				continue

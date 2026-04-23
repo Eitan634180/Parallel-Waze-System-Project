@@ -9,8 +9,8 @@ import (
 	"nav-system/src/graph/model"
 	"nav-system/src/navigation"
 	navigationsessions "nav-system/src/navigation/sessions"
+	"nav-system/src/traffic"
 
-	trafficpropagation "nav-system/src/traffic/propagation"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 )
@@ -20,6 +20,11 @@ type heuristicSessionSnapshot struct {
 	carLon      float64
 	destination *model.Node
 	eta         float32
+}
+
+type speedUpdate struct {
+	EdgeID              model.EdgeID
+	RecommendedSpeedKmh float32
 }
 
 func RunPropagation(ctx context.Context, mgr *navigationsessions.Manager, store *trafficstore.Store, g *model.Graph) {
@@ -38,12 +43,12 @@ func RunPropagation(ctx context.Context, mgr *navigationsessions.Manager, store 
 
 func propagate(ctx context.Context, mgr *navigationsessions.Manager, store *trafficstore.Store, g *model.Graph) {
 	changedEdges := store.DirtySnapshot()
-	improvedEdges := trafficpropagation.ImprovedEdges(changedEdges)
+	improvedEdges := improvedEdges(changedEdges)
 	if len(improvedEdges) > 0 {
 		flagBetterRoutes(ctx, mgr.ActiveSessions(), improvedEdges, store, g)
 	}
 
-	for _, update := range trafficpropagation.RecommendedSpeedUpdates(g, store, changedEdges) {
+	for _, update := range recommendedSpeedUpdates(g, store, changedEdges) {
 		broadcastSpeedUpdate(mgr, update.EdgeID, update.RecommendedSpeedKmh)
 	}
 }
@@ -182,4 +187,34 @@ func heuristicSnapshot(s *navigationsessions.Session, g *model.Graph) (heuristic
 		destination: destinationNode,
 		eta:         s.ETA,
 	}, true
+}
+
+func improvedEdges(changed []trafficstore.ChangedEdge) []trafficstore.ChangedEdge {
+	improved := make([]trafficstore.ChangedEdge, 0, len(changed))
+	for _, edge := range changed {
+		if edge.OldMultiplier-edge.NewMultiplier >= traffic.SignificantShift {
+			improved = append(improved, edge)
+		}
+	}
+	return improved
+}
+
+func recommendedSpeedUpdates(g *model.Graph, store *trafficstore.Store, changed []trafficstore.ChangedEdge) []speedUpdate {
+	updates := make([]speedUpdate, 0, len(changed))
+	for _, edgeChange := range changed {
+		if int(edgeChange.EdgeID) >= len(g.Edges) {
+			continue
+		}
+
+		edge := &g.Edges[edgeChange.EdgeID]
+		if edge.SpeedKmh <= 0 {
+			continue
+		}
+
+		updates = append(updates, speedUpdate{
+			EdgeID:              edgeChange.EdgeID,
+			RecommendedSpeedKmh: store.RecommendedSpeedKmh(edgeChange.EdgeID, edge.SpeedKmh, edge.DistanceM),
+		})
+	}
+	return updates
 }

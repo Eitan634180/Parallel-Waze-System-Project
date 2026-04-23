@@ -142,13 +142,13 @@ func walkOverlayBack(
 		prevIdx := predecessor.PrevNodeIdx
 		edgeIDs = append(edgeIDs, predecessor.EdgeIdx)
 
-		g.OverlayAdj.Mu.RLock()
-		if int(predecessor.EdgeIdx) >= len(g.OverlayAdj.OverlayEdges) {
-			g.OverlayAdj.Mu.RUnlock()
+		g.Overlay.Mu.RLock()
+		if int(predecessor.EdgeIdx) >= len(g.Overlay.OverlayEdges) {
+			g.Overlay.Mu.RUnlock()
 			return nil, nil, ^uint32(0)
 		}
-		overlayEdge := g.OverlayAdj.OverlayEdges[predecessor.EdgeIdx]
-		g.OverlayAdj.Mu.RUnlock()
+		overlayEdge := g.Overlay.OverlayEdges[predecessor.EdgeIdx]
+		g.Overlay.Mu.RUnlock()
 
 		if overlayEdge.IsCrossCell {
 			edgeID, _, timeSec := baseEdgeBetween(g, prevIdx, current, wf)
@@ -162,7 +162,7 @@ func walkOverlayBack(
 }
 
 func baseEdgeBetween(g *model.Graph, fromIdx, toIdx uint32, wf WeightFunc) (model.EdgeID, float32, float32) {
-	for _, edgeID := range g.BaseAdj.Neighbours(fromIdx) {
+	for _, edgeID := range g.Base.Neighbours(fromIdx) {
 		edge := &g.Edges[edgeID]
 		if edge.ToNodeIdx == toIdx {
 			return edgeID, edge.DistanceM, wf(edge)

@@ -73,7 +73,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	}
 	offsets[len(g.BoundaryBaseIdxs)] = uint32(len(edges))
 
-	g.OverlayAdj = model.OverlayAdjList{Mu: &sync.RWMutex{}, Offsets: offsets, OverlayEdges: edges}
+	g.Overlay = model.OverlayGraph{Mu: &sync.RWMutex{}, Offsets: offsets, OverlayEdges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
 		cellBuilderLogPrefix,
 		totalEdges,
@@ -103,7 +103,7 @@ func DetectBoundaryNodes(g *model.Graph) {
 	isBoundary := make([]bool, len(g.Nodes))
 	for i := range g.Nodes {
 		fromCellID := g.Nodes[i].CellID
-		for _, eid := range g.BaseAdj.Neighbours(uint32(i)) {
+		for _, eid := range g.Base.Neighbours(uint32(i)) {
 			e := &g.Edges[eid]
 			toIdx := e.ToNodeIdx
 			if g.Nodes[toIdx].CellID != fromCellID {
@@ -156,7 +156,7 @@ func computeCellOverlayEdges(g *model.Graph, cell *model.Cell, cellNodeIdxs []ui
 			continue
 		}
 
-		for _, eid := range g.BaseAdj.Neighbours(fromIdx) {
+		for _, eid := range g.Base.Neighbours(fromIdx) {
 			e := &g.Edges[eid]
 			toIdx := e.ToNodeIdx
 
@@ -246,7 +246,7 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, boundaryNodes []uint32, inCell 
 			}
 		}
 
-		for _, eid := range g.BaseAdj.Neighbours(cur.idx) {
+		for _, eid := range g.Base.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
 			toIdx := e.ToNodeIdx
 			if !inCell[toIdx] {

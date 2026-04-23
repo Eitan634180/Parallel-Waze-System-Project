@@ -132,18 +132,18 @@ func saveBaseAdj(g *model.Graph, path string) error {
 	defer f.Close()
 	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
-	if err := writeHeader(bw, uint64(len(g.BaseAdj.Offsets))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.Base.Offsets))); err != nil {
 		return err
 	}
-	for _, o := range g.BaseAdj.Offsets {
+	for _, o := range g.Base.Offsets {
 		if err := writeUint32(bw, o); err != nil {
 			return err
 		}
 	}
-	if err := writeUint64(bw, uint64(len(g.BaseAdj.EdgeIDs))); err != nil {
+	if err := writeUint64(bw, uint64(len(g.Base.EdgeIDs))); err != nil {
 		return err
 	}
-	for _, e := range g.BaseAdj.EdgeIDs {
+	for _, e := range g.Base.EdgeIDs {
 		if err := writeUint32(bw, e); err != nil {
 			return err
 		}
@@ -206,18 +206,18 @@ func saveOverlayAdj(g *model.Graph, path string) error {
 	defer f.Close()
 	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
 
-	if err := writeHeader(bw, uint64(len(g.OverlayAdj.Offsets))); err != nil {
+	if err := writeHeader(bw, uint64(len(g.Overlay.Offsets))); err != nil {
 		return err
 	}
-	for _, o := range g.OverlayAdj.Offsets {
+	for _, o := range g.Overlay.Offsets {
 		if err := writeUint32(bw, o); err != nil {
 			return err
 		}
 	}
-	if err := writeUint64(bw, uint64(len(g.OverlayAdj.OverlayEdges))); err != nil {
+	if err := writeUint64(bw, uint64(len(g.Overlay.OverlayEdges))); err != nil {
 		return err
 	}
-	for _, e := range g.OverlayAdj.OverlayEdges {
+	for _, e := range g.Overlay.OverlayEdges {
 		cc := crossCellFalse
 		if e.IsCrossCell {
 			cc = crossCellTrue

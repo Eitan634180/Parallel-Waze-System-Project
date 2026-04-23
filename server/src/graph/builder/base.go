@@ -62,7 +62,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 	if len(pr.Ways) == 0 {
 		log.Printf("%s edges ready (%d directed)", graphBuilderLogPrefix, len(g.Edges))
 		log.Printf("%s building base adjacency", graphBuilderLogPrefix)
-		g.BaseAdj = buildCSR(adjTmp, len(g.Edges))
+		g.Base = buildCSR(adjTmp, len(g.Edges))
 		log.Printf("%s base adjacency ready", graphBuilderLogPrefix)
 		return g, nil
 	}
@@ -169,14 +169,14 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, error) {
 
 	log.Printf("%s edges ready (%d directed)", graphBuilderLogPrefix, len(g.Edges))
 	log.Printf("%s building base adjacency", graphBuilderLogPrefix)
-	g.BaseAdj = buildCSR(adjTmp, len(g.Edges))
+	g.Base = buildCSR(adjTmp, len(g.Edges))
 	log.Printf("%s base adjacency ready", graphBuilderLogPrefix)
 
 	return g, nil
 }
 
 // buildCSR converts per-node edge slices into a CSR adjacency list.
-func buildCSR(adjTmp [][]model.EdgeID, edgeCount int) model.AdjacencyList {
+func buildCSR(adjTmp [][]model.EdgeID, edgeCount int) model.BaseGraph {
 	offsets := make([]uint32, len(adjTmp)+1)
 	edgeIDs := make([]model.EdgeID, 0, edgeCount)
 
@@ -186,7 +186,7 @@ func buildCSR(adjTmp [][]model.EdgeID, edgeCount int) model.AdjacencyList {
 	}
 	offsets[len(adjTmp)] = uint32(len(edgeIDs))
 
-	return model.AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}
+	return model.BaseGraph{Offsets: offsets, EdgeIDs: edgeIDs}
 }
 
 func boundingBoxFromNodes(nodes []model.Node) model.BoundingBox {

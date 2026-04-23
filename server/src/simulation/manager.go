@@ -146,7 +146,7 @@ func (m *Manager) tick(dtSec float32) {
 		return
 	}
 
-	workerCount := minInt(maxInt(runtime.GOMAXPROCS(0), MinWorkers), len(refs))
+	workerCount := min(max(runtime.GOMAXPROCS(0), MinWorkers), len(refs))
 	finishedChunks := make(chan []carRef, workerCount)
 	processPing := m.sessionBridge.ProcessPing
 

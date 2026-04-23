@@ -48,7 +48,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		if err != nil {
 			return fmt.Errorf("base_adj: %w", err)
 		}
-		g.BaseAdj = baseAdj
+		g.Base = baseAdj
 		return nil
 	})
 
@@ -75,7 +75,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		if err != nil {
 			return fmt.Errorf("overlay_adj: %w", err)
 		}
-		g.OverlayAdj = overlayAdj
+		g.Overlay = overlayAdj
 		return nil
 	})
 
@@ -111,7 +111,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		len(g.Edges),
 		len(g.Cells),
 		len(g.BoundaryBaseIdxs),
-		len(g.OverlayAdj.OverlayEdges),
+		len(g.Overlay.OverlayEdges),
 	)
 	return g, nil
 }
@@ -163,10 +163,10 @@ func loadEdges(path string) ([]model.Edge, error) {
 	return edges, nil
 }
 
-func loadBaseAdj(path string) (model.AdjacencyList, error) {
+func loadBaseAdj(path string) (model.BaseGraph, error) {
 	f, offsetCount, err := openFile(path)
 	if err != nil {
-		return model.AdjacencyList{}, err
+		return model.BaseGraph{}, err
 	}
 	defer f.Close()
 	br := bufio.NewReaderSize(f, graph.FileBufferSize)
@@ -175,24 +175,24 @@ func loadBaseAdj(path string) (model.AdjacencyList, error) {
 	for i := range offsets {
 		v, err := readUint32(br)
 		if err != nil {
-			return model.AdjacencyList{}, err
+			return model.BaseGraph{}, err
 		}
 		offsets[i] = v
 	}
 
 	edgeCount, err := readUint64(br)
 	if err != nil {
-		return model.AdjacencyList{}, err
+		return model.BaseGraph{}, err
 	}
 	edgeIDs := make([]uint32, edgeCount)
 	for i := range edgeIDs {
 		v, err := readUint32(br)
 		if err != nil {
-			return model.AdjacencyList{}, err
+			return model.BaseGraph{}, err
 		}
 		edgeIDs[i] = v
 	}
-	return model.AdjacencyList{Offsets: offsets, EdgeIDs: edgeIDs}, nil
+	return model.BaseGraph{Offsets: offsets, EdgeIDs: edgeIDs}, nil
 }
 
 func loadCells(path string) ([]model.Cell, error) {
@@ -245,10 +245,10 @@ func loadBoundary(path string) ([]uint32, error) {
 	return nodes, nil
 }
 
-func loadOverlayAdj(path string) (model.OverlayAdjList, error) {
+func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 	f, offsetCount, err := openFile(path)
 	if err != nil {
-		return model.OverlayAdjList{}, err
+		return model.OverlayGraph{}, err
 	}
 	defer f.Close()
 	br := bufio.NewReaderSize(f, graph.FileBufferSize)
@@ -257,20 +257,20 @@ func loadOverlayAdj(path string) (model.OverlayAdjList, error) {
 	for i := range offsets {
 		v, err := readUint32(br)
 		if err != nil {
-			return model.OverlayAdjList{}, err
+			return model.OverlayGraph{}, err
 		}
 		offsets[i] = v
 	}
 
 	edgeCount, err := readUint64(br)
 	if err != nil {
-		return model.OverlayAdjList{}, err
+		return model.OverlayGraph{}, err
 	}
 	edges := make([]model.OverlayEdge, edgeCount)
 	for i := range edges {
 		var b overlayEdgeBin
 		if err := binary.Read(br, le, &b); err != nil {
-			return model.OverlayAdjList{}, err
+			return model.OverlayGraph{}, err
 		}
 		edges[i] = model.OverlayEdge{
 			FromNodeIdx: b.FromNodeIdx,
@@ -280,7 +280,7 @@ func loadOverlayAdj(path string) (model.OverlayAdjList, error) {
 			IsCrossCell: b.IsCrossCell != 0,
 		}
 	}
-	return model.OverlayAdjList{
+	return model.OverlayGraph{
 		Mu:           &sync.RWMutex{},
 		Offsets:      offsets,
 		OverlayEdges: edges,

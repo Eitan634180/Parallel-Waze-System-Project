@@ -1,6 +1,16 @@
 package store
 
-import "nav-system/src/graph/model"
+import (
+	"nav-system/src/graph/model"
+	"nav-system/src/traffic"
+)
+
+// ChangedEdge describes an edge whose live state changed since the last snapshot.
+type ChangedEdge struct {
+	EdgeID        model.EdgeID
+	OldMultiplier float32
+	NewMultiplier float32
+}
 
 func (s *Store) checkDedup(id model.EdgeID, data *storeData, changed *[]ChangedEdge) {
 	if s.snapshotDedup[id] {
@@ -18,7 +28,7 @@ func (s *Store) checkDedup(id model.EdgeID, data *storeData, changed *[]ChangedE
 	density := loadDensity(data, id)
 	densityChanged := density != s.prevDensity[id]
 
-	if delta >= SignificantShift || densityChanged {
+	if delta >= traffic.SignificantShift || densityChanged {
 		*changed = append(*changed, ChangedEdge{EdgeID: id, OldMultiplier: prev, NewMultiplier: cur})
 		s.prev[id] = cur
 		s.prevDensity[id] = density

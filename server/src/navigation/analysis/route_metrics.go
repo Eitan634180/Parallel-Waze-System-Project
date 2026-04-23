@@ -3,6 +3,7 @@ package analysis
 import (
 	"nav-system/src/graph/model"
 	routingentities "nav-system/src/routing/entities"
+	"nav-system/src/traffic"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 )
@@ -64,7 +65,7 @@ func StepCongestionSummary(steps []routingentities.Step, store *trafficstore.Sto
 		}
 
 		liveWeight := store.LiveWeight(edgeID, edge.Weight)
-		if liveWeight >= edge.Weight*trafficstore.CongestionThreshold {
+		if liveWeight >= edge.Weight*traffic.CongestionThreshold {
 			count++
 		}
 	}

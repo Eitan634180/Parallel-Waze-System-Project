@@ -10,6 +10,7 @@ import (
 
 	"nav-system/src/graph/model"
 	routingentities "nav-system/src/routing/entities"
+	"nav-system/src/utilities"
 )
 
 type geoBox struct {
@@ -115,7 +116,7 @@ func (m *Manager) computeRandomCandidates(bbox geoBox, limit int) []routingentit
 	}
 
 	attempts := limit * RandomRouteAttemptFactor
-	workerCount := minInt(maxInt(runtime.GOMAXPROCS(0), MinWorkers), attempts)
+	workerCount := min(max(runtime.GOMAXPROCS(0), MinWorkers), attempts)
 
 	jobs := make(chan struct{}, workerCount)
 	results := make(chan routingentities.Route, workerCount)
@@ -240,10 +241,10 @@ func (b geoBox) randomPoint(rng *rand.Rand) (float64, float64) {
 }
 
 func (b geoBox) randomNearbyPoint(rng *rand.Rand, centerLat, centerLon float64) (float64, float64) {
-	minLat := maxFloat64(b.minLat, centerLat-MaxCommuteDegrees)
-	maxLat := minFloat64(b.maxLat, centerLat+MaxCommuteDegrees)
-	minLon := maxFloat64(b.minLon, centerLon-MaxCommuteDegrees)
-	maxLon := minFloat64(b.maxLon, centerLon+MaxCommuteDegrees)
+	minLat := utilities.MaxFloat64(b.minLat, centerLat-MaxCommuteDegrees)
+	maxLat := utilities.MinFloat64(b.maxLat, centerLat+MaxCommuteDegrees)
+	minLon := utilities.MaxFloat64(b.minLon, centerLon-MaxCommuteDegrees)
+	maxLon := utilities.MinFloat64(b.maxLon, centerLon+MaxCommuteDegrees)
 
 	lat := minLat + rng.Float64()*(maxLat-minLat)
 	lon := minLon + rng.Float64()*(maxLon-minLon)
@@ -254,32 +255,4 @@ func distanceSquared(lat1, lon1, lat2, lon2 float64) float64 {
 	dLat := lat1 - lat2
 	dLon := lon1 - lon2
 	return dLat*dLat + dLon*dLon
-}
-
-func minFloat64(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxFloat64(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

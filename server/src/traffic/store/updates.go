@@ -4,18 +4,19 @@ import (
 	"math"
 
 	"nav-system/src/graph/model"
+	"nav-system/src/traffic"
 	"nav-system/src/utilities"
 )
 
-// RecordObservation updates the edge multiplier using an EWMA of observed/base time.
+// Update weight using EWMA of observed/base drive time.
 func (s *Store) RecordObservation(id model.EdgeID, observedSec, baseSec float32) {
 	if baseSec <= 0 {
 		return
 	}
-	s.recordObservedRatio(id, observedSec/baseSec, ewmaAlpha)
+	s.recordObservedRatio(id, observedSec/baseSec, traffic.EwmaAlpha)
 }
 
-// RecordSpeedSample updates the observed multiplier from an in-progress speed sample.
+// Update weight using EWMA of speeds on the edge.
 func (s *Store) RecordSpeedSample(id model.EdgeID, speedKmh, baseSec, distanceM float32) {
 	if speedKmh <= 0 || baseSec <= 0 || distanceM <= 0 {
 		return
@@ -24,7 +25,7 @@ func (s *Store) RecordSpeedSample(id model.EdgeID, speedKmh, baseSec, distanceM 
 	if observedSec <= 0 {
 		return
 	}
-	s.recordObservedRatio(id, observedSec/baseSec, partialSampleAlpha)
+	s.recordObservedRatio(id, observedSec/baseSec, traffic.PartialSampleAlpha)
 }
 
 func (s *Store) recordObservedRatio(id model.EdgeID, ratio, alpha float32) {
@@ -58,20 +59,6 @@ func (s *Store) recordObservedRatio(id model.EdgeID, ratio, alpha float32) {
 	s.metaMu.Unlock()
 }
 
-// LiveWeight returns the routing/ETA cost for an edge based on observed traffic only.
-func (s *Store) LiveWeight(id model.EdgeID, baseSec float32) float32 {
-	data := s.data.Load()
-	if data == nil || int(id) >= len(data.weight) {
-		return baseSec
-	}
-	return baseSec * math.Float32frombits(data.weight[id].Load())
-}
-
-// Multiplier returns the raw multiplier for an edge (1.0 if not observed).
-func (s *Store) Multiplier(id model.EdgeID) float32 {
-	return loadWeight(s.data.Load(), id)
-}
-
 // SnapshotWeightMultipliers fills a dense multiplier slice indexed by EdgeID.
 // Entries default to 1.0 when an edge has no observed override.
 func (s *Store) SnapshotWeightMultipliers(dst []float32, edgeCount int) []float32 {
@@ -94,4 +81,33 @@ func (s *Store) SnapshotWeightMultipliers(dst []float32, edgeCount int) []float3
 		}
 	}
 	return dst
+}
+
+// EnterEdge increments the active-session count for an edge.
+func (s *Store) EnterEdge(id model.EdgeID) {
+	s.metaMu.Lock()
+	data := s.ensureLocked(id)
+	data.density[id].Add(1)
+	if !s.isActive[id] {
+		s.isActive[id] = true
+		s.activityEdges = append(s.activityEdges, id)
+	}
+	s.metaMu.Unlock()
+}
+
+// LeaveEdge decrements the active-session count for an edge.
+func (s *Store) LeaveEdge(id model.EdgeID) {
+	s.metaMu.Lock()
+	data := s.ensureLocked(id)
+	d := data.density[id].Load() - 1
+	if d <= 0 {
+		data.density[id].Store(0)
+	} else {
+		data.density[id].Store(d)
+	}
+	if !s.isActive[id] {
+		s.isActive[id] = true
+		s.activityEdges = append(s.activityEdges, id)
+	}
+	s.metaMu.Unlock()
 }

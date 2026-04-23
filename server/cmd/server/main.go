@@ -21,7 +21,6 @@ import (
 	routingengine "nav-system/src/routing/engine"
 	routingentities "nav-system/src/routing/entities"
 	"nav-system/src/simulation"
-	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/transport"
 	"nav-system/src/utilities"
@@ -60,7 +59,7 @@ func main() {
 		serverLogPrefix,
 		time.Since(t).Round(time.Millisecond),
 		len(g.Nodes), len(g.Edges), len(g.Cells),
-		len(g.BoundaryBaseIdxs), len(g.OverlayAdj.OverlayEdges))
+		len(g.BoundaryBaseIdxs), len(g.Overlay.OverlayEdges))
 
 	log.Printf("%s building snap index", serverLogPrefix)
 	t = time.Now()
@@ -68,7 +67,7 @@ func main() {
 	log.Printf("%s snap index ready in %s", serverLogPrefix, time.Since(t).Round(time.Millisecond))
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
-	customizer := trafficcustomization.NewCustomizer(g)
+	customizer := trafficstore.NewCustomizer(g)
 	mgr := navigationsessions.NewManager()
 	router := routingengine.NewRouterWithMode(g, si, routingMode)
 	sim := simulation.NewManager(g, store, router, func() routingengine.WeightFunc {

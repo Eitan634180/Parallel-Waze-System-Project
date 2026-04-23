@@ -175,7 +175,7 @@ func FindEdgeID(tb testing.TB, g *model.Graph, fromID, toID model.NodeRawID) mod
 		tb.Fatalf("to node %d not found", toID)
 	}
 
-	for _, edgeID := range g.BaseAdj.Neighbours(fromIdx) {
+	for _, edgeID := range g.Base.Neighbours(fromIdx) {
 		if g.Edges[edgeID].ToNodeIdx == toIdx {
 			return edgeID
 		}

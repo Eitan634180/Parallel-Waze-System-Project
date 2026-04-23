@@ -82,7 +82,7 @@ func (si *SnapIndex) Snap(lat, lon float64) uint32 {
 	bestDist := float32(math.MaxFloat32)
 
 	for ring := 0; ring <= maxRing; ring++ {
-		ringMinDist := float32(ring) * utilities.Min32(si.cellW, si.cellH)
+		ringMinDist := float32(ring) * utilities.MinFloat32(si.cellW, si.cellH)
 		if ring > 0 && ringMinDist*ringMinDist > bestDist {
 			break
 		}

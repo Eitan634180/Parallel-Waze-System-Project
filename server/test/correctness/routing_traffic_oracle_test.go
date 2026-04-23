@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"nav-system/src/graph/model"
-	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
 )
@@ -12,7 +11,7 @@ import (
 func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
 	store := trafficstore.NewStoreWithCapacity(len(fixture.Graph.Edges))
-	customizer := trafficcustomization.NewCustomizer(fixture.Graph)
+	customizer := trafficstore.NewCustomizer(fixture.Graph)
 
 	congestedEdge := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
 	baseWeight := fixture.Graph.Edges[congestedEdge].Weight

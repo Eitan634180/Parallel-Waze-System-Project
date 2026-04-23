@@ -8,8 +8,8 @@ type Graph struct {
 	Edges []Edge
 	Cells []Cell
 
-	BaseAdj    AdjacencyList
-	OverlayAdj OverlayAdjList
+	Base    BaseGraph
+	Overlay OverlayGraph
 
 	BoundaryNodeIdx  []int32
 	BoundaryBaseIdxs []uint32
@@ -18,26 +18,26 @@ type Graph struct {
 	ProjectionRefLat float64
 }
 
-// AdjacencyList stores outgoing base-graph edges in CSR form.
-type AdjacencyList struct {
+// BaseGraph stores outgoing base-graph edges in CSR form.
+type BaseGraph struct {
 	Offsets []uint32
 	EdgeIDs []EdgeID
 }
 
-// OverlayAdjList stores outgoing overlay edges in CSR form over boundary nodes.
-type OverlayAdjList struct {
+// OverlayGraph stores outgoing overlay edges in CSR form over boundary nodes.
+type OverlayGraph struct {
 	Mu           *sync.RWMutex
 	Offsets      []uint32
 	OverlayEdges []OverlayEdge
 }
 
 // Neighbours returns all outgoing edges for the internal node index.
-func (a *AdjacencyList) Neighbours(idx uint32) []EdgeID {
+func (a *BaseGraph) Neighbours(idx uint32) []EdgeID {
 	return a.EdgeIDs[a.Offsets[idx]:a.Offsets[idx+1]]
 }
 
 // Neighbours returns all outgoing overlay edges for the boundary-node index.
-func (o *OverlayAdjList) Neighbours(idx uint32) []OverlayEdge {
+func (o *OverlayGraph) Neighbours(idx uint32) []OverlayEdge {
 	return o.OverlayEdges[o.Offsets[idx]:o.Offsets[idx+1]]
 }
 

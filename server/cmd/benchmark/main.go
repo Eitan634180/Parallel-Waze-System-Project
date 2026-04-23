@@ -11,7 +11,6 @@ import (
 	graphbuilder "nav-system/src/graph/builder"
 	"nav-system/src/graph/model"
 	graphstore "nav-system/src/graph/store"
-	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 	benchmarkfixture "nav-system/test/benchmark"
@@ -334,7 +333,7 @@ func runOverlayCustomization(args []string) {
 	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.BoundaryBaseIdxs), len(g.Edges))
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
-	customizer := trafficcustomization.NewCustomizer(g)
+	customizer := trafficstore.NewCustomizer(g)
 	dirtyEdges := seedDirtyStore(g, store)
 	log.Printf("%s store ready (%d dirty edges)", customizationBenchLogPrefix, dirtyEdges)
 

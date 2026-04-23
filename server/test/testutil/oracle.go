@@ -97,7 +97,7 @@ func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routingengine.Weight
 			break
 		}
 
-		for _, edgeID := range g.BaseAdj.Neighbours(item.nodeIdx) {
+		for _, edgeID := range g.Base.Neighbours(item.nodeIdx) {
 			edge := &g.Edges[edgeID]
 			nextIdx := edge.ToNodeIdx
 			nextCost := item.cost + wf(edge)

@@ -7,7 +7,6 @@ import (
 	"nav-system/src/graph/model"
 	routingengine "nav-system/src/routing/engine"
 	routingentities "nav-system/src/routing/entities"
-	trafficcustomization "nav-system/src/traffic/customization"
 	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
 )
@@ -323,7 +322,7 @@ func applyGeneratedTraffic(t testing.TB, g *model.Graph) routingengine.WeightFun
 	t.Helper()
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
-	customizer := trafficcustomization.NewCustomizer(g)
+	customizer := trafficstore.NewCustomizer(g)
 	for edgeID := range g.Edges {
 		edge := &g.Edges[edgeID]
 		switch edgeID % 4 {

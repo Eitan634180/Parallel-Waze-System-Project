@@ -1,4 +1,4 @@
-package customization
+package store
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 
 	"nav-system/src/graph/model"
 	"nav-system/src/traffic"
-	trafficstore "nav-system/src/traffic/store"
 	"nav-system/src/utilities"
 )
 
@@ -58,7 +57,7 @@ func NewCustomizer(g *model.Graph) *Customizer {
 }
 
 // Run periodically customizes overlay weights.
-func (c *Customizer) Run(ctx context.Context, store *trafficstore.Store) {
+func (c *Customizer) Run(ctx context.Context, store *Store) {
 	ticker := time.NewTicker(traffic.CustomizationInterval)
 	defer ticker.Stop()
 
@@ -73,7 +72,7 @@ func (c *Customizer) Run(ctx context.Context, store *trafficstore.Store) {
 }
 
 // Customize recomputes overlay weights against the current live traffic.
-func (c *Customizer) Customize(store *trafficstore.Store) {
+func (c *Customizer) Customize(store *Store) {
 	start := time.Now()
 
 	pendingEdges := store.SwapPending()
@@ -96,7 +95,7 @@ func (c *Customizer) Customize(store *trafficstore.Store) {
 		coverage = float64(len(pendingEdges)) / float64(len(g.Edges))
 	}
 
-	if coverage >= fullAffectedCellsDirtyCoverage {
+	if coverage >= traffic.FullAffectedCellsDirtyCoverage {
 		for _, cell := range g.Cells {
 			affectedCellIDs = append(affectedCellIDs, cell.ID)
 		}
@@ -170,11 +169,11 @@ func (c *Customizer) Customize(store *trafficstore.Store) {
 		updates = append(updates, result.updates...)
 	}
 
-	g.OverlayAdj.Mu.Lock()
+	g.Overlay.Mu.Lock()
 	for _, update := range updates {
-		g.OverlayAdj.OverlayEdges[update.edgeIdx].Weight = update.weight
+		g.Overlay.OverlayEdges[update.edgeIdx].Weight = update.weight
 	}
-	g.OverlayAdj.Mu.Unlock()
+	g.Overlay.Mu.Unlock()
 
 	elapsed := time.Since(start)
 	if elapsed >= traffic.SlowCustomizationLogThreshold {
@@ -262,7 +261,7 @@ func liveCellDijkstra(
 			}
 		}
 
-		for _, eid := range g.BaseAdj.Neighbours(cur.idx) {
+		for _, eid := range g.Base.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
 			if g.Nodes[e.ToNodeIdx].CellID != cellID {
 				continue
@@ -293,10 +292,10 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
 	}
 
-	g.OverlayAdj.Mu.RLock()
-	defer g.OverlayAdj.Mu.RUnlock()
+	g.Overlay.Mu.RLock()
+	defer g.Overlay.Mu.RUnlock()
 
-	for overlayEdgeIdx, overlayEdge := range g.OverlayAdj.OverlayEdges {
+	for overlayEdgeIdx, overlayEdge := range g.Overlay.OverlayEdges {
 		if !overlayEdge.IsCrossCell {
 			fromBoundaryIdx := g.BoundaryNodeIdx[overlayEdge.FromNodeIdx]
 			if fromBoundaryIdx != -1 {
@@ -319,7 +318,7 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 }
 
 func baseEdgeIDBetweenNodeIdxs(g *model.Graph, fromIdx, toIdx uint32) (model.EdgeID, bool) {
-	for _, eid := range g.BaseAdj.Neighbours(fromIdx) {
+	for _, eid := range g.Base.Neighbours(fromIdx) {
 		if g.Edges[eid].ToNodeIdx == toIdx {
 			return eid, true
 		}

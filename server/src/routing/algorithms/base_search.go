@@ -39,7 +39,7 @@ func FullGraphAStar(
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
 
-		for _, edgeID := range g.BaseAdj.Neighbours(current.idx) {
+		for _, edgeID := range g.Base.Neighbours(current.idx) {
 			edge := &g.Edges[edgeID]
 			nextIdx := edge.ToNodeIdx
 
@@ -83,7 +83,7 @@ func FullGraphDijkstra(
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
 
-		for _, edgeID := range g.BaseAdj.Neighbours(current.idx) {
+		for _, edgeID := range g.Base.Neighbours(current.idx) {
 			edge := &g.Edges[edgeID]
 			nextCost := current.cost + wf(edge)
 			nextIdx := edge.ToNodeIdx
@@ -138,9 +138,9 @@ func OverlayAStar(
 			continue
 		}
 
-		g.OverlayAdj.Mu.RLock()
-		baseEdgeIdx := g.OverlayAdj.Offsets[boundaryIdx]
-		for i, overlayEdge := range g.OverlayAdj.Neighbours(uint32(boundaryIdx)) {
+		g.Overlay.Mu.RLock()
+		baseEdgeIdx := g.Overlay.Offsets[boundaryIdx]
+		for i, overlayEdge := range g.Overlay.Neighbours(uint32(boundaryIdx)) {
 			edgeIdx := baseEdgeIdx + uint32(i)
 			weight := overlayEdge.Weight
 			if penalty, ok := penalties[edgeIdx]; ok {
@@ -162,7 +162,7 @@ func OverlayAStar(
 				})
 			}
 		}
-		g.OverlayAdj.Mu.RUnlock()
+		g.Overlay.Mu.RUnlock()
 	}
 
 	return costs, pred
