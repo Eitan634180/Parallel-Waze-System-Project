@@ -12,7 +12,7 @@ type ChangedEdge struct {
 	NewMultiplier float32
 }
 
-func (s *Store) checkDedup(id model.EdgeID, data *storeData, changed *[]ChangedEdge) {
+func (s *Store) checkDedup(id model.EdgeID, data *baseStore, changed *[]ChangedEdge) {
 	if s.snapshotDedup[id] {
 		return
 	}
@@ -42,7 +42,7 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 	defer s.metaMu.Unlock()
 
 	var changed []ChangedEdge
-	data := s.data.Load()
+	data := s.baseStore.Load()
 	for _, id := range s.dirtyEdges {
 		s.checkDedup(id, data, &changed)
 	}

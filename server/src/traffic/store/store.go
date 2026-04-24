@@ -11,9 +11,9 @@ import (
 
 // Store holds the live traffic state for every edge that has been observed.
 type Store struct {
-	metaMu  sync.Mutex
-	data    atomic.Pointer[storeData]
-	overlay atomic.Pointer[overlayData]
+	metaMu        sync.Mutex
+	baseStore     atomic.Pointer[baseStore]
+	shortcutStore atomic.Pointer[shortcutStore]
 
 	prev        []float32 // multiplier at last propagation snapshot
 	prevDensity []int32   // density at last propagation snapshot
@@ -28,12 +28,12 @@ type Store struct {
 	snapshotDedup []bool
 }
 
-type storeData struct {
+type baseStore struct {
 	weight  []atomic.Uint32
 	density []atomic.Int32
 }
 
-type overlayData struct {
+type shortcutStore struct {
 	weight []atomic.Uint32
 }
 
@@ -49,8 +49,8 @@ func NewStoreWithCapacity(edgeCount int) *Store {
 	return s
 }
 
-func newStoreData(edgeCount int) *storeData {
-	data := &storeData{
+func newStoreData(edgeCount int) *baseStore {
+	data := &baseStore{
 		weight:  make([]atomic.Uint32, edgeCount),
 		density: make([]atomic.Int32, edgeCount),
 	}
@@ -61,8 +61,8 @@ func newStoreData(edgeCount int) *storeData {
 	return data
 }
 
-func (s *Store) ensureLocked(id model.EdgeID) *storeData {
-	data := s.data.Load()
+func (s *Store) ensureLocked(id model.EdgeID) *baseStore {
+	data := s.baseStore.Load()
 	if data != nil && int(id) < len(data.weight) {
 		return data
 	}
@@ -72,11 +72,11 @@ func (s *Store) ensureLocked(id model.EdgeID) *storeData {
 		newLen = int(id) + 1
 	}
 	s.resizeLocked(newLen)
-	return s.data.Load()
+	return s.baseStore.Load()
 }
 
 func (s *Store) resizeLocked(newLen int) {
-	current := s.data.Load()
+	current := s.baseStore.Load()
 	currentLen := 0
 	if current != nil {
 		currentLen = len(current.weight)
@@ -92,7 +92,7 @@ func (s *Store) resizeLocked(newLen int) {
 			next.density[i].Store(current.density[i].Load())
 		}
 	}
-	s.data.Store(next)
+	s.baseStore.Store(next)
 
 	newPrev := make([]float32, newLen)
 	for i := range newPrev {
@@ -122,27 +122,27 @@ func (s *Store) resizeLocked(newLen int) {
 	s.snapshotDedup = newSnapshotDedup
 }
 
-func loadWeight(data *storeData, id model.EdgeID) float32 {
+func loadWeight(data *baseStore, id model.EdgeID) float32 {
 	if data == nil || int(id) >= len(data.weight) {
 		return 1.0
 	}
 	return math.Float32frombits(data.weight[id].Load())
 }
 
-func loadDensity(data *storeData, id model.EdgeID) int32 {
+func loadDensity(data *baseStore, id model.EdgeID) int32 {
 	if data == nil || int(id) >= len(data.density) {
 		return 0
 	}
 	return data.density[id].Load()
 }
 
-func loadOverlayWeight(data *overlayData, edgeIdx uint32, fallback float32) float32 {
+func loadOverlayWeight(data *shortcutStore, edgeIdx uint32, fallback float32) float32 {
 	if data == nil || int(edgeIdx) >= len(data.weight) {
 		return fallback
 	}
 	return math.Float32frombits(data.weight[edgeIdx].Load())
 }
 
-func storeWeight(data *storeData, id model.EdgeID, weight float32) {
+func storeWeight(data *baseStore, id model.EdgeID, weight float32) {
 	data.weight[id].Store(math.Float32bits(weight))
 }

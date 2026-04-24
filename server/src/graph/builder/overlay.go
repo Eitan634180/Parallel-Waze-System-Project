@@ -52,7 +52,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	}()
 
 	gateCount := 0
-	for _, bIdx := range g.GateNodeIdx {
+	for _, bIdx := range g.NodeToGate {
 		if bIdx != -1 {
 			gateCount++
 		}
@@ -62,7 +62,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	totalEdges := 0
 	for result := range results {
 		for _, edge := range result.edges {
-			fromIdx := g.GateNodeIdx[edge.FromNodeIdx]
+			fromIdx := g.NodeToGate[edge.FromNodeIdx]
 			if fromIdx == -1 {
 				continue
 			}
@@ -78,6 +78,14 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		edges = append(edges, neighbours...)
 	}
 	offsets[gateCount] = uint32(len(edges))
+
+	shortcutIdx := uint32(0)
+	for i := range edges {
+		if !edges[i].IsCrossCell {
+			edges[i].LiveWeightIdx = shortcutIdx
+			shortcutIdx++
+		}
+	}
 
 	g.Overlay = model.OverlayGraph{Offsets: offsets, OverlayEdges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
@@ -119,9 +127,9 @@ func DetectGateNodes(g *model.Graph) {
 		}
 	}
 
-	g.GateNodeIdx = make([]int32, len(g.Nodes))
-	for i := range g.GateNodeIdx {
-		g.GateNodeIdx[i] = -1
+	g.NodeToGate = make([]int32, len(g.Nodes))
+	for i := range g.NodeToGate {
+		g.NodeToGate[i] = -1
 	}
 	cellGates := make(map[model.CellID][]uint32)
 
@@ -130,7 +138,7 @@ func DetectGateNodes(g *model.Graph) {
 		if !isGate[i] {
 			continue
 		}
-		g.GateNodeIdx[i] = int32(gateCount)
+		g.NodeToGate[i] = int32(gateCount)
 		gateCount++
 		cellGates[node.CellID] = append(cellGates[node.CellID], uint32(i))
 	}
@@ -157,7 +165,7 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 	var result []model.OverlayEdge
 
 	for _, fromIdx := range cell.GateNodeIdxs {
-		if g.GateNodeIdx[fromIdx] == -1 {
+		if g.NodeToGate[fromIdx] == -1 {
 			continue
 		}
 
@@ -168,13 +176,15 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 			if g.Nodes[toIdx].CellID == cellID {
 				continue
 			}
-			if g.GateNodeIdx[toIdx] == -1 {
+			if g.NodeToGate[toIdx] == -1 {
 				continue
 			}
 			result = append(result, model.OverlayEdge{
-				FromNodeIdx: fromIdx,
-				ToNodeIdx:   toIdx,
-				BaseWeight:  e.BaseWeight,
+				FromNodeIdx:   fromIdx,
+				ToNodeIdx:     toIdx,
+				BaseWeight:    e.BaseWeight,
+				LiveWeightIdx: eid,
+				IsCrossCell:   true,
 			})
 		}
 	}

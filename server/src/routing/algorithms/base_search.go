@@ -109,7 +109,7 @@ func OverlayAStar(
 	injectionCosts map[uint32]float32,
 	dstSet map[uint32]struct{},
 	heuristic func(uint32) float32,
-	overlayWeight func(uint32, float32) float32,
+	overlayWeight func(uint32, *model.OverlayEdge) float32,
 	penalties map[uint32]float32,
 	stats *entities.SearchStats,
 ) (costs map[uint32]float32, pred map[uint32]OverlayPredecessor) {
@@ -141,7 +141,7 @@ func OverlayAStar(
 			}
 		}
 
-		gateIdx := g.GateNodeIdx[current.idx]
+		gateIdx := g.NodeToGate[current.idx]
 		if gateIdx == -1 {
 			continue
 		}
@@ -150,7 +150,7 @@ func OverlayAStar(
 		end := g.Overlay.Offsets[gateIdx+1]
 		for edgeIdx := start; edgeIdx < end; edgeIdx++ {
 			overlayEdge := g.Overlay.OverlayEdges[edgeIdx]
-			weight := overlayWeight(edgeIdx, overlayEdge.BaseWeight)
+			weight := overlayWeight(edgeIdx, &overlayEdge)
 			if penalty, ok := penalties[edgeIdx]; ok {
 				weight *= penalty
 			}

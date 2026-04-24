@@ -67,12 +67,12 @@ func main() {
 	log.Printf("%s snap index ready in %s", serverLogPrefix, time.Since(t).Round(time.Millisecond))
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
-	store.InitOverlayWeights(g.Overlay.OverlayEdges)
+	store.InitOverlayWeights(g)
 	customizer := trafficstore.NewCustomizer(g)
 	mgr := navigationsessions.NewManager()
 	router := routingengine.NewRouterWithMode(g, si, routingMode)
-	router.SetOverlayWeightFunc(func(edgeIdx uint32, staticWeight float32) float32 {
-		return store.OverlayWeight(edgeIdx, staticWeight)
+	router.SetOverlayWeightFunc(func(edgeIdx uint32, overlayEdge *model.OverlayEdge) float32 {
+		return store.OverlayWeight(edgeIdx, overlayEdge)
 	})
 	sim := simulation.NewManager(g, store, router, func() routingengine.WeightFunc {
 		return func(e *model.Edge) float32 {

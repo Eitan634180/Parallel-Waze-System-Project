@@ -42,6 +42,30 @@ func TestGraphStoreRoundTripPreservesRuntimeCellBoundaries(t *testing.T) {
 	}
 }
 
+func TestGraphStoreRoundTripPreservesNodeToGateMapping(t *testing.T) {
+	fixture := testutil.BuildGraphFixture(t, "one_way_detour_graph.json", 2)
+
+	dir := t.TempDir()
+	if err := graphstore.SaveGraph(fixture.Graph, dir); err != nil {
+		t.Fatalf("SaveGraph: %v", err)
+	}
+
+	reloaded, err := graphstore.LoadGraph(dir)
+	if err != nil {
+		t.Fatalf("LoadGraph: %v", err)
+	}
+
+	if len(reloaded.NodeToGate) != len(fixture.Graph.NodeToGate) {
+		t.Fatalf("node-to-gate length changed across save/load: got %d want %d", len(reloaded.NodeToGate), len(fixture.Graph.NodeToGate))
+	}
+
+	for i := range fixture.Graph.NodeToGate {
+		if reloaded.NodeToGate[i] != fixture.Graph.NodeToGate[i] {
+			t.Fatalf("node %d gate mapping changed across save/load: got %d want %d", i, reloaded.NodeToGate[i], fixture.Graph.NodeToGate[i])
+		}
+	}
+}
+
 func TestGraphStoreRejectsUnsupportedSequenceFileVersion(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
 

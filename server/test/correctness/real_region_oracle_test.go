@@ -190,6 +190,9 @@ func loadRealRegionGraph(tb testing.TB, region string) *model.Graph {
 
 	graph, err := store.LoadGraph(filepath.Join(realRegionModuleRoot(), "data", "map", region))
 	if err != nil {
+		if os.IsNotExist(err) || strings.Contains(strings.ToLower(err.Error()), "cannot find the file specified") {
+			tb.Skipf("real-region map data for %s is not built locally: %v", region, err)
+		}
 		if strings.Contains(err.Error(), "unsupported graph format version") {
 			tb.Skipf("real-region map data for %s must be rebuilt: %v", region, err)
 		}

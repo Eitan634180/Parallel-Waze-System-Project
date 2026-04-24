@@ -31,8 +31,7 @@ type shortcutTarget struct {
 }
 
 type customizationIndex struct {
-	crossCellOverlayByBaseEdge []uint32
-	shortcutTargetsByGate      [][]shortcutTarget
+	shortcutTargetsByGate [][]shortcutTarget
 }
 
 type Customizer struct {
@@ -116,22 +115,6 @@ func (c *Customizer) Customize(store *Store) {
 		}
 	}
 
-	for _, edgeID := range pendingEdges {
-		if int(edgeID) >= len(index.crossCellOverlayByBaseEdge) {
-			continue
-		}
-
-		overlayEdgeIdx := index.crossCellOverlayByBaseEdge[edgeID]
-		if overlayEdgeIdx == noOverlayEdgeIdx {
-			continue
-		}
-
-		updates = append(updates, overlayWeightUpdate{
-			edgeIdx: overlayEdgeIdx,
-			weight:  liveWeightFromSnapshot(weights, edgeID, g.Edges[edgeID].BaseWeight),
-		})
-	}
-
 	type cellUpdates struct {
 		updates []overlayWeightUpdate
 	}
@@ -195,7 +178,7 @@ func computeCellCustomizationUpdates(
 
 	updates := make([]overlayWeightUpdate, 0, len(cell.GateNodeIdxs))
 	for _, srcIdx := range cell.GateNodeIdxs {
-		srcGateIdx := g.GateNodeIdx[srcIdx]
+		srcGateIdx := g.NodeToGate[srcIdx]
 		if srcGateIdx == -1 {
 			continue
 		}
@@ -281,42 +264,24 @@ func liveWeightFromSnapshot(weights []float32, id model.EdgeID, baseSec float32)
 
 func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	index := &customizationIndex{
-		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
-		shortcutTargetsByGate:      make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
-	}
-	for i := range index.crossCellOverlayByBaseEdge {
-		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx
+		shortcutTargetsByGate: make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
 	}
 
-	for overlayEdgeIdx, overlayEdge := range g.Overlay.OverlayEdges {
-		if g.Nodes[overlayEdge.FromNodeIdx].CellID == g.Nodes[overlayEdge.ToNodeIdx].CellID {
-			fromGateIdx := g.GateNodeIdx[overlayEdge.FromNodeIdx]
-			if fromGateIdx != -1 {
-				index.shortcutTargetsByGate[fromGateIdx] = append(
-					index.shortcutTargetsByGate[fromGateIdx],
-					shortcutTarget{toIdx: overlayEdge.ToNodeIdx, edgeIdx: uint32(overlayEdgeIdx)},
-				)
-			}
+	for _, overlayEdge := range g.Overlay.OverlayEdges {
+		if overlayEdge.IsCrossCell {
 			continue
 		}
-
-		baseEdgeID, ok := baseEdgeIDBetweenNodeIdxs(g, overlayEdge.FromNodeIdx, overlayEdge.ToNodeIdx)
-		if !ok || int(baseEdgeID) >= len(index.crossCellOverlayByBaseEdge) {
+		fromGateIdx := g.NodeToGate[overlayEdge.FromNodeIdx]
+		if fromGateIdx == -1 {
 			continue
 		}
-		index.crossCellOverlayByBaseEdge[baseEdgeID] = uint32(overlayEdgeIdx)
+		index.shortcutTargetsByGate[fromGateIdx] = append(
+			index.shortcutTargetsByGate[fromGateIdx],
+			shortcutTarget{toIdx: overlayEdge.ToNodeIdx, edgeIdx: overlayEdge.LiveWeightIdx},
+		)
 	}
 
 	return index
-}
-
-func baseEdgeIDBetweenNodeIdxs(g *model.Graph, fromIdx, toIdx uint32) (model.EdgeID, bool) {
-	for _, eid := range g.Base.Neighbours(fromIdx) {
-		if g.Edges[eid].ToNodeIdx == toIdx {
-			return eid, true
-		}
-	}
-	return 0, false
 }
 
 func newLiveDijkstraScratch(nodeCount int) *liveDijkstraScratch {

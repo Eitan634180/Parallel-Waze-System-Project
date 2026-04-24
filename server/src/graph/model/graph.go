@@ -2,14 +2,13 @@ package model
 
 // Graph contains the base graph, partition metadata, and overlay graph.
 type Graph struct {
-	Nodes []Node
-	Edges []Edge
-	Cells []Cell
+	Nodes      []Node
+	Edges      []Edge
+	Cells      []Cell
+	NodeToGate []int32
 
 	Base    BaseGraph
 	Overlay OverlayGraph
-
-	GateNodeIdx []int32
 
 	BBox             BoundingBox
 	ProjectionRefLat float64

@@ -80,23 +80,27 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		return nil, err
 	}
 
-	g.GateNodeIdx = make([]int32, len(g.Nodes))
-	for i := range g.GateNodeIdx {
-		g.GateNodeIdx[i] = -1
+	g.NodeToGate = make([]int32, len(g.Nodes))
+	for i := range g.NodeToGate {
+		g.NodeToGate[i] = -1
+	}
+
+	isGate := make([]bool, len(g.Nodes))
+	for i := range g.Nodes {
+		fromCellID := g.Nodes[i].CellID
+		for _, eid := range g.Base.Neighbours(uint32(i)) {
+			toIdx := g.Edges[eid].ToNodeIdx
+			if g.Nodes[toIdx].CellID != fromCellID {
+				isGate[i] = true
+				isGate[toIdx] = true
+			}
+		}
 	}
 
 	gateCount := 0
 	for i := range g.Nodes {
-		fromCellID := g.Nodes[i].CellID
-		isGate := false
-		for _, eid := range g.Base.Neighbours(uint32(i)) {
-			if g.Nodes[g.Edges[eid].ToNodeIdx].CellID != fromCellID {
-				isGate = true
-				break
-			}
-		}
-		if isGate {
-			g.GateNodeIdx[i] = int32(gateCount)
+		if isGate[i] {
+			g.NodeToGate[i] = int32(gateCount)
 			gateCount++
 		}
 	}
@@ -253,9 +257,11 @@ func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 			return model.OverlayGraph{}, err
 		}
 		edges[i] = model.OverlayEdge{
-			FromNodeIdx: b.FromNodeIdx,
-			ToNodeIdx:   b.ToNodeIdx,
-			BaseWeight:  b.Weight,
+			FromNodeIdx:   b.FromNodeIdx,
+			ToNodeIdx:     b.ToNodeIdx,
+			BaseWeight:    b.Weight,
+			LiveWeightIdx: b.LiveWeightIdx,
+			IsCrossCell:   b.IsCrossCell != 0,
 		}
 
 	}

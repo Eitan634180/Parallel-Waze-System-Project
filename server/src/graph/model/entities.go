@@ -28,9 +28,11 @@ type Edge struct {
 
 // OverlayEdge is an edge in the two-level overlay graph (cross-cell edges and shortcut edges).
 type OverlayEdge struct {
-	FromNodeIdx uint32
-	ToNodeIdx   uint32
-	BaseWeight  float32
+	FromNodeIdx   uint32
+	ToNodeIdx     uint32
+	BaseWeight    float32
+	LiveWeightIdx uint32
+	IsCrossCell   bool
 }
 
 // Cell is one partition region produced by recursive bisection.

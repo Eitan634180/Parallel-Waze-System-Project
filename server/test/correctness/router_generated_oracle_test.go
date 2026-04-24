@@ -333,7 +333,7 @@ func applyGeneratedTraffic(t testing.TB, g *model.Graph) liveTrafficWeights {
 	t.Helper()
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
-	store.InitOverlayWeights(g.Overlay.OverlayEdges)
+	store.InitOverlayWeights(g)
 	customizer := trafficstore.NewCustomizer(g)
 	for edgeID := range g.Edges {
 		edge := &g.Edges[edgeID]
@@ -353,8 +353,8 @@ func applyGeneratedTraffic(t testing.TB, g *model.Graph) liveTrafficWeights {
 			return store.LiveWeight(edge.ID, edge.BaseWeight)
 		},
 		configure: func(router *routingengine.Router) {
-			router.SetOverlayWeightFunc(func(edgeIdx uint32, staticWeight float32) float32 {
-				return store.OverlayWeight(edgeIdx, staticWeight)
+			router.SetOverlayWeightFunc(func(edgeIdx uint32, overlayEdge *model.OverlayEdge) float32 {
+				return store.OverlayWeight(edgeIdx, overlayEdge)
 			})
 		},
 	}

@@ -11,7 +11,7 @@ import (
 
 const (
 	fileMagic   = "NAVI"
-	fileVersion = uint16(11)
+	fileVersion = uint16(13)
 
 	nodesFileName      = "nodes.bin"
 	edgesFileName      = "edges.bin"
@@ -23,8 +23,6 @@ const (
 	graphStoreLogPrefix = "graph-store:"
 	graphDataDirPerm    = 0o755
 	headerMagicSize     = 4
-	crossCellFalse      = uint8(0)
-	crossCellTrue       = uint8(1)
 )
 
 var le = binary.LittleEndian
@@ -49,9 +47,12 @@ type edgeBin struct {
 }
 
 type overlayEdgeBin struct {
-	FromNodeIdx uint32
-	ToNodeIdx   uint32
-	Weight      float32
+	FromNodeIdx   uint32
+	ToNodeIdx     uint32
+	Weight        float32
+	LiveWeightIdx uint32
+	IsCrossCell   uint8
+	Pad           [3]byte
 }
 
 type graphMeta struct {

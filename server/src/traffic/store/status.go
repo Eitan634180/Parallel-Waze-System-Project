@@ -9,17 +9,17 @@ import (
 
 // Density returns the current number of active sessions on an edge.
 func (s *Store) Density(id model.EdgeID) int {
-	return int(loadDensity(s.data.Load(), id))
+	return int(loadDensity(s.baseStore.Load(), id))
 }
 
 // Multiplier returns the raw multiplier for an edge (1.0 if not observed).
 func (s *Store) Multiplier(id model.EdgeID) float32 {
-	return loadWeight(s.data.Load(), id)
+	return loadWeight(s.baseStore.Load(), id)
 }
 
 // LiveWeight returns the routing/ETA cost for an edge based on observed traffic only.
 func (s *Store) LiveWeight(id model.EdgeID, baseSec float32) float32 {
-	data := s.data.Load()
+	data := s.baseStore.Load()
 	if data == nil || int(id) >= len(data.weight) {
 		return baseSec
 	}

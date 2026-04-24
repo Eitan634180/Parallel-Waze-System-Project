@@ -7,22 +7,40 @@ import (
 	"nav-system/src/graph/model"
 )
 
-func (s *Store) InitOverlayWeights(edges []model.OverlayEdge) {
-	data := &overlayData{
-		weight: make([]atomic.Uint32, len(edges)),
+func (s *Store) InitOverlayWeights(g *model.Graph) {
+
+	shortcutCount := 0
+	for i := range g.Overlay.OverlayEdges {
+		if !g.Overlay.OverlayEdges[i].IsCrossCell {
+			shortcutCount++
+		}
 	}
-	for i, edge := range edges {
-		data.weight[i].Store(math.Float32bits(edge.BaseWeight))
+
+	data := &shortcutStore{
+		weight: make([]atomic.Uint32, shortcutCount),
 	}
-	s.overlay.Store(data)
+	for i := range g.Overlay.OverlayEdges {
+		e := &g.Overlay.OverlayEdges[i]
+		if !e.IsCrossCell {
+			data.weight[e.LiveWeightIdx].Store(math.Float32bits(e.BaseWeight))
+		}
+	}
+	s.shortcutStore.Store(data)
 }
 
-func (s *Store) OverlayWeight(edgeIdx uint32, fallback float32) float32 {
-	return loadOverlayWeight(s.overlay.Load(), edgeIdx, fallback)
+// OverlayWeight returns the live weight for an overlay edge.
+// Cross-cell edges derive their weight from the base traffic store.
+// Shortcut edges read from the dedicated shortcut weight array.
+func (s *Store) OverlayWeight(edgeIdx uint32, overlayEdge *model.OverlayEdge) float32 {
+	if overlayEdge.IsCrossCell {
+		data := s.baseStore.Load()
+		return overlayEdge.BaseWeight * loadWeight(data, overlayEdge.LiveWeightIdx)
+	}
+	return loadOverlayWeight(s.shortcutStore.Load(), overlayEdge.LiveWeightIdx, overlayEdge.BaseWeight)
 }
 
 func (s *Store) applyOverlayUpdates(updates []overlayWeightUpdate) {
-	data := s.overlay.Load()
+	data := s.shortcutStore.Load()
 	if data == nil {
 		return
 	}

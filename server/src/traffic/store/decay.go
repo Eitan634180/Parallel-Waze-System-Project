@@ -32,7 +32,7 @@ func (s *Store) ApplyDecay(factor, tolerance float32) {
 	defer s.metaMu.Unlock()
 
 	newDirty := s.dirtyEdges[:0]
-	data := s.data.Load()
+	data := s.baseStore.Load()
 	for _, id := range s.dirtyEdges {
 		cur := math.Float32frombits(data.weight[id].Load())
 		updated := 1.0 + (cur-1.0)*factor

@@ -74,7 +74,7 @@ func (s *Store) SnapshotWeightMultipliers(dst []float32, edgeCount int) []float3
 
 	s.metaMu.Lock()
 	defer s.metaMu.Unlock()
-	data := s.data.Load()
+	data := s.baseStore.Load()
 	for _, edgeID := range s.dirtyEdges {
 		if int(edgeID) < len(dst) {
 			dst[edgeID] = loadWeight(data, edgeID)
