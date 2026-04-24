@@ -28,14 +28,16 @@ func FullGraphAStar(
 	pq := utilities.NewHeap(func(a, b astarItem) bool { return a.f < b.f })
 	pq.Push(astarItem{idx: srcIdx, f: heuristic(srcIdx), g: 0})
 
+	visitedCount := 0
 	for pq.Len() > 0 {
 		current := pq.Pop()
 		if best, ok := costs[current.idx]; ok && current.g > best {
 			continue
 		}
-		stats.RecordVisitedNode()
+		visitedCount++
 
 		if current.idx == dstIdx {
+			stats.RecordVisitedNodes(visitedCount)
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
 
@@ -56,6 +58,7 @@ func FullGraphAStar(
 		}
 	}
 
+	stats.RecordVisitedNodes(visitedCount)
 	return nil, false
 }
 
@@ -72,14 +75,16 @@ func FullGraphDijkstra(
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
 	pq.Push(ijItem{idx: srcIdx, cost: 0})
 
+	visitedCount := 0
 	for pq.Len() > 0 {
 		current := pq.Pop()
 		if best, ok := costs[current.idx]; ok && current.cost > best {
 			continue
 		}
-		stats.RecordVisitedNode()
+		visitedCount++
 
 		if current.idx == dstIdx {
+			stats.RecordVisitedNodes(visitedCount)
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
 
@@ -95,6 +100,7 @@ func FullGraphDijkstra(
 		}
 	}
 
+	stats.RecordVisitedNodes(visitedCount)
 	return nil, false
 }
 
@@ -119,12 +125,13 @@ func OverlayAStar(
 	settledDestinations := 0
 	totalDestinations := len(dstSet)
 
+	visitedCount := 0
 	for pq.Len() > 0 {
 		current := pq.Pop()
 		if best, ok := costs[current.idx]; ok && current.g > best {
 			continue
 		}
-		stats.RecordVisitedNode()
+		visitedCount++
 
 		if _, isDestination := dstSet[current.idx]; isDestination {
 			settledDestinations++
@@ -139,9 +146,10 @@ func OverlayAStar(
 			continue
 		}
 
-		baseEdgeIdx := g.Overlay.Offsets[gateIdx]
-		for i, overlayEdge := range g.Overlay.Neighbours(uint32(gateIdx)) {
-			edgeIdx := baseEdgeIdx + uint32(i)
+		start := g.Overlay.Offsets[gateIdx]
+		end := g.Overlay.Offsets[gateIdx+1]
+		for edgeIdx := start; edgeIdx < end; edgeIdx++ {
+			overlayEdge := g.Overlay.OverlayEdges[edgeIdx]
 			weight := overlayWeight(edgeIdx, overlayEdge.BaseWeight)
 			if penalty, ok := penalties[edgeIdx]; ok {
 				weight *= penalty
@@ -164,5 +172,6 @@ func OverlayAStar(
 		}
 	}
 
+	stats.RecordVisitedNodes(visitedCount)
 	return costs, pred
 }

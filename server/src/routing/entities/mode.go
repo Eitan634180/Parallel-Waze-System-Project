@@ -31,8 +31,9 @@ type SearchStats struct {
 	VisitedNodes int64
 }
 
-func (s *SearchStats) RecordVisitedNode() {
+func (s *SearchStats) RecordVisitedNodes(n int) {
 	if s != nil {
-		s.VisitedNodes++
+		s.VisitedNodes += int64(n)
 	}
 }
+

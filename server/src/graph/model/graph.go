@@ -32,11 +32,6 @@ func (a *BaseGraph) Neighbours(idx uint32) []EdgeID {
 	return a.EdgeIDs[a.Offsets[idx]:a.Offsets[idx+1]]
 }
 
-// Neighbours returns all outgoing overlay edges for the gate-node index.
-func (o *OverlayGraph) Neighbours(idx uint32) []OverlayEdge {
-	return o.OverlayEdges[o.Offsets[idx]:o.Offsets[idx+1]]
-}
-
 func (g *Graph) Edge(id EdgeID) (*Edge, bool) {
 
 	if int(id) < 0 || int(id) >= len(g.Edges) {

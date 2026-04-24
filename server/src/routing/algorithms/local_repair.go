@@ -54,9 +54,10 @@ func LocalRepairOverlay(
 			continue
 		}
 
-		baseEdgeIdx := g.Overlay.Offsets[gateIdx]
-		for i, overlayEdge := range g.Overlay.Neighbours(uint32(gateIdx)) {
-			edgeIdx := baseEdgeIdx + uint32(i)
+		start := g.Overlay.Offsets[gateIdx]
+		end := g.Overlay.Offsets[gateIdx+1]
+		for edgeIdx := start; edgeIdx < end; edgeIdx++ {
+			overlayEdge := g.Overlay.OverlayEdges[edgeIdx]
 			if current.idx == srcIdx && overlayEdge.ToNodeIdx == dstIdx {
 				continue
 			}

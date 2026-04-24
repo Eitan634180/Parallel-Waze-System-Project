@@ -32,7 +32,7 @@ type shortcutTarget struct {
 
 type customizationIndex struct {
 	crossCellOverlayByBaseEdge []uint32
-	shortcutTargetsByGate  [][]shortcutTarget
+	shortcutTargetsByGate      [][]shortcutTarget
 }
 
 type Customizer struct {
@@ -282,7 +282,7 @@ func liveWeightFromSnapshot(weights []float32, id model.EdgeID, baseSec float32)
 func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	index := &customizationIndex{
 		crossCellOverlayByBaseEdge: make([]uint32, len(g.Edges)),
-		shortcutTargetsByGate:  make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
+		shortcutTargetsByGate:      make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
 	}
 	for i := range index.crossCellOverlayByBaseEdge {
 		index.crossCellOverlayByBaseEdge[i] = noOverlayEdgeIdx

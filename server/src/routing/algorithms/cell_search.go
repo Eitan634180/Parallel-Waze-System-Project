@@ -29,12 +29,13 @@ func CellDijkstra(
 	pq := utilities.NewHeap(func(a, b ijItem) bool { return a.cost < b.cost })
 	pq.Push(ijItem{idx: srcInternalIdx, cost: 0})
 
+	visitedCount := 0
 	for pq.Len() > 0 {
 		current := pq.Pop()
 		if best, ok := costs[current.idx]; ok && current.cost > best {
 			continue
 		}
-		stats.RecordVisitedNode()
+		visitedCount++
 
 		if _, isTarget := targetSet[current.idx]; isTarget {
 			remaining--
@@ -60,6 +61,7 @@ func CellDijkstra(
 		}
 	}
 
+	stats.RecordVisitedNodes(visitedCount)
 	return costs, pred
 }
 
@@ -96,12 +98,13 @@ func MultiSourceCellDijkstra(
 		pq.Push(ijItem{idx: seed.NodeIdx, cost: seed.Cost})
 	}
 
+	visitedCount := 0
 	for pq.Len() > 0 {
 		current := pq.Pop()
 		if best, ok := costs[current.idx]; ok && current.cost > best {
 			continue
 		}
-		stats.RecordVisitedNode()
+		visitedCount++
 
 		if current.idx == dstInternalIdx {
 			break
@@ -123,6 +126,7 @@ func MultiSourceCellDijkstra(
 		}
 	}
 
+	stats.RecordVisitedNodes(visitedCount)
 	return costs, pred
 }
 
