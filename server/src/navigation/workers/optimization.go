@@ -116,7 +116,7 @@ func tryQueueOptimization(jobs chan<- *navigationsessions.Session, sess *navigat
 		sess.Mu.Lock()
 		sess.OptimizationQueued = false
 		sess.Mu.Unlock()
-		log.Printf("session: optimization queue full, deferring session %s", sess.ID)
+		// log.Printf("session: optimization queue full, deferring session %s", sess.ID)
 	}
 }
 

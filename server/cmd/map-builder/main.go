@@ -78,7 +78,7 @@ func main() {
 	log.Printf("%s partitioned graph in %s (%d cells)",
 		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Cells))
 
-	log.Printf("%s detecting boundary nodes", builderLogPrefix)
+	log.Printf("%s detecting gate nodes", builderLogPrefix)
 	t = time.Now()
 	builder.DetectGateNodes(g)
 	log.Printf("%s boundary nodes ready in %s (%d nodes)",

@@ -283,7 +283,7 @@ func runOverlayBuild(args []string) {
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
-	log.Printf("%s graph ready (%d cells, %d boundary nodes)", overlayBenchLogPrefix, len(g.Cells), len(g.Overlay.Offsets)-1)
+	log.Printf("%s graph ready (%d cells, %d gate nodes)", overlayBenchLogPrefix, len(g.Cells), len(g.Overlay.Offsets)-1)
 
 	for _, workers := range resolvedWorkers {
 		var total time.Duration
@@ -330,7 +330,7 @@ func runOverlayCustomization(args []string) {
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
-	log.Printf("%s graph ready (%d cells, %d boundary nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.Overlay.Offsets)-1, len(g.Edges))
+	log.Printf("%s graph ready (%d cells, %d gate nodes, %d edges)", customizationBenchLogPrefix, len(g.Cells), len(g.Overlay.Offsets)-1, len(g.Edges))
 
 	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
 	store.InitOverlayWeights(g.Overlay.OverlayEdges)
