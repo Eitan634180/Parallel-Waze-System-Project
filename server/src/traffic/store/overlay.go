@@ -12,7 +12,7 @@ func (s *Store) InitOverlayWeights(edges []model.OverlayEdge) {
 		weight: make([]atomic.Uint32, len(edges)),
 	}
 	for i, edge := range edges {
-		data.weight[i].Store(math.Float32bits(edge.Weight))
+		data.weight[i].Store(math.Float32bits(edge.BaseWeight))
 	}
 	s.overlay.Store(data)
 }

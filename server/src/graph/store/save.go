@@ -189,7 +189,7 @@ func saveOverlayAdj(g *model.Graph, path string) error {
 		return err
 	}
 	for _, e := range g.Overlay.OverlayEdges {
-		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeIdx, e.ToNodeIdx, e.Weight}); err != nil {
+		if err := writeFixed(bw, overlayEdgeBin{e.FromNodeIdx, e.ToNodeIdx, e.BaseWeight}); err != nil {
 			return err
 		}
 	}

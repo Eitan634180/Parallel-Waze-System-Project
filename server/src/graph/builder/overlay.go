@@ -174,7 +174,7 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 			result = append(result, model.OverlayEdge{
 				FromNodeIdx: fromIdx,
 				ToNodeIdx:   toIdx,
-				Weight:      e.BaseWeight,
+				BaseWeight:  e.BaseWeight,
 			})
 		}
 	}
@@ -201,7 +201,7 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 			result = append(result, model.OverlayEdge{
 				FromNodeIdx: srcIdx,
 				ToNodeIdx:   dstIdx,
-				Weight:      d.weight,
+				BaseWeight:  d.weight,
 			})
 		}
 	}

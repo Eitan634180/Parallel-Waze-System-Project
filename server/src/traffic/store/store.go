@@ -11,8 +11,8 @@ import (
 
 // Store holds the live traffic state for every edge that has been observed.
 type Store struct {
-	metaMu sync.Mutex
-	data   atomic.Pointer[storeData]
+	metaMu  sync.Mutex
+	data    atomic.Pointer[storeData]
 	overlay atomic.Pointer[overlayData]
 
 	prev        []float32 // multiplier at last propagation snapshot
@@ -136,13 +136,13 @@ func loadDensity(data *storeData, id model.EdgeID) int32 {
 	return data.density[id].Load()
 }
 
-func storeWeight(data *storeData, id model.EdgeID, weight float32) {
-	data.weight[id].Store(math.Float32bits(weight))
-}
-
 func loadOverlayWeight(data *overlayData, edgeIdx uint32, fallback float32) float32 {
 	if data == nil || int(edgeIdx) >= len(data.weight) {
 		return fallback
 	}
 	return math.Float32frombits(data.weight[edgeIdx].Load())
+}
+
+func storeWeight(data *storeData, id model.EdgeID, weight float32) {
+	data.weight[id].Store(math.Float32bits(weight))
 }

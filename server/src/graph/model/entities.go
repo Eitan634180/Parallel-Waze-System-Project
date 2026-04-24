@@ -30,7 +30,7 @@ type Edge struct {
 type OverlayEdge struct {
 	FromNodeIdx uint32
 	ToNodeIdx   uint32
-	Weight      float32
+	BaseWeight  float32
 }
 
 // Cell is one partition region produced by recursive bisection.

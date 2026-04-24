@@ -255,7 +255,7 @@ func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 		edges[i] = model.OverlayEdge{
 			FromNodeIdx: b.FromNodeIdx,
 			ToNodeIdx:   b.ToNodeIdx,
-			Weight:      b.Weight,
+			BaseWeight:  b.Weight,
 		}
 
 	}

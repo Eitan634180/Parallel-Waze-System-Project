@@ -61,7 +61,7 @@ func LocalRepairOverlay(
 				continue
 			}
 
-			nextCost := current.g + overlayWeight(edgeIdx, overlayEdge.Weight)
+			nextCost := current.g + overlayWeight(edgeIdx, overlayEdge.BaseWeight)
 			if nextCost > maxCost {
 				continue
 			}
