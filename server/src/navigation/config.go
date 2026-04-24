@@ -11,7 +11,7 @@ const (
 	SessionExpiryCheckInterval = 60 * time.Second
 
 	PropagationInterval       = 2 * time.Second
-	OptimizationSweepInterval = 500 * time.Millisecond
+	OptimizationSweepInterval = 5 * time.Second
 	SlowComputeLogThreshold   = 150 * time.Millisecond
 	RerouteCooldown           = 10 * time.Second
 	ETAThrottle               = 2 * time.Second

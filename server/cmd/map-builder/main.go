@@ -81,7 +81,7 @@ func main() {
 	log.Printf("%s detecting gate nodes", builderLogPrefix)
 	t = time.Now()
 	builder.DetectGateNodes(g)
-	log.Printf("%s boundary nodes ready in %s (%d nodes)",
+	log.Printf("%s gate nodes ready in %s (%d nodes)",
 		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Overlay.Offsets)-1)
 
 	log.Printf("%s using GOMAXPROCS=%d", builderLogPrefix, parallelism)
@@ -97,7 +97,7 @@ func main() {
 		log.Fatalf("SaveGraph: %v", err)
 	}
 	log.Printf("%s graph written in %s", builderLogPrefix, time.Since(t).Round(time.Millisecond))
-	log.Printf("%s build complete in %s (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
+	log.Printf("%s build complete in %s (%d nodes, %d edges, %d cells, %d gate nodes, %d overlay edges)",
 		builderLogPrefix,
 		time.Since(total).Round(time.Millisecond),
 		len(g.Nodes),

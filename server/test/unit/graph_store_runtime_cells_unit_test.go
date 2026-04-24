@@ -32,11 +32,11 @@ func TestGraphStoreRoundTripPreservesRuntimeCellBoundaries(t *testing.T) {
 		want := fixture.Graph.Cells[i].GateNodeIdxs
 		got := reloaded.Cells[i].GateNodeIdxs
 		if len(got) != len(want) {
-			t.Fatalf("cell %d boundary count changed across save/load: got %d want %d", i, len(got), len(want))
+			t.Fatalf("cell %d gate count changed across save/load: got %d want %d", i, len(got), len(want))
 		}
 		for j := range want {
 			if got[j] != want[j] {
-				t.Fatalf("cell %d boundary %d changed across save/load: got %d want %d", i, j, got[j], want[j])
+				t.Fatalf("cell %d gate %d changed across save/load: got %d want %d", i, j, got[j], want[j])
 			}
 		}
 	}

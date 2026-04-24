@@ -134,13 +134,13 @@ func OverlayAStar(
 			}
 		}
 
-		boundaryIdx := g.GateNodeIdx[current.idx]
-		if boundaryIdx == -1 {
+		gateIdx := g.GateNodeIdx[current.idx]
+		if gateIdx == -1 {
 			continue
 		}
 
-		baseEdgeIdx := g.Overlay.Offsets[boundaryIdx]
-		for i, overlayEdge := range g.Overlay.Neighbours(uint32(boundaryIdx)) {
+		baseEdgeIdx := g.Overlay.Offsets[gateIdx]
+		for i, overlayEdge := range g.Overlay.Neighbours(uint32(gateIdx)) {
 			edgeIdx := baseEdgeIdx + uint32(i)
 			weight := overlayWeight(edgeIdx, overlayEdge.Weight)
 			if penalty, ok := penalties[edgeIdx]; ok {

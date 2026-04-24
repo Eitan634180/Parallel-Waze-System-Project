@@ -55,7 +55,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
-	log.Printf("%s graph ready in %s (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
+	log.Printf("%s graph ready in %s (%d nodes, %d edges, %d cells, %d gate nodes, %d overlay edges)",
 		serverLogPrefix,
 		time.Since(t).Round(time.Millisecond),
 		len(g.Nodes), len(g.Edges), len(g.Cells),

@@ -85,7 +85,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		g.GateNodeIdx[i] = -1
 	}
 
-	boundaryCount := 0
+	gateCount := 0
 	for i := range g.Nodes {
 		fromCellID := g.Nodes[i].CellID
 		isGate := false
@@ -96,8 +96,8 @@ func LoadGraph(dir string) (*model.Graph, error) {
 			}
 		}
 		if isGate {
-			g.GateNodeIdx[i] = int32(boundaryCount)
-			boundaryCount++
+			g.GateNodeIdx[i] = int32(gateCount)
+			gateCount++
 		}
 	}
 
@@ -108,7 +108,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 	g.ProjectionRefLat = g.BBox.CenterLat()
 	reprojectNodes(g)
 
-	log.Printf("%s graph ready (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
+	log.Printf("%s graph ready (%d nodes, %d edges, %d cells, %d gate nodes, %d overlay edges)",
 		graphStoreLogPrefix,
 		len(g.Nodes),
 		len(g.Edges),
@@ -212,15 +212,15 @@ func loadCells(path string) ([]model.Cell, error) {
 		if err != nil {
 			return nil, err
 		}
-		boundary := make([]uint32, bc)
-		for j := range boundary {
+		gate := make([]uint32, bc)
+		for j := range gate {
 			v, err := readUint32(br)
 			if err != nil {
 				return nil, err
 			}
-			boundary[j] = v
+			gate[j] = v
 		}
-		cells[i] = model.Cell{GateNodeIdxs: boundary}
+		cells[i] = model.Cell{GateNodeIdxs: gate}
 	}
 	return cells, nil
 }

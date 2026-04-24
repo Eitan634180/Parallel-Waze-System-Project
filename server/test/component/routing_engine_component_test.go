@@ -27,7 +27,7 @@ func TestRoutingEngineBuildsOverlayAndRoutesAcrossCorpus(t *testing.T) {
 				t.Fatalf("expected at least 2 cells, got %d", len(fixture.Graph.Cells))
 			}
 			if len(fixture.Graph.Overlay.Offsets) <= 1 {
-				t.Fatal("expected boundary nodes to be detected")
+				t.Fatal("expected gate nodes to be detected")
 			}
 			if len(fixture.Graph.Overlay.OverlayEdges) == 0 {
 				t.Fatal("expected overlay graph to contain edges")

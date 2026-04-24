@@ -145,7 +145,7 @@ func (c *Customizer) Customize(store *Store) {
 		go func() {
 			defer wg.Done()
 			scratch := newLiveDijkstraScratch(len(g.Nodes))
-			// The work done in every cell is small enough that splitting it into boundary node jobs costs more than it saves.
+			// The work done in every cell is small enough that splitting it into gate node jobs costs more than it saves.
 			for cellID := range cellJobs {
 				updates := computeCellCustomizationUpdates(g, cellID, index, weights, scratch)
 				cellResults <- cellUpdates{updates: updates}

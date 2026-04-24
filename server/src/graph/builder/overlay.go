@@ -11,7 +11,7 @@ import (
 	"nav-system/src/utilities"
 )
 
-// BuildOverlayGraph constructs the overlay adjacency list for all boundary
+// BuildOverlayGraph constructs the overlay adjacency list for all gate
 // nodes. Each cell contributes cross-cell edges and intra-cell shortcuts.
 func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	if numWorkers <= 0 {
@@ -51,14 +51,14 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		close(results)
 	}()
 
-	boundaryCount := 0
+	gateCount := 0
 	for _, bIdx := range g.GateNodeIdx {
 		if bIdx != -1 {
-			boundaryCount++
+			gateCount++
 		}
 	}
 
-	adjFrom := make([][]model.OverlayEdge, boundaryCount)
+	adjFrom := make([][]model.OverlayEdge, gateCount)
 	totalEdges := 0
 	for result := range results {
 		for _, edge := range result.edges {
@@ -71,13 +71,13 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		}
 	}
 
-	offsets := make([]uint32, boundaryCount+1)
+	offsets := make([]uint32, gateCount+1)
 	edges := make([]model.OverlayEdge, 0, totalEdges)
 	for i, neighbours := range adjFrom {
 		offsets[i] = uint32(len(edges))
 		edges = append(edges, neighbours...)
 	}
-	offsets[boundaryCount] = uint32(len(edges))
+	offsets[gateCount] = uint32(len(edges))
 
 	g.Overlay = model.OverlayGraph{Offsets: offsets, OverlayEdges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
@@ -102,9 +102,9 @@ func groupNodesByCell(g *model.Graph) [][]uint32 {
 	return nodesByCell
 }
 
-// DetectGateNodes marks nodes that touch edges crossing a cell boundary.
+// DetectGateNodes marks nodes that touch edges crossing a cell gate.
 func DetectGateNodes(g *model.Graph) {
-	log.Printf("%s detecting boundary nodes", cellBuilderLogPrefix)
+	log.Printf("%s detecting gate nodes", cellBuilderLogPrefix)
 
 	isGate := make([]bool, len(g.Nodes))
 	for i := range g.Nodes {
@@ -125,13 +125,13 @@ func DetectGateNodes(g *model.Graph) {
 	}
 	cellGates := make(map[model.CellID][]uint32)
 
-	boundaryCount := 0
+	gateCount := 0
 	for i, node := range g.Nodes {
 		if !isGate[i] {
 			continue
 		}
-		g.GateNodeIdx[i] = int32(boundaryCount)
-		boundaryCount++
+		g.GateNodeIdx[i] = int32(gateCount)
+		gateCount++
 		cellGates[node.CellID] = append(cellGates[node.CellID], uint32(i))
 	}
 
@@ -139,7 +139,7 @@ func DetectGateNodes(g *model.Graph) {
 		g.Cells[i].GateNodeIdxs = cellGates[model.CellID(i)]
 	}
 
-	log.Printf("%s detected %d boundary nodes", cellBuilderLogPrefix, boundaryCount)
+	log.Printf("%s detected %d gate nodes", cellBuilderLogPrefix, gateCount)
 }
 
 func countCrossCell(g *model.Graph, edges []model.OverlayEdge) int {
@@ -213,8 +213,8 @@ type distInfo struct {
 	weight float32
 }
 
-// cellDijkstra runs Dijkstra inside one cell and returns settled boundary
-// distances from the source boundary node.
+// cellDijkstra runs Dijkstra inside one cell and returns settled gate
+// distances from the source gate node.
 func cellDijkstra(g *model.Graph, srcIdx uint32, GateNodes []uint32, inCell []bool) map[uint32]distInfo {
 	dist := make(map[uint32]distInfo)
 	dist[srcIdx] = distInfo{0}
