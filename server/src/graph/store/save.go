@@ -177,10 +177,10 @@ func saveOverlayAdj(g *model.Graph, path string) error {
 			return err
 		}
 	}
-	if err := writeUint64(bw, uint64(len(g.Overlay.OverlayEdges))); err != nil {
+	if err := writeUint64(bw, uint64(len(g.Overlay.Edges))); err != nil {
 		return err
 	}
-	for _, e := range g.Overlay.OverlayEdges {
+	for _, e := range g.Overlay.Edges {
 		isCrossCell := uint8(0)
 		if e.IsCrossCell {
 			isCrossCell = 1

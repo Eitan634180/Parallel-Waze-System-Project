@@ -19,14 +19,14 @@ type BaseGraph struct {
 	Offsets []uint32
 }
 
-func (a *BaseGraph) EdgeRange(idx uint32) (uint32, uint32) {
-	return a.Offsets[idx], a.Offsets[idx+1]
-}
-
 // OverlayGraph stores outgoing overlay edges in CSR form over gate nodes.
 type OverlayGraph struct {
-	Offsets      []uint32
-	OverlayEdges []OverlayEdge
+	Offsets []uint32
+	Edges   []OverlayEdge
+}
+
+func (a *BaseGraph) EdgeRange(idx uint32) (uint32, uint32) {
+	return a.Offsets[idx], a.Offsets[idx+1]
 }
 
 func (g *Graph) Edge(id EdgeID) (*Edge, bool) {

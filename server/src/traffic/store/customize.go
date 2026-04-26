@@ -276,7 +276,7 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 	for gateIdx := 0; gateIdx < numGates; gateIdx++ {
 		start, end := g.Overlay.Offsets[gateIdx], g.Overlay.Offsets[gateIdx+1]
 		for i := start; i < end; i++ {
-			if !g.Overlay.OverlayEdges[i].IsCrossCell {
+			if !g.Overlay.Edges[i].IsCrossCell {
 				shortcutCounts[gateIdx]++
 				totalShortcuts++
 			}
@@ -299,7 +299,7 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 		writeIdx := 0
 		start, end := g.Overlay.Offsets[gateIdx], g.Overlay.Offsets[gateIdx+1]
 		for i := start; i < end; i++ {
-			edge := &g.Overlay.OverlayEdges[i]
+			edge := &g.Overlay.Edges[i]
 			if !edge.IsCrossCell {
 				index.targets[currentPos+writeIdx] = shortcutTarget{
 					toIdx:   edge.ToNode,

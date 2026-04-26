@@ -93,7 +93,7 @@ func main() {
 	t = time.Now()
 	builder.BuildOverlayGraph(g, 0)
 	log.Printf("%s overlay ready in %s (%d edges)",
-		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Overlay.OverlayEdges))
+		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Overlay.Edges))
 
 	log.Printf("%s writing graph to %s", builderLogPrefix, resolvedOutDir)
 	t = time.Now()
@@ -108,7 +108,7 @@ func main() {
 		len(g.Edges),
 		len(g.Cells),
 		len(g.Overlay.Offsets)-1,
-		len(g.Overlay.OverlayEdges),
+		len(g.Overlay.Edges),
 	)
 }
 

@@ -119,7 +119,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		len(g.Edges),
 		len(g.Cells),
 		len(g.Overlay.Offsets)-1,
-		len(g.Overlay.OverlayEdges),
+		len(g.Overlay.Edges),
 	)
 	return g, nil
 }
@@ -254,8 +254,8 @@ func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 
 	}
 	return model.OverlayGraph{
-		Offsets:      offsets,
-		OverlayEdges: edges,
+		Offsets: offsets,
+		Edges:   edges,
 	}, nil
 }
 

@@ -87,7 +87,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		}
 	}
 
-	g.Overlay = model.OverlayGraph{Offsets: offsets, OverlayEdges: edges}
+	g.Overlay = model.OverlayGraph{Offsets: offsets, Edges: edges}
 	log.Printf("%s overlay graph ready (%d edges, %d cross-cell, %d shortcuts)",
 		cellBuilderLogPrefix,
 		totalEdges,

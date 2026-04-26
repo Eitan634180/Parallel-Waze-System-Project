@@ -10,8 +10,8 @@ import (
 func (s *Store) InitOverlayWeights(g *model.Graph) {
 
 	shortcutCount := 0
-	for i := range g.Overlay.OverlayEdges {
-		if !g.Overlay.OverlayEdges[i].IsCrossCell {
+	for i := range g.Overlay.Edges {
+		if !g.Overlay.Edges[i].IsCrossCell {
 			shortcutCount++
 		}
 	}
@@ -19,8 +19,8 @@ func (s *Store) InitOverlayWeights(g *model.Graph) {
 	data := &shortcutStore{
 		weight: make([]atomic.Uint32, shortcutCount),
 	}
-	for i := range g.Overlay.OverlayEdges {
-		e := &g.Overlay.OverlayEdges[i]
+	for i := range g.Overlay.Edges {
+		e := &g.Overlay.Edges[i]
 		if !e.IsCrossCell {
 			data.weight[e.StoreIdx].Store(math.Float32bits(e.BaseWeight))
 		}
