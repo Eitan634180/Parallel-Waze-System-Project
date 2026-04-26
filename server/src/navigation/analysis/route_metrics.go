@@ -74,7 +74,7 @@ func StepCongestionSummary(steps []routingentities.Step, store *trafficstore.Sto
 }
 
 func remainingFractionOnCurrentEdge(route routingentities.Route, stepIdx int, lastLat, lastLon float64, step routingentities.Step, edge *model.Edge, g *model.Graph) float32 {
-	if stepIdx <= 0 || stepIdx >= len(route.Steps) || edge.DistanceM <= 0 {
+	if stepIdx <= 0 || stepIdx >= len(route.Steps) || edge.Length <= 0 {
 		return 1
 	}
 
@@ -85,8 +85,8 @@ func remainingFractionOnCurrentEdge(route routingentities.Route, stepIdx int, la
 	}
 
 	distLeft := utilities.Distance(px, py, node.X, node.Y)
-	if distLeft >= edge.DistanceM {
+	if distLeft >= edge.Length {
 		return 1
 	}
-	return distLeft / edge.DistanceM
+	return distLeft / edge.Length
 }

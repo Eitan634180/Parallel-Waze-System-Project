@@ -106,8 +106,8 @@ func (c *Customizer) Customize(store *Store) {
 			}
 
 			edge := &g.Edges[edgeID]
-			fromCellID := g.Nodes[edge.FromNodeIdx].CellID
-			toCellID := g.Nodes[edge.ToNodeIdx].CellID
+			fromCellID := g.Nodes[edge.FromNode].CellID
+			toCellID := g.Nodes[edge.ToNode].CellID
 			if fromCellID == toCellID && int(fromCellID) < len(cellSeen) && !cellSeen[fromCellID] {
 				cellSeen[fromCellID] = true
 				affectedCellIDs = append(affectedCellIDs, fromCellID)
@@ -172,12 +172,12 @@ func computeCellCustomizationUpdates(
 	}
 
 	cell := &g.Cells[cellID]
-	if len(cell.GateNodeIdxs) < 2 {
+	if len(cell.GateNodes) < 2 {
 		return nil
 	}
 
-	updates := make([]overlayWeightUpdate, 0, len(cell.GateNodeIdxs))
-	for _, srcIdx := range cell.GateNodeIdxs {
+	updates := make([]overlayWeightUpdate, 0, len(cell.GateNodes))
+	for _, srcIdx := range cell.GateNodes {
 		srcGateIdx := g.NodeToGate[srcIdx]
 		if srcGateIdx == -1 {
 			continue
@@ -242,14 +242,14 @@ func liveCellDijkstra(
 
 		for _, eid := range g.Base.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
-			if g.Nodes[e.ToNodeIdx].CellID != cellID {
+			if g.Nodes[e.ToNode].CellID != cellID {
 				continue
 			}
 
 			newCost := best + liveWeightFromSnapshot(weights, eid, e.BaseWeight)
-			if existing, has := scratch.cost(e.ToNodeIdx); !has || newCost < existing {
-				scratch.set(e.ToNodeIdx, newCost)
-				scratch.heap.Push(livePQItem{idx: e.ToNodeIdx, cost: newCost})
+			if existing, has := scratch.cost(e.ToNode); !has || newCost < existing {
+				scratch.set(e.ToNode, newCost)
+				scratch.heap.Push(livePQItem{idx: e.ToNode, cost: newCost})
 			}
 		}
 	}
@@ -271,13 +271,13 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 		if overlayEdge.IsCrossCell {
 			continue
 		}
-		fromGateIdx := g.NodeToGate[overlayEdge.FromNodeIdx]
+		fromGateIdx := g.NodeToGate[overlayEdge.FromNode]
 		if fromGateIdx == -1 {
 			continue
 		}
 		index.shortcutTargetsByGate[fromGateIdx] = append(
 			index.shortcutTargetsByGate[fromGateIdx],
-			shortcutTarget{toIdx: overlayEdge.ToNodeIdx, edgeIdx: overlayEdge.LiveWeightIdx},
+			shortcutTarget{toIdx: overlayEdge.ToNode, edgeIdx: overlayEdge.StoreIdx},
 		)
 	}
 

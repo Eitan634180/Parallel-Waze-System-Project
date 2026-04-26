@@ -62,7 +62,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	totalEdges := 0
 	for result := range results {
 		for _, edge := range result.edges {
-			fromIdx := g.NodeToGate[edge.FromNodeIdx]
+			fromIdx := g.NodeToGate[edge.FromNode]
 			if fromIdx == -1 {
 				continue
 			}
@@ -82,7 +82,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	shortcutIdx := uint32(0)
 	for i := range edges {
 		if !edges[i].IsCrossCell {
-			edges[i].LiveWeightIdx = shortcutIdx
+			edges[i].StoreIdx = shortcutIdx
 			shortcutIdx++
 		}
 	}
@@ -119,7 +119,7 @@ func DetectGateNodes(g *model.Graph) {
 		fromCellID := g.Nodes[i].CellID
 		for _, eid := range g.Base.Neighbours(uint32(i)) {
 			e := &g.Edges[eid]
-			toIdx := e.ToNodeIdx
+			toIdx := e.ToNode
 			if g.Nodes[toIdx].CellID != fromCellID {
 				isGate[i] = true
 				isGate[toIdx] = true
@@ -144,7 +144,7 @@ func DetectGateNodes(g *model.Graph) {
 	}
 
 	for i := range g.Cells {
-		g.Cells[i].GateNodeIdxs = cellGates[model.CellID(i)]
+		g.Cells[i].GateNodes = cellGates[model.CellID(i)]
 	}
 
 	log.Printf("%s detected %d gate nodes", cellBuilderLogPrefix, gateCount)
@@ -153,7 +153,7 @@ func DetectGateNodes(g *model.Graph) {
 func countCrossCell(g *model.Graph, edges []model.OverlayEdge) int {
 	n := 0
 	for _, e := range edges {
-		if g.Nodes[e.FromNodeIdx].CellID != g.Nodes[e.ToNodeIdx].CellID {
+		if g.Nodes[e.FromNode].CellID != g.Nodes[e.ToNode].CellID {
 			n++
 		}
 	}
@@ -164,14 +164,14 @@ func countCrossCell(g *model.Graph, edges []model.OverlayEdge) int {
 func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Cell, cellNodeIdxs []uint32) []model.OverlayEdge {
 	var result []model.OverlayEdge
 
-	for _, fromIdx := range cell.GateNodeIdxs {
+	for _, fromIdx := range cell.GateNodes {
 		if g.NodeToGate[fromIdx] == -1 {
 			continue
 		}
 
 		for _, eid := range g.Base.Neighbours(fromIdx) {
 			e := &g.Edges[eid]
-			toIdx := e.ToNodeIdx
+			toIdx := e.ToNode
 
 			if g.Nodes[toIdx].CellID == cellID {
 				continue
@@ -180,16 +180,16 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 				continue
 			}
 			result = append(result, model.OverlayEdge{
-				FromNodeIdx:   fromIdx,
-				ToNodeIdx:     toIdx,
-				BaseWeight:    e.BaseWeight,
-				LiveWeightIdx: eid,
-				IsCrossCell:   true,
+				FromNode:    fromIdx,
+				ToNode:      toIdx,
+				BaseWeight:  e.BaseWeight,
+				StoreIdx:    eid,
+				IsCrossCell: true,
 			})
 		}
 	}
 
-	if len(cell.GateNodeIdxs) < 2 {
+	if len(cell.GateNodes) < 2 {
 		return result
 	}
 
@@ -198,9 +198,9 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 		inCell[idx] = true
 	}
 
-	for _, srcIdx := range cell.GateNodeIdxs {
-		dists := cellDijkstra(g, srcIdx, cell.GateNodeIdxs, inCell)
-		for _, dstIdx := range cell.GateNodeIdxs {
+	for _, srcIdx := range cell.GateNodes {
+		dists := cellDijkstra(g, srcIdx, cell.GateNodes, inCell)
+		for _, dstIdx := range cell.GateNodes {
 			if dstIdx == srcIdx {
 				continue
 			}
@@ -209,9 +209,9 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 				continue
 			}
 			result = append(result, model.OverlayEdge{
-				FromNodeIdx: srcIdx,
-				ToNodeIdx:   dstIdx,
-				BaseWeight:  d.weight,
+				FromNode:   srcIdx,
+				ToNode:     dstIdx,
+				BaseWeight: d.weight,
 			})
 		}
 	}
@@ -258,7 +258,7 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, GateNodes []uint32, inCell []bo
 
 		for _, eid := range g.Base.Neighbours(cur.idx) {
 			e := &g.Edges[eid]
-			toIdx := e.ToNodeIdx
+			toIdx := e.ToNode
 			if !inCell[toIdx] {
 				continue
 			}

@@ -49,11 +49,11 @@ func AssertRouteValid(tb testing.TB, g *model.Graph, route routingentities.Route
 			tb.Fatalf("step %d edge %d is out of range", i, edgeID)
 		}
 		edge := &g.Edges[edgeID]
-		if edge.FromNodeIdx != prev.NodeIdx || edge.ToNodeIdx != cur.NodeIdx {
+		if edge.FromNode != prev.NodeIdx || edge.ToNode != cur.NodeIdx {
 			tb.Fatalf("step %d edge %d does not connect %d -> %d", i, edgeID, prev.NodeIdx, cur.NodeIdx)
 		}
 
-		cumulativeDistance += edge.DistanceM
+		cumulativeDistance += edge.Length
 		cumulativeCost += wf(edge)
 		edgeIDs = append(edgeIDs, edgeID)
 

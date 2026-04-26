@@ -22,7 +22,7 @@ func (s *Store) InitOverlayWeights(g *model.Graph) {
 	for i := range g.Overlay.OverlayEdges {
 		e := &g.Overlay.OverlayEdges[i]
 		if !e.IsCrossCell {
-			data.weight[e.LiveWeightIdx].Store(math.Float32bits(e.BaseWeight))
+			data.weight[e.StoreIdx].Store(math.Float32bits(e.BaseWeight))
 		}
 	}
 	s.shortcutStore.Store(data)
@@ -34,9 +34,9 @@ func (s *Store) InitOverlayWeights(g *model.Graph) {
 func (s *Store) OverlayWeight(edgeIdx uint32, overlayEdge *model.OverlayEdge) float32 {
 	if overlayEdge.IsCrossCell {
 		data := s.baseStore.Load()
-		return overlayEdge.BaseWeight * loadWeight(data, overlayEdge.LiveWeightIdx)
+		return overlayEdge.BaseWeight * loadWeight(data, overlayEdge.StoreIdx)
 	}
-	return loadOverlayWeight(s.shortcutStore.Load(), overlayEdge.LiveWeightIdx, overlayEdge.BaseWeight)
+	return loadOverlayWeight(s.shortcutStore.Load(), overlayEdge.StoreIdx, overlayEdge.BaseWeight)
 }
 
 func (s *Store) applyOverlayUpdates(updates []overlayWeightUpdate) {

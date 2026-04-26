@@ -24,7 +24,7 @@ func (r *Router) twoLevelSearch(
 		return steps, nil, ok
 	}
 
-	srcGate := g.Cells[srcCellID].GateNodeIdxs
+	srcGate := g.Cells[srcCellID].GateNodes
 	injectionCosts, injectionPred := algorithms.CellDijkstra(g, srcIdx, srcGate, srcCellID, wf, stats)
 
 	overlaySeeds := make(map[uint32]float32, len(srcGate))
@@ -37,7 +37,7 @@ func (r *Router) twoLevelSearch(
 		return nil, nil, false
 	}
 
-	dstGate := g.Cells[dstCellID].GateNodeIdxs
+	dstGate := g.Cells[dstCellID].GateNodes
 	dstGateSet := make(map[uint32]struct{}, len(dstGate))
 	for _, idx := range dstGate {
 		dstGateSet[idx] = struct{}{}
@@ -120,7 +120,7 @@ func walkBaseBack(
 		}
 
 		edge := &g.Edges[predecessor.EdgeID]
-		steps = append(steps, nodeToStep(g, current, predecessor.EdgeID, edge.DistanceM, wf(edge)))
+		steps = append(steps, nodeToStep(g, current, predecessor.EdgeID, edge.Length, wf(edge)))
 		current = predecessor.PrevNodeIdx
 	}
 }
@@ -144,7 +144,7 @@ func walkOverlayBack(
 
 		if g.Nodes[prevIdx].CellID != g.Nodes[current].CellID {
 			edgeID, _, timeSec := baseEdgeBetween(g, prevIdx, current, wf)
-			steps = append(steps, nodeToStep(g, current, edgeID, g.Edges[edgeID].DistanceM, timeSec))
+			steps = append(steps, nodeToStep(g, current, edgeID, g.Edges[edgeID].Length, timeSec))
 		} else {
 			steps = append(steps, algorithms.ExpandCellShortcut(g, prevIdx, current, wf)...)
 		}
@@ -156,8 +156,8 @@ func walkOverlayBack(
 func baseEdgeBetween(g *model.Graph, fromIdx, toIdx uint32, wf WeightFunc) (model.EdgeID, float32, float32) {
 	for _, edgeID := range g.Base.Neighbours(fromIdx) {
 		edge := &g.Edges[edgeID]
-		if edge.ToNodeIdx == toIdx {
-			return edgeID, edge.DistanceM, wf(edge)
+		if edge.ToNode == toIdx {
+			return edgeID, edge.Length, wf(edge)
 		}
 	}
 	return 0, 0, 0

@@ -33,12 +33,12 @@ func sendCurrentSpeedHints(s *navigationsessions.Session, store *trafficstore.St
 	for _, edgeID32 := range s.RemainingEdges() {
 		edgeID := model.EdgeID(edgeID32)
 		edge, ok := g.Edge(edgeID)
-		if !ok || edge.SpeedKmh <= 0 {
+		if !ok || edge.SpeedLimit <= 0 {
 			continue
 		}
 
-		recommended := store.RecommendedSpeedKmh(edgeID, edge.SpeedKmh, edge.DistanceM)
-		if recommended == edge.SpeedKmh && store.Density(edgeID) == 0 {
+		recommended := store.RecommendedSpeedKmh(edgeID, edge.SpeedLimit, edge.Length)
+		if recommended == edge.SpeedLimit && store.Density(edgeID) == 0 {
 			continue
 		}
 

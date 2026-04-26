@@ -119,12 +119,12 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 					localEdges = append(localEdges, pendingEdge{
 						fromIdx: n1idx,
 						e: model.Edge{
-							FromNodeIdx: n1idx,
-							ToNodeIdx:   n2idx,
-							BaseWeight:  weightSec,
-							DistanceM:   distM,
-							SpeedKmh:    speedKmh,
-							Flags:       flags,
+							FromNode:   n1idx,
+							ToNode:     n2idx,
+							BaseWeight: weightSec,
+							Length:     distM,
+							SpeedLimit: speedKmh,
+							Flags:      flags,
 						},
 					})
 
@@ -132,12 +132,12 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 						localEdges = append(localEdges, pendingEdge{
 							fromIdx: n2idx,
 							e: model.Edge{
-								FromNodeIdx: n2idx,
-								ToNodeIdx:   n1idx,
-								BaseWeight:  weightSec,
-								DistanceM:   distM,
-								SpeedKmh:    speedKmh,
-								Flags:       flags,
+								FromNode:   n2idx,
+								ToNode:     n1idx,
+								BaseWeight: weightSec,
+								Length:     distM,
+								SpeedLimit: speedKmh,
+								Flags:      flags,
 							},
 						})
 					}

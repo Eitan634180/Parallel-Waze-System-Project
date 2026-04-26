@@ -138,11 +138,11 @@ func recordSimSpeedSample(c *car, step routingentities.Step, speedMps float32, g
 
 	eid := model.EdgeID(*step.EdgeID)
 	edge, ok := g.Edge(eid)
-	if !ok || edge.BaseWeight <= 0 || edge.DistanceM <= 0 {
+	if !ok || edge.BaseWeight <= 0 || edge.Length <= 0 {
 		return
 	}
 
-	store.RecordSpeedSample(eid, speedMps*utilities.KilometersPerHourToMps, edge.BaseWeight, edge.DistanceM)
+	store.RecordSpeedSample(eid, speedMps*utilities.KilometersPerHourToMps, edge.BaseWeight, edge.Length)
 	c.lastObservationSampleS = c.edgeTimeS
 }
 
@@ -170,11 +170,11 @@ func currentSpeedMps(c *car, g *model.Graph, store *trafficstore.Store) float32 
 	if cur.EdgeID != nil {
 		eid := model.EdgeID(*cur.EdgeID)
 		if edge, ok := g.Edge(eid); ok {
-			recommended := store.RecommendedSpeedKmh(eid, edge.SpeedKmh, edge.DistanceM)
+			recommended := store.RecommendedSpeedKmh(eid, edge.SpeedLimit, edge.Length)
 			if recommended > 0 {
 				baseKmh = recommended
-			} else if edge.SpeedKmh > 0 {
-				baseKmh = edge.SpeedKmh
+			} else if edge.SpeedLimit > 0 {
+				baseKmh = edge.SpeedLimit
 			}
 		}
 	}

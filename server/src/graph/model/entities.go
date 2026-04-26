@@ -17,27 +17,27 @@ type Node struct {
 
 // Edge is a directed edge in the base road graph.
 type Edge struct {
-	ID          EdgeID
-	FromNodeIdx uint32
-	ToNodeIdx   uint32
-	BaseWeight  float32
-	DistanceM   float32
-	SpeedKmh    float32
-	Flags       uint8
+	ID         EdgeID
+	FromNode   uint32
+	ToNode     uint32
+	BaseWeight float32
+	Length     float32
+	SpeedLimit float32
+	Flags      uint8
 }
 
 // OverlayEdge is an edge in the two-level overlay graph (cross-cell edges and shortcut edges).
 type OverlayEdge struct {
-	FromNodeIdx   uint32
-	ToNodeIdx     uint32
-	BaseWeight    float32
-	LiveWeightIdx uint32
-	IsCrossCell   bool
+	FromNode    uint32
+	ToNode      uint32
+	BaseWeight  float32
+	StoreIdx    uint32
+	IsCrossCell bool
 }
 
 // Cell is one partition region produced by recursive bisection.
 type Cell struct {
-	GateNodeIdxs []uint32
+	GateNodes []uint32
 }
 
 func (e *Edge) IsOneWay() bool { return e.Flags&FlagOneWay != 0 }

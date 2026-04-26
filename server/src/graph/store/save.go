@@ -104,11 +104,11 @@ func saveEdges(g *model.Graph, path string) error {
 		e := &g.Edges[i]
 		if err := writeFixed(bw, edgeBin{
 			ID:          e.ID,
-			FromNodeIdx: e.FromNodeIdx,
-			ToNodeIdx:   e.ToNodeIdx,
+			FromNodeIdx: e.FromNode,
+			ToNodeIdx:   e.ToNode,
 			BaseWeight:  e.BaseWeight,
-			DistanceM:   e.DistanceM,
-			SpeedKmh:    e.SpeedKmh,
+			DistanceM:   e.Length,
+			SpeedKmh:    e.SpeedLimit,
 			Flags:       e.Flags,
 		}); err != nil {
 			return err
@@ -157,10 +157,10 @@ func saveCells(g *model.Graph, path string) error {
 	}
 	for i := range g.Cells {
 		c := &g.Cells[i]
-		if err := writeUint32(bw, uint32(len(c.GateNodeIdxs))); err != nil {
+		if err := writeUint32(bw, uint32(len(c.GateNodes))); err != nil {
 			return err
 		}
-		for _, idx := range c.GateNodeIdxs {
+		for _, idx := range c.GateNodes {
 			if err := writeUint32(bw, idx); err != nil {
 				return err
 			}
@@ -194,10 +194,10 @@ func saveOverlayAdj(g *model.Graph, path string) error {
 			isCrossCell = 1
 		}
 		if err := writeFixed(bw, overlayEdgeBin{
-			FromNodeIdx:   e.FromNodeIdx,
-			ToNodeIdx:     e.ToNodeIdx,
+			FromNodeIdx:   e.FromNode,
+			ToNodeIdx:     e.ToNode,
 			Weight:        e.BaseWeight,
-			LiveWeightIdx: e.LiveWeightIdx,
+			LiveWeightIdx: e.StoreIdx,
 			IsCrossCell:   isCrossCell,
 		}); err != nil {
 			return err

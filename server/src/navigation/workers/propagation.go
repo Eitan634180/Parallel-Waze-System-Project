@@ -145,8 +145,8 @@ func flagBetterRouteIfHelpful(s *navigationsessions.Session, improvedEdges []tra
 			continue
 		}
 
-		fromNode := g.Node(edge.FromNodeIdx)
-		toNode := g.Node(edge.ToNodeIdx)
+		fromNode := g.Node(edge.FromNode)
+		toNode := g.Node(edge.ToNode)
 		if fromNode == nil || toNode == nil {
 			continue
 		}
@@ -207,13 +207,13 @@ func recommendedSpeedUpdates(g *model.Graph, store *trafficstore.Store, changed 
 		}
 
 		edge := &g.Edges[edgeChange.EdgeID]
-		if edge.SpeedKmh <= 0 {
+		if edge.SpeedLimit <= 0 {
 			continue
 		}
 
 		updates = append(updates, speedUpdate{
 			EdgeID:              edgeChange.EdgeID,
-			RecommendedSpeedKmh: store.RecommendedSpeedKmh(edgeChange.EdgeID, edge.SpeedKmh, edge.DistanceM),
+			RecommendedSpeedKmh: store.RecommendedSpeedKmh(edgeChange.EdgeID, edge.SpeedLimit, edge.Length),
 		})
 	}
 	return updates

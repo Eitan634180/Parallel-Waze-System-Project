@@ -132,11 +132,11 @@ func (t *Tracker) SendInitialSpeedUpdates(sess *navigationsessions.Session) {
 	for _, edgeID32 := range sess.RemainingEdges() {
 		eid := model.EdgeID(edgeID32)
 		edge, ok := t.Graph.Edge(eid)
-		if !ok || edge.SpeedKmh <= 0 {
+		if !ok || edge.SpeedLimit <= 0 {
 			continue
 		}
-		recSpeed := t.Store.RecommendedSpeedKmh(eid, edge.SpeedKmh, edge.DistanceM)
-		if recSpeed == edge.SpeedKmh && t.Store.Density(eid) == 0 {
+		recSpeed := t.Store.RecommendedSpeedKmh(eid, edge.SpeedLimit, edge.Length)
+		if recSpeed == edge.SpeedLimit && t.Store.Density(eid) == 0 {
 			continue
 		}
 		edgeIDVal := uint32(eid)

@@ -99,7 +99,7 @@ func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routingengine.Weight
 
 		for _, edgeID := range g.Base.Neighbours(item.nodeIdx) {
 			edge := &g.Edges[edgeID]
-			nextIdx := edge.ToNodeIdx
+			nextIdx := edge.ToNode
 			nextCost := item.cost + wf(edge)
 			if nextCost < dist[nextIdx] {
 				dist[nextIdx] = nextCost
@@ -124,7 +124,7 @@ func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routingengine.Weight
 		}
 		edgeID := model.EdgeID(prevEdge[current])
 		edgeIDs = append(edgeIDs, edgeID)
-		totalDistance += g.Edges[edgeID].DistanceM
+		totalDistance += g.Edges[edgeID].Length
 		nodeIdxs = append(nodeIdxs, uint32(prevNode[current]))
 	}
 

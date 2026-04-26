@@ -58,7 +58,7 @@ func LocalRepairOverlay(
 		end := g.Overlay.Offsets[gateIdx+1]
 		for edgeIdx := start; edgeIdx < end; edgeIdx++ {
 			overlayEdge := g.Overlay.OverlayEdges[edgeIdx]
-			if current.idx == srcIdx && overlayEdge.ToNodeIdx == dstIdx {
+			if current.idx == srcIdx && overlayEdge.ToNode == dstIdx {
 				continue
 			}
 
@@ -67,7 +67,7 @@ func LocalRepairOverlay(
 				continue
 			}
 
-			nextIdx := overlayEdge.ToNodeIdx
+			nextIdx := overlayEdge.ToNode
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
 				pred[nextIdx] = OverlayPredecessor{
@@ -131,7 +131,7 @@ func LocalRepairOriginal(
 
 		for _, edgeID := range g.Base.Neighbours(current.idx) {
 			edge := &g.Edges[edgeID]
-			if current.idx == srcIdx && edge.ToNodeIdx == dstIdx {
+			if current.idx == srcIdx && edge.ToNode == dstIdx {
 				continue
 			}
 
@@ -140,7 +140,7 @@ func LocalRepairOriginal(
 				continue
 			}
 
-			nextIdx := edge.ToNodeIdx
+			nextIdx := edge.ToNode
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
 				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}

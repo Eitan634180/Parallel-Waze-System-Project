@@ -21,7 +21,7 @@ func TestActiveSessionsPropagateSpeedUpdateToSubscribedSession(t *testing.T) {
 	routes := requestRoutes(t, server.URL, routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1)
 	routeID := routes.Routes[0].ID
 	firstEdgeID := *routes.Routes[0].Steps[1].EdgeID
-	baseSpeed := fixture.Graph.Edges[firstEdgeID].SpeedKmh
+	baseSpeed := fixture.Graph.Edges[firstEdgeID].SpeedLimit
 
 	primarySessionID := createSession(t, server.URL, routeID)
 	primaryConn := dialWS(t, server.URL, "/session/"+primarySessionID+"/ws")
