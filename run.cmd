@@ -22,7 +22,7 @@ for %%D in ("%BIN_DIR%") do if not exist "%%~D" mkdir "%%~D"
 
 echo Building Go binaries...
 pushd "%SERVER_DIR%"
-set "CGO_ENABLED=0"
+set "CGO_ENABLED=1"
 for %%B in (map-builder region-picker server) do (
   go build -o "%BIN_DIR%\%%B.exe" .\cmd\%%B || (echo %%B build failed. & popd & pause & exit /b 1)
 )
@@ -47,7 +47,7 @@ if not defined NAV_SERVER_DATA_DIR if not defined DEV_REGION_DIR (
 )
 
 echo Starting API server in a new window...
-start "Navigation Server" cmd /k "cd /d "%SERVER_DIR%" && set CGO_ENABLED=0 && "%SERVER_EXE%""
+start "Navigation Server" cmd /k "cd /d "%SERVER_DIR%" && set CGO_ENABLED=1 && "%SERVER_EXE%""
 
 echo Starting static client in a new window...
 start "Navigation Client" cmd /k "cd /d "%CLIENT_DIR%" && python -m http.server %DEV_CLIENT_PORT%"

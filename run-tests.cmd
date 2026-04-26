@@ -37,11 +37,12 @@ if errorlevel 1 goto :all
 
 :server
 set "GO_ARGS=./..."
-set "CGO_ENABLED=0"
+set "CGO_ENABLED=1"
 goto :run_go
 
 :server-race
-set "GO_ARGS=-race ./src/api ./src/graph/builder ./src/mapstore ./src/regionpicker ./src/routing ./src/session ./src/simulation ./src/traffic ./src/utilities ./test/component ./test/correctness ./test/external ./test/integration ./test/unit"
+set "CGO_ENABLED=1"
+set "GO_ARGS=-race ./src/graph/... ./src/navigation/... ./src/routing/... ./src/simulation/... ./src/traffic/... ./src/transport/... ./src/utilities/... ./test/component ./test/correctness ./test/external ./test/integration ./test/unit"
 
 :run_go
 pushd "%SERVER_DIR%"

@@ -46,7 +46,7 @@ exit /b 0
 :build_tools
 where go >nul 2>nul || (echo Go was not found in PATH. & exit /b 1)
 pushd "%SERVER_DIR%"
-set "CGO_ENABLED=0"
+set "CGO_ENABLED=1"
 go build -buildvcs=false -o "%SERVER_EXE%" .\cmd\server || (popd & exit /b 1)
 go build -buildvcs=false -o "%BUILDER_EXE%" .\cmd\map-builder || (popd & exit /b 1)
 go build -buildvcs=false -o "%BENCHMARK_EXE%" .\cmd\benchmark || (popd & exit /b 1)
@@ -55,7 +55,7 @@ popd & exit /b 0
 :compare-static
 call :build_tools || exit /b 1
 pushd "%SERVER_DIR%"
-set "CGO_ENABLED=0"
+set "CGO_ENABLED=1"
 go test ./test/benchmark -run TestBenchmarkCorpusMatchesBaseAStarStatic -bench BenchmarkRouterCompareStatic -benchmem -count %TEST_BENCH_REPEAT_COUNT% -timeout %TEST_BENCH_GO_TEST_TIMEOUT% > "%OUT_DIR%\compare-static.txt" 2>&1
 set "ERR=!ERRORLEVEL!" & popd
 if "!ERR!"=="0" "%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
@@ -75,7 +75,7 @@ call :build_tools || exit /b 1
 for %%P in (%TEST_BENCH_GOMAXPROCS%) do (
   echo Running build-scale for GOMAXPROCS=%%P
   pushd "%SERVER_DIR%"
-  set "CGO_ENABLED=0" & set "GOMAXPROCS=%%P"
+  set "CGO_ENABLED=1" & set "GOMAXPROCS=%%P"
   "%BUILDER_EXE%" --out "%BUILD_WORK_DIR%\p%%P" > "%OUT_DIR%\build-scale\p%%P.log" 2>&1
   set "ERR=!ERRORLEVEL!" & popd
   if not "!ERR!"=="0" exit /b !ERR!
@@ -87,7 +87,7 @@ exit /b %ERRORLEVEL%
 call :build_tools || exit /b 1
 echo Running overlay-scale for workers=%TEST_BENCH_GOMAXPROCS%
 pushd "%SERVER_DIR%"
-set "CGO_ENABLED=0"
+set "CGO_ENABLED=1"
 "%BENCHMARK_EXE%" overlay-build > "%OUT_DIR%\overlay-scale\summary.log" 2>&1
 set "ERR=!ERRORLEVEL!" & popd
 if "!ERR!"=="0" "%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
@@ -97,7 +97,7 @@ exit /b !ERR!
 call :build_tools || exit /b 1
 echo Running customization-scale for workers=%TEST_BENCH_GOMAXPROCS%
 pushd "%SERVER_DIR%"
-set "CGO_ENABLED=0"
+set "CGO_ENABLED=1"
 "%BENCHMARK_EXE%" overlay-customization > "%OUT_DIR%\customization-scale\summary.log" 2>&1
 set "ERR=!ERRORLEVEL!" & popd
 if "!ERR!"=="0" "%BENCHMARK_EXE%" report --dir "%OUT_DIR%"
