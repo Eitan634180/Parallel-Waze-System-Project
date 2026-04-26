@@ -154,10 +154,11 @@ func walkOverlayBack(
 }
 
 func baseEdgeBetween(g *model.Graph, fromIdx, toIdx uint32, wf WeightFunc) (model.EdgeID, float32, float32) {
-	for _, edgeID := range g.Base.Neighbours(fromIdx) {
-		edge := &g.Edges[edgeID]
+	start, end := g.Base.EdgeRange(fromIdx)
+	for eid := start; eid < end; eid++ {
+		edge := &g.Edges[eid]
 		if edge.ToNode == toIdx {
-			return edgeID, edge.Length, wf(edge)
+			return eid, edge.Length, wf(edge)
 		}
 	}
 	return 0, 0, 0

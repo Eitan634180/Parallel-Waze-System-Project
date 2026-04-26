@@ -128,6 +128,7 @@ func BuildGraphFixture(tb testing.TB, graphName string, maxCellSize int) *BuiltG
 	}
 
 	builder.PartitionCells(g, maxCellSize)
+	builder.ReorderGraphByCell(g, nodeIdx)
 	builder.DetectGateNodes(g)
 	builder.BuildOverlayGraph(g, 1)
 
@@ -183,9 +184,10 @@ func FindEdgeID(tb testing.TB, fixture *BuiltGraphFixture, fromID, toID builder.
 		tb.Fatalf("to node %d not found", toID)
 	}
 
-	for _, edgeID := range fixture.Graph.Base.Neighbours(fromIdx) {
-		if fixture.Graph.Edges[edgeID].ToNode == toIdx {
-			return edgeID
+	start, end := fixture.Graph.Base.EdgeRange(fromIdx)
+	for eid := start; eid < end; eid++ {
+		if fixture.Graph.Edges[eid].ToNode == toIdx {
+			return eid
 		}
 	}
 

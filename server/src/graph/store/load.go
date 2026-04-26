@@ -88,7 +88,8 @@ func LoadGraph(dir string) (*model.Graph, error) {
 	isGate := make([]bool, len(g.Nodes))
 	for i := range g.Nodes {
 		fromCellID := g.Nodes[i].CellID
-		for _, eid := range g.Base.Neighbours(uint32(i)) {
+		start, end := g.Base.EdgeRange(uint32(i))
+		for eid := start; eid < end; eid++ {
 			toIdx := g.Edges[eid].ToNode
 			if g.Nodes[toIdx].CellID != fromCellID {
 				isGate[i] = true
@@ -186,20 +187,7 @@ func loadBaseAdj(path string) (model.BaseGraph, error) {
 		}
 		offsets[i] = v
 	}
-
-	edgeCount, err := readUint64(br)
-	if err != nil {
-		return model.BaseGraph{}, err
-	}
-	edgeIDs := make([]uint32, edgeCount)
-	for i := range edgeIDs {
-		v, err := readUint32(br)
-		if err != nil {
-			return model.BaseGraph{}, err
-		}
-		edgeIDs[i] = v
-	}
-	return model.BaseGraph{Offsets: offsets, EdgeIDs: edgeIDs}, nil
+	return model.BaseGraph{Offsets: offsets}, nil
 }
 
 func loadCells(path string) ([]model.Cell, error) {

@@ -17,7 +17,10 @@ type Graph struct {
 // BaseGraph stores outgoing base-graph edges in CSR form.
 type BaseGraph struct {
 	Offsets []uint32
-	EdgeIDs []EdgeID
+}
+
+func (a *BaseGraph) EdgeRange(idx uint32) (uint32, uint32) {
+	return a.Offsets[idx], a.Offsets[idx+1]
 }
 
 // OverlayGraph stores outgoing overlay edges in CSR form over gate nodes.
@@ -26,13 +29,7 @@ type OverlayGraph struct {
 	OverlayEdges []OverlayEdge
 }
 
-// Neighbours returns all outgoing edges for the internal node index.
-func (a *BaseGraph) Neighbours(idx uint32) []EdgeID {
-	return a.EdgeIDs[a.Offsets[idx]:a.Offsets[idx+1]]
-}
-
 func (g *Graph) Edge(id EdgeID) (*Edge, bool) {
-
 	if int(id) < 0 || int(id) >= len(g.Edges) {
 		return nil, false
 	}

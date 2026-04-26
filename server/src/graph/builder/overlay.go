@@ -117,9 +117,9 @@ func DetectGateNodes(g *model.Graph) {
 	isGate := make([]bool, len(g.Nodes))
 	for i := range g.Nodes {
 		fromCellID := g.Nodes[i].CellID
-		for _, eid := range g.Base.Neighbours(uint32(i)) {
-			e := &g.Edges[eid]
-			toIdx := e.ToNode
+		start, end := g.Base.EdgeRange(uint32(i))
+		for eid := start; eid < end; eid++ {
+			toIdx := g.Edges[eid].ToNode
 			if g.Nodes[toIdx].CellID != fromCellID {
 				isGate[i] = true
 				isGate[toIdx] = true
@@ -169,7 +169,8 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 			continue
 		}
 
-		for _, eid := range g.Base.Neighbours(fromIdx) {
+		start, end := g.Base.EdgeRange(fromIdx)
+		for eid := start; eid < end; eid++ {
 			e := &g.Edges[eid]
 			toIdx := e.ToNode
 
@@ -256,7 +257,8 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, GateNodes []uint32, inCell []bo
 			}
 		}
 
-		for _, eid := range g.Base.Neighbours(cur.idx) {
+		start, end := g.Base.EdgeRange(cur.idx)
+		for eid := start; eid < end; eid++ {
 			e := &g.Edges[eid]
 			toIdx := e.ToNode
 			if !inCell[toIdx] {

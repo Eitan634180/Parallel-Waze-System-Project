@@ -31,7 +31,12 @@ type shortcutTarget struct {
 }
 
 type customizationIndex struct {
-	shortcutTargetsByGate [][]shortcutTarget
+	offsets []uint32
+	targets []shortcutTarget
+}
+
+func (idx *customizationIndex) Targets(gateIdx uint32) []shortcutTarget {
+	return idx.targets[idx.offsets[gateIdx]:idx.offsets[gateIdx+1]]
 }
 
 type Customizer struct {
@@ -183,7 +188,7 @@ func computeCellCustomizationUpdates(
 			continue
 		}
 
-		targets := index.shortcutTargetsByGate[srcGateIdx]
+		targets := index.Targets(uint32(srcGateIdx))
 		if len(targets) == 0 {
 			continue
 		}
@@ -240,7 +245,8 @@ func liveCellDijkstra(
 			}
 		}
 
-		for _, eid := range g.Base.Neighbours(cur.idx) {
+		start, end := g.Base.EdgeRange(cur.idx)
+		for eid := start; eid < end; eid++ {
 			e := &g.Edges[eid]
 			if g.Nodes[e.ToNode].CellID != cellID {
 				continue
@@ -263,23 +269,48 @@ func liveWeightFromSnapshot(weights []float32, id model.EdgeID, baseSec float32)
 }
 
 func buildCustomizationIndex(g *model.Graph) *customizationIndex {
-	index := &customizationIndex{
-		shortcutTargetsByGate: make([][]shortcutTarget, len(g.Overlay.Offsets)-1),
+	numGates := len(g.Overlay.Offsets) - 1
+
+	shortcutCounts := make([]int, numGates)
+	totalShortcuts := 0
+	for gateIdx := 0; gateIdx < numGates; gateIdx++ {
+		start, end := g.Overlay.Offsets[gateIdx], g.Overlay.Offsets[gateIdx+1]
+		for i := start; i < end; i++ {
+			if !g.Overlay.OverlayEdges[i].IsCrossCell {
+				shortcutCounts[gateIdx]++
+				totalShortcuts++
+			}
+		}
 	}
 
-	for _, overlayEdge := range g.Overlay.OverlayEdges {
-		if overlayEdge.IsCrossCell {
-			continue
-		}
-		fromGateIdx := g.NodeToGate[overlayEdge.FromNode]
-		if fromGateIdx == -1 {
-			continue
-		}
-		index.shortcutTargetsByGate[fromGateIdx] = append(
-			index.shortcutTargetsByGate[fromGateIdx],
-			shortcutTarget{toIdx: overlayEdge.ToNode, edgeIdx: overlayEdge.StoreIdx},
-		)
+	index := &customizationIndex{
+		offsets: make([]uint32, numGates+1),
+		targets: make([]shortcutTarget, totalShortcuts),
 	}
+
+	currentPos := 0
+	for gateIdx := 0; gateIdx < numGates; gateIdx++ {
+		index.offsets[gateIdx] = uint32(currentPos)
+		count := shortcutCounts[gateIdx]
+		if count == 0 {
+			continue
+		}
+
+		writeIdx := 0
+		start, end := g.Overlay.Offsets[gateIdx], g.Overlay.Offsets[gateIdx+1]
+		for i := start; i < end; i++ {
+			edge := &g.Overlay.OverlayEdges[i]
+			if !edge.IsCrossCell {
+				index.targets[currentPos+writeIdx] = shortcutTarget{
+					toIdx:   edge.ToNode,
+					edgeIdx: edge.StoreIdx,
+				}
+				writeIdx++
+			}
+		}
+		currentPos += count
+	}
+	index.offsets[numGates] = uint32(totalShortcuts)
 
 	return index
 }

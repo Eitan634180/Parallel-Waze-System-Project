@@ -4,6 +4,7 @@ import (
 	"log"
 	"math"
 	"runtime"
+	"slices"
 
 	"nav-system/src/graph"
 	"nav-system/src/graph/model"
@@ -46,9 +47,6 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 	estimatedEdges := len(pr.Ways) * graph.EstimatedEdgesPerWayHint
 	g.Edges = make([]model.Edge, 0, estimatedEdges)
 
-	// Build adjacency per node before converting it to CSR.
-	adjTmp := make([][]model.EdgeID, len(g.Nodes))
-
 	type pendingEdge struct {
 		fromIdx uint32
 		e       model.Edge
@@ -61,7 +59,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 	if len(pr.Ways) == 0 {
 		log.Printf("%s edges ready (%d directed)", graphBuilderLogPrefix, len(g.Edges))
 		log.Printf("%s building base adjacency", graphBuilderLogPrefix)
-		g.Base = buildCSR(adjTmp, len(g.Edges))
+		g.Base = buildCSR(nil, len(g.Nodes))
 		log.Printf("%s base adjacency ready", graphBuilderLogPrefix)
 		return g, nodeIdx, nil
 	}
@@ -154,36 +152,95 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 		totalEdges += len(res)
 	}
 	g.Edges = make([]model.Edge, 0, totalEdges)
-
 	for _, res := range workerResults {
 		for _, pe := range res {
-			fwdID := model.EdgeID(len(g.Edges))
-			pe.e.ID = fwdID
 			g.Edges = append(g.Edges, pe.e)
-			adjTmp[pe.fromIdx] = append(adjTmp[pe.fromIdx], fwdID)
 		}
+	}
+
+	slices.SortFunc(g.Edges, func(a, b model.Edge) int {
+		if a.FromNode < b.FromNode { return -1 }
+		if a.FromNode > b.FromNode { return 1 }
+		if a.ToNode < b.ToNode { return -1 }
+		if a.ToNode > b.ToNode { return 1 }
+		return 0
+	})
+
+	for i := range g.Edges {
+		g.Edges[i].ID = model.EdgeID(i)
 	}
 
 	log.Printf("%s edges ready (%d directed)", graphBuilderLogPrefix, len(g.Edges))
 	log.Printf("%s building base adjacency", graphBuilderLogPrefix)
-	g.Base = buildCSR(adjTmp, len(g.Edges))
+	g.Base = buildCSR(g.Edges, len(g.Nodes))
 	log.Printf("%s base adjacency ready", graphBuilderLogPrefix)
 
 	return g, nodeIdx, nil
 }
 
-// buildCSR converts per-node edge slices into a CSR adjacency list.
-func buildCSR(adjTmp [][]model.EdgeID, edgeCount int) model.BaseGraph {
-	offsets := make([]uint32, len(adjTmp)+1)
-	edgeIDs := make([]model.EdgeID, 0, edgeCount)
-
-	for i, nbrs := range adjTmp {
-		offsets[i] = uint32(len(edgeIDs))
-		edgeIDs = append(edgeIDs, nbrs...)
+func buildCSR(edges []model.Edge, nodeCount int) model.BaseGraph {
+	offsets := make([]uint32, nodeCount+1)
+	for _, e := range edges {
+		offsets[e.FromNode+1]++
 	}
-	offsets[len(adjTmp)] = uint32(len(edgeIDs))
+	for i := 1; i <= nodeCount; i++ {
+		offsets[i] += offsets[i-1]
+	}
+	return model.BaseGraph{Offsets: offsets}
+}
 
-	return model.BaseGraph{Offsets: offsets, EdgeIDs: edgeIDs}
+// ReorderGraphByCell sorts g.Nodes by CellID, updates edge references, and then
+// sorts g.Edges by FromNode. This perfectly groups both nodes and edges by cell in memory.
+// It also rebuilds the offsets-only BaseGraph CSR.
+func ReorderGraphByCell(g *model.Graph, nodeIdx map[NodeRawID]uint32) {
+	log.Printf("%s reordering graph by cell for cache locality", graphBuilderLogPrefix)
+	
+	type sortedNode struct {
+		n       model.Node
+		origIdx uint32
+	}
+	sn := make([]sortedNode, len(g.Nodes))
+	for i := range g.Nodes {
+		sn[i] = sortedNode{n: g.Nodes[i], origIdx: uint32(i)}
+	}
+	slices.SortFunc(sn, func(a, b sortedNode) int {
+		if a.n.CellID < b.n.CellID { return -1 }
+		if a.n.CellID > b.n.CellID { return 1 }
+		if a.origIdx < b.origIdx { return -1 }
+		if a.origIdx > b.origIdx { return 1 }
+		return 0
+	})
+
+	oldToNew := make([]uint32, len(g.Nodes))
+	for i := range sn {
+		g.Nodes[i] = sn[i].n
+		oldToNew[sn[i].origIdx] = uint32(i)
+	}
+
+	if nodeIdx != nil {
+		for rawID, oldIdx := range nodeIdx {
+			nodeIdx[rawID] = oldToNew[oldIdx]
+		}
+	}
+
+	for i := range g.Edges {
+		g.Edges[i].FromNode = oldToNew[g.Edges[i].FromNode]
+		g.Edges[i].ToNode = oldToNew[g.Edges[i].ToNode]
+	}
+
+	slices.SortFunc(g.Edges, func(a, b model.Edge) int {
+		if a.FromNode < b.FromNode { return -1 }
+		if a.FromNode > b.FromNode { return 1 }
+		if a.ToNode < b.ToNode { return -1 }
+		if a.ToNode > b.ToNode { return 1 }
+		return 0
+	})
+
+	for i := range g.Edges {
+		g.Edges[i].ID = model.EdgeID(i)
+	}
+
+	g.Base = buildCSR(g.Edges, len(g.Nodes))
 }
 
 func boundingBoxFromNodes(nodes []model.Node) model.BoundingBox {

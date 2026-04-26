@@ -97,14 +97,15 @@ func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routingengine.Weight
 			break
 		}
 
-		for _, edgeID := range g.Base.Neighbours(item.nodeIdx) {
-			edge := &g.Edges[edgeID]
+		start, end := g.Base.EdgeRange(item.nodeIdx)
+		for eid := start; eid < end; eid++ {
+			edge := &g.Edges[eid]
 			nextIdx := edge.ToNode
 			nextCost := item.cost + wf(edge)
 			if nextCost < dist[nextIdx] {
 				dist[nextIdx] = nextCost
 				prevNode[nextIdx] = int(item.nodeIdx)
-				prevEdge[nextIdx] = int(edgeID)
+				prevEdge[nextIdx] = int(eid)
 				heap.Push(&pq, &oracleItem{nodeIdx: nextIdx, cost: nextCost})
 			}
 		}

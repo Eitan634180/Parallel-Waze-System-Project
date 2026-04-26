@@ -78,11 +78,15 @@ func main() {
 	log.Printf("%s partitioned graph in %s (%d cells)",
 		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Cells))
 
+	t = time.Now()
+	builder.ReorderGraphByCell(g, nil)
+	log.Printf("%s reordered graph by cell in %s", builderLogPrefix, time.Since(t).Round(time.Millisecond))
+
 	log.Printf("%s detecting gate nodes", builderLogPrefix)
 	t = time.Now()
 	builder.DetectGateNodes(g)
-	log.Printf("%s gate nodes ready in %s (%d nodes)",
-		builderLogPrefix, time.Since(t).Round(time.Millisecond), len(g.Overlay.Offsets)-1)
+	log.Printf("%s gate nodes ready in %s",
+		builderLogPrefix, time.Since(t).Round(time.Millisecond))
 
 	log.Printf("%s using GOMAXPROCS=%d", builderLogPrefix, parallelism)
 	log.Printf("%s building overlay graph", builderLogPrefix)

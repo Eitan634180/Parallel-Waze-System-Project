@@ -45,8 +45,9 @@ func CellDijkstra(
 			}
 		}
 
-		for _, edgeID := range g.Base.Neighbours(current.idx) {
-			edge := &g.Edges[edgeID]
+		start, end := g.Base.EdgeRange(current.idx)
+		for eid := start; eid < end; eid++ {
+			edge := &g.Edges[eid]
 			nextIdx := edge.ToNode
 			if g.Nodes[nextIdx].CellID != cellID {
 				continue
@@ -55,7 +56,7 @@ func CellDijkstra(
 			nextCost := current.cost + wf(edge)
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: eid}
 				pq.Push(ijItem{idx: nextIdx, cost: nextCost})
 			}
 		}
@@ -110,8 +111,9 @@ func MultiSourceCellDijkstra(
 			break
 		}
 
-		for _, edgeID := range g.Base.Neighbours(current.idx) {
-			edge := &g.Edges[edgeID]
+		start, end := g.Base.EdgeRange(current.idx)
+		for eid := start; eid < end; eid++ {
+			edge := &g.Edges[eid]
 			nextIdx := edge.ToNode
 			if g.Nodes[nextIdx].CellID != cellID {
 				continue
@@ -120,7 +122,7 @@ func MultiSourceCellDijkstra(
 			nextCost := current.cost + wf(edge)
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: eid}
 				pq.Push(ijItem{idx: nextIdx, cost: nextCost})
 			}
 		}

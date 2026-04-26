@@ -133,14 +133,6 @@ func saveBaseAdj(g *model.Graph, path string) error {
 			return err
 		}
 	}
-	if err := writeUint64(bw, uint64(len(g.Base.EdgeIDs))); err != nil {
-		return err
-	}
-	for _, e := range g.Base.EdgeIDs {
-		if err := writeUint32(bw, e); err != nil {
-			return err
-		}
-	}
 	return bw.Flush()
 }
 

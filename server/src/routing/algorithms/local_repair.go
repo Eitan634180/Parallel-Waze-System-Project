@@ -129,8 +129,9 @@ func LocalRepairOriginal(
 			continue
 		}
 
-		for _, edgeID := range g.Base.Neighbours(current.idx) {
-			edge := &g.Edges[edgeID]
+		start, end := g.Base.EdgeRange(current.idx)
+		for eid := start; eid < end; eid++ {
+			edge := &g.Edges[eid]
 			if current.idx == srcIdx && edge.ToNode == dstIdx {
 				continue
 			}
@@ -143,7 +144,7 @@ func LocalRepairOriginal(
 			nextIdx := edge.ToNode
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: eid}
 				pq.Push(localAstarItem{
 					idx:  nextIdx,
 					g:    nextCost,

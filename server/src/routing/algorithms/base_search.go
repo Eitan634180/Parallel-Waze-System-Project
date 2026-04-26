@@ -41,14 +41,15 @@ func FullGraphAStar(
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
 
-		for _, edgeID := range g.Base.Neighbours(current.idx) {
-			edge := &g.Edges[edgeID]
+		start, end := g.Base.EdgeRange(current.idx)
+		for eid := start; eid < end; eid++ {
+			edge := &g.Edges[eid]
 			nextIdx := edge.ToNode
 
 			nextCost := current.g + wf(edge)
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: eid}
 				pq.Push(astarItem{
 					idx: nextIdx,
 					g:   nextCost,
@@ -88,13 +89,14 @@ func FullGraphDijkstra(
 			return backtrackBase(srcIdx, dstIdx, pred, g, wf), true
 		}
 
-		for _, edgeID := range g.Base.Neighbours(current.idx) {
-			edge := &g.Edges[edgeID]
+		start, end := g.Base.EdgeRange(current.idx)
+		for eid := start; eid < end; eid++ {
+			edge := &g.Edges[eid]
 			nextCost := current.cost + wf(edge)
 			nextIdx := edge.ToNode
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
-				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: edgeID}
+				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: eid}
 				pq.Push(ijItem{idx: nextIdx, cost: nextCost})
 			}
 		}
