@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $psi = [System.Diagnostics.ProcessStartInfo]@{ FileName=$ServerExe; WorkingDirectory=$ServerWorkdir; UseShellExecute=$false }
 $psi.EnvironmentVariables['GOMAXPROCS'] = $GOMAXPROCS
-$psi.EnvironmentVariables['NAV_SERVER_ADDR'] = "$env:TEST_HOST:$env:TEST_BENCH_SERVER_PORT"
+$psi.EnvironmentVariables['NAV_SERVER_ADDR'] = "$($env:TEST_HOST):$($env:TEST_BENCH_SERVER_PORT)"
 
 $srv = [System.Diagnostics.Process]::Start($psi)
 if (-not $srv) { throw "Failed to start server process" }

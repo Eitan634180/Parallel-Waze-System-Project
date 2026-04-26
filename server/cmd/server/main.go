@@ -127,24 +127,32 @@ func main() {
 }
 
 func resolveListenAddr(flagValue string) (string, error) {
+	addr := ""
 	if value := strings.TrimSpace(flagValue); value != "" {
-		return value, nil
-	}
-	if value, ok := utilities.LookupEnvTrimmed("NAV_SERVER_ADDR"); ok {
-		return value, nil
+		addr = value
+	} else if value, ok := utilities.LookupEnvTrimmed("NAV_SERVER_ADDR"); ok {
+		addr = value
+	} else {
+		host, ok := utilities.LookupEnvTrimmed("TEST_HOST")
+		if !ok {
+			return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+		}
+		if port, ok := utilities.LookupEnvTrimmed("TEST_BENCH_SERVER_PORT"); ok {
+			addr = net.JoinHostPort(host, port)
+		} else if port, ok := utilities.LookupEnvTrimmed("TEST_SERVER_PORT"); ok {
+			addr = net.JoinHostPort(host, port)
+		} else {
+			return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+		}
 	}
 
-	host, ok := utilities.LookupEnvTrimmed("TEST_HOST")
-	if !ok {
-		return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+	if !strings.Contains(addr, ":") {
+		if _, err := net.LookupPort("tcp", addr); err == nil {
+			addr = ":" + addr
+		}
 	}
-	if port, ok := utilities.LookupEnvTrimmed("TEST_BENCH_SERVER_PORT"); ok {
-		return net.JoinHostPort(host, port), nil
-	}
-	if port, ok := utilities.LookupEnvTrimmed("TEST_SERVER_PORT"); ok {
-		return net.JoinHostPort(host, port), nil
-	}
-	return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+
+	return addr, nil
 }
 
 func resolveRoutingMode(flagValue string) string {
