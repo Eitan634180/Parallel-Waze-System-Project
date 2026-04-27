@@ -101,11 +101,16 @@ func (m *Manager) AdvanceStep(sessionID string, route routingentities.Route, old
 
 // UpdateRoute replaces a session's route and refreshes edge subscriptions.
 func (m *Manager) UpdateRoute(s *Session, newRoute routingentities.Route) {
+	m.UpdateRouteAtStep(s, newRoute, newRoute.InitialStepIndex())
+}
+
+// UpdateRouteAtStep replaces a session's route and keeps progress at stepIdx.
+func (m *Manager) UpdateRouteAtStep(s *Session, newRoute routingentities.Route, stepIdx int) {
 	s.Mu.Lock()
 	oldSteps := append([]routingentities.Step(nil), s.Route.Steps[s.StepIdx:]...)
 	s.Route = newRoute
 	s.RouteRevision++
-	s.StepIdx = newRoute.InitialStepIndex()
+	s.StepIdx = normalizeStepIndex(stepIdx, len(newRoute.Steps))
 	s.CurrentEdgeID = newRoute.CurrentEdge(s.StepIdx)
 	s.CurrentEdgeAt = now()
 	newSteps := append([]routingentities.Step(nil), s.Route.Steps[s.StepIdx:]...)
@@ -172,4 +177,17 @@ func remainingStepsFrom(route routingentities.Route, stepIdx int) []routingentit
 	default:
 		return append([]routingentities.Step(nil), route.Steps[stepIdx:]...)
 	}
+}
+
+func normalizeStepIndex(stepIdx, stepCount int) int {
+	if stepCount == 0 {
+		return 0
+	}
+	if stepIdx < 0 {
+		return 0
+	}
+	if stepIdx >= stepCount {
+		return stepCount - 1
+	}
+	return stepIdx
 }

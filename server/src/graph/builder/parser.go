@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strings"
 
 	"nav-system/src/graph/model"
 
@@ -26,11 +27,12 @@ type RawNode struct {
 
 // RawWay holds the parsed fields of an input way relevant for routing.
 type RawWay struct {
-	ID        uint64
-	NodeRefs  []NodeRawID
-	RoadClass uint8
-	IsOneWay  bool
-	MaxSpeed  float32 // 0 means "use default for road class"
+	ID            uint64
+	NodeRefs      []NodeRawID
+	RoadClass     uint8
+	IsOneWay      bool
+	ReverseOneWay bool
+	MaxSpeed      float32 // 0 means "use default for road class"
 }
 
 // ParseResult is the normalized graph-building input produced by source parsers.
@@ -73,8 +75,8 @@ func ParsePBF(path string) (*ParseResult, error) {
 			ID:        uint64(w.ID),
 			NodeRefs:  make([]uint64, len(w.Nodes)),
 			RoadClass: class,
-			IsOneWay:  w.Tags.Find("oneway") == "yes",
 		}
+		raw.IsOneWay, raw.ReverseOneWay = parseOneWay(w.Tags.Find("oneway"), w.Tags.Find("junction"))
 		for i, wn := range w.Nodes {
 			raw.NodeRefs[i] = uint64(wn.ID)
 			needed.Add(uint64(wn.ID))
@@ -112,6 +114,19 @@ func ParsePBF(path string) (*ParseResult, error) {
 
 	log.Printf("%s pass 2 complete (%d nodes loaded)", importerLogPrefix, len(nodes))
 	return &ParseResult{Nodes: nodes, Ways: ways}, nil
+}
+
+func parseOneWay(oneway, junction string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(oneway)) {
+	case "yes", "true", "1":
+		return true, false
+	case "-1", "reverse":
+		return true, true
+	case "no", "false", "0":
+		return false, false
+	default:
+		return strings.EqualFold(strings.TrimSpace(junction), "roundabout"), false
+	}
 }
 
 func scanPBF(path string, procs int, skipNodes, skipWays, skipRelations bool, fn func(osmlib.Object)) error {

@@ -114,30 +114,25 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 						flags |= model.FlagOneWay
 					}
 
-					localEdges = append(localEdges, pendingEdge{
-						fromIdx: n1idx,
-						e: model.Edge{
-							SrcNode:    n1idx,
-							DstNode:    n2idx,
-							BaseWeight: weightSec,
-							Length:     distM,
-							SpeedLimit: speedKmh,
-							Flags:      flags,
-						},
-					})
-
-					if !rw.IsOneWay {
+					addEdge := func(srcIdx, dstIdx uint32) {
 						localEdges = append(localEdges, pendingEdge{
-							fromIdx: n2idx,
+							fromIdx: srcIdx,
 							e: model.Edge{
-								SrcNode:    n2idx,
-								DstNode:    n1idx,
+								SrcNode:    srcIdx,
+								DstNode:    dstIdx,
 								BaseWeight: weightSec,
 								Length:     distM,
 								SpeedLimit: speedKmh,
 								Flags:      flags,
 							},
 						})
+					}
+
+					if !rw.IsOneWay || !rw.ReverseOneWay {
+						addEdge(n1idx, n2idx)
+					}
+					if !rw.IsOneWay || rw.ReverseOneWay {
+						addEdge(n2idx, n1idx)
 					}
 				}
 			}

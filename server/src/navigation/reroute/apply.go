@@ -72,7 +72,12 @@ func ApplyRouteUpdate(
 		return routingentities.Route{}
 	}
 
-	replaceSessionRoute(s, route, store, mgr, now, reason)
+	stepIdx := route.InitialStepIndex()
+	if reason == navigation.RerouteReasonLocalPatch && expectedVersion != nil {
+		stepIdx = expectedVersion.StepIdx
+	}
+
+	replaceSessionRoute(s, route, stepIdx, store, mgr, now, reason)
 	sendRerouteMessage(s, route, reason, oldETA, newETA)
 	sendCurrentSpeedHints(s, store, g)
 
@@ -89,7 +94,7 @@ func sessionVersionChanged(s *navigationsessions.Session, expected *SessionVersi
 	return s.StepIdx != expected.StepIdx || s.RouteRevision != expected.RouteRevision
 }
 
-func replaceSessionRoute(s *navigationsessions.Session, route routingentities.Route, store *trafficstore.Store, mgr *navigationsessions.Manager, now time.Time, reason string) {
+func replaceSessionRoute(s *navigationsessions.Session, route routingentities.Route, stepIdx int, store *trafficstore.Store, mgr *navigationsessions.Manager, now time.Time, reason string) {
 	s.Mu.RLock()
 	currentEdgeID := s.CurrentEdgeID
 	s.Mu.RUnlock()
@@ -97,7 +102,7 @@ func replaceSessionRoute(s *navigationsessions.Session, route routingentities.Ro
 		store.LeaveEdge(model.EdgeID(*currentEdgeID))
 	}
 
-	mgr.UpdateRoute(s, route)
+	mgr.UpdateRouteAtStep(s, route, stepIdx)
 
 	s.Mu.Lock()
 	if s.CurrentEdgeID != nil {

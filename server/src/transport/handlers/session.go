@@ -110,7 +110,9 @@ func (h *SessionHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SessionHandler) delete(w http.ResponseWriter, id string) {
-	h.Manager.Delete(id)
+	if sess := h.Manager.Get(id); sess != nil {
+		h.Tracker.Destroy(sess)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

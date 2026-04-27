@@ -131,7 +131,7 @@ func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc,
 			break
 		}
 
-		routes = append(routes, stepsToRoute(steps))
+		routes = append(routes, r.normalizeRouteCosts(stepsToRoute(steps), wf))
 		for _, step := range steps {
 			if step.EdgeID != nil {
 				penalties[model.EdgeID(*step.EdgeID)] = r.config.AlternativeRoutePenalty
@@ -195,4 +195,44 @@ func stepsToRoute(steps []entities.Step) entities.Route {
 		TotalDistM:   totalDistance,
 		TotalTimeSec: totalTime,
 	}
+}
+
+func (r *Router) normalizeRouteCosts(route entities.Route, wf WeightFunc) entities.Route {
+	var totalDistance float32
+	var totalTime float32
+
+	for i := range route.Steps {
+		if i == 0 {
+			route.Steps[i].DistanceM = 0
+			route.Steps[i].BaseTimeSec = 0
+			continue
+		}
+
+		edge := r.stepEdge(route.Steps[i-1], route.Steps[i])
+		if edge != nil {
+			totalDistance += edge.Length
+			totalTime += wf(edge)
+		}
+		route.Steps[i].DistanceM = totalDistance
+		route.Steps[i].BaseTimeSec = totalTime
+	}
+
+	route.TotalDistM = totalDistance
+	route.TotalTimeSec = totalTime
+	return route
+}
+
+func (r *Router) stepEdge(prevStep, step entities.Step) *model.Edge {
+	if step.EdgeID != nil && int(*step.EdgeID) < len(r.g.Edges) {
+		return &r.g.Edges[*step.EdgeID]
+	}
+
+	start, end := r.g.Base.EdgeRange(prevStep.NodeIdx)
+	for eid := start; eid < end; eid++ {
+		edge := &r.g.Edges[eid]
+		if edge.DstNode == step.NodeIdx {
+			return edge
+		}
+	}
+	return nil
 }
