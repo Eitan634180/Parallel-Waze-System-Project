@@ -12,11 +12,11 @@ func DistanceFromExpectedPath(route routingentities.Route, stepIdx int, lat, lon
 		return 0
 	}
 
-	px, py := utilities.ProjectAtReferenceLat(lat, lon, g.ProjectionRefLat)
+	px, py := utilities.ProjectAtReferenceLat(lat, lon, g.RefLat)
 	best := distanceFromExpectedProjection(route, stepIdx, g, px, py)
 
 	if lat < utilities.MinLatitude || lat > utilities.MaxLatitude {
-		swappedX, swappedY := utilities.ProjectAtReferenceLat(lon, lat, g.ProjectionRefLat)
+		swappedX, swappedY := utilities.ProjectAtReferenceLat(lon, lat, g.RefLat)
 		swappedBest := distanceFromExpectedProjection(route, stepIdx, g, swappedX, swappedY)
 		if swappedBest < best {
 			return swappedBest

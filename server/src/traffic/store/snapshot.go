@@ -19,7 +19,7 @@ func (s *Store) checkDedup(id model.EdgeID, data *baseStore, changed *[]ChangedE
 	s.snapshotDedup[id] = true
 
 	cur := loadWeight(data, id)
-	prev := s.prev[id]
+	prev := s.prevWeight[id]
 	delta := cur - prev
 	if delta < 0 {
 		delta = -delta
@@ -30,7 +30,7 @@ func (s *Store) checkDedup(id model.EdgeID, data *baseStore, changed *[]ChangedE
 
 	if delta >= traffic.SignificantShift || densityChanged {
 		*changed = append(*changed, ChangedEdge{EdgeID: id, OldMultiplier: prev, NewMultiplier: cur})
-		s.prev[id] = cur
+		s.prevWeight[id] = cur
 		s.prevDensity[id] = density
 	}
 }
@@ -42,7 +42,7 @@ func (s *Store) DirtySnapshot() []ChangedEdge {
 	defer s.metaMu.Unlock()
 
 	var changed []ChangedEdge
-	data := s.baseStore.Load()
+	data := s.base.Load()
 	for _, id := range s.dirtyEdges {
 		s.checkDedup(id, data, &changed)
 	}

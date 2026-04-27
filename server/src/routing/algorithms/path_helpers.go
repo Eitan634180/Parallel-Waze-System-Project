@@ -66,7 +66,7 @@ func baseEdgeBetween(g *model.Graph, fromIdx, toIdx uint32, wf func(*model.Edge)
 	start, end := g.Base.EdgeRange(fromIdx)
 	for eid := start; eid < end; eid++ {
 		edge := &g.Edges[eid]
-		if edge.ToNode == toIdx {
+		if edge.DstNode == toIdx {
 			return eid, edge.Length, wf(edge)
 		}
 	}

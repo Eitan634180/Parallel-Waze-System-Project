@@ -36,23 +36,23 @@ type nodeBin struct {
 }
 
 type edgeBin struct {
-	ID          uint32
-	FromNodeIdx uint32
-	ToNodeIdx   uint32
-	BaseWeight  float32
-	DistanceM   float32
-	SpeedKmh    float32
-	Flags       uint8
-	Pad         [3]byte
+	ID         uint32
+	SrcNode    uint32
+	DstNode    uint32
+	BaseWeight float32
+	Length     float32
+	SpeedLimit float32
+	Flags      uint8
+	Pad        [3]byte
 }
 
 type overlayEdgeBin struct {
-	FromNodeIdx   uint32
-	ToNodeIdx     uint32
-	Weight        float32
-	LiveWeightIdx uint32
-	IsCrossCell   uint8
-	Pad           [3]byte
+	SrcNode     uint32
+	DstNode     uint32
+	Weight      float32
+	StoreIdx    uint32
+	IsCrossCell uint8
+	Pad         [3]byte
 }
 
 type graphMeta struct {

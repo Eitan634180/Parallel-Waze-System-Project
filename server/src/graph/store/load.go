@@ -80,9 +80,9 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		return nil, err
 	}
 
-	g.NodeToGate = make([]int32, len(g.Nodes))
-	for i := range g.NodeToGate {
-		g.NodeToGate[i] = -1
+	g.Gates = make([]int32, len(g.Nodes))
+	for i := range g.Gates {
+		g.Gates[i] = -1
 	}
 
 	isGate := make([]bool, len(g.Nodes))
@@ -90,7 +90,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		fromCellID := g.Nodes[i].CellID
 		start, end := g.Base.EdgeRange(uint32(i))
 		for eid := start; eid < end; eid++ {
-			toIdx := g.Edges[eid].ToNode
+			toIdx := g.Edges[eid].DstNode
 			if g.Nodes[toIdx].CellID != fromCellID {
 				isGate[i] = true
 				isGate[toIdx] = true
@@ -101,7 +101,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 	gateCount := 0
 	for i := range g.Nodes {
 		if isGate[i] {
-			g.NodeToGate[i] = int32(gateCount)
+			g.Gates[i] = int32(gateCount)
 			gateCount++
 		}
 	}
@@ -110,7 +110,7 @@ func LoadGraph(dir string) (*model.Graph, error) {
 		log.Printf("%s recomputing bounding box from node data", graphStoreLogPrefix)
 		g.BBox = boundingBoxFromNodes(g.Nodes)
 	}
-	g.ProjectionRefLat = g.BBox.CenterLat()
+	g.RefLat = g.BBox.CenterLat()
 	reprojectNodes(g)
 
 	log.Printf("%s graph ready (%d nodes, %d edges, %d cells, %d gate nodes, %d overlay edges)",
@@ -159,11 +159,11 @@ func loadEdges(path string) ([]model.Edge, error) {
 		}
 		edges[i] = model.Edge{
 			ID:         b.ID,
-			FromNode:   b.FromNodeIdx,
-			ToNode:     b.ToNodeIdx,
+			SrcNode:    b.SrcNode,
+			DstNode:    b.DstNode,
 			BaseWeight: b.BaseWeight,
-			Length:     b.DistanceM,
-			SpeedLimit: b.SpeedKmh,
+			Length:     b.Length,
+			SpeedLimit: b.SpeedLimit,
 			Flags:      b.Flags,
 		}
 
@@ -212,7 +212,7 @@ func loadCells(path string) ([]model.Cell, error) {
 			}
 			gate[j] = v
 		}
-		cells[i] = model.Cell{GateNodes: gate}
+		cells[i] = model.Cell{Gates: gate}
 	}
 	return cells, nil
 }
@@ -245,10 +245,10 @@ func loadOverlayAdj(path string) (model.OverlayGraph, error) {
 			return model.OverlayGraph{}, err
 		}
 		edges[i] = model.OverlayEdge{
-			FromNode:    b.FromNodeIdx,
-			ToNode:      b.ToNodeIdx,
+			SrcNode:     b.SrcNode,
+			DstNode:     b.DstNode,
 			BaseWeight:  b.Weight,
-			StoreIdx:    b.LiveWeightIdx,
+			StoreIdx:    b.StoreIdx,
 			IsCrossCell: b.IsCrossCell != 0,
 		}
 
@@ -306,6 +306,6 @@ func boundingBoxFromNodes(nodes []model.Node) model.BoundingBox {
 func reprojectNodes(g *model.Graph) {
 	for i := range g.Nodes {
 		node := &g.Nodes[i]
-		node.X, node.Y = utilities.ProjectAtReferenceLat(node.Lat, node.Lon, g.ProjectionRefLat)
+		node.X, node.Y = utilities.ProjectAtReferenceLat(node.Lat, node.Lon, g.RefLat)
 	}
 }

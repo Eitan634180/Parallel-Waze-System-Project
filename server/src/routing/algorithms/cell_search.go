@@ -48,7 +48,7 @@ func CellDijkstra(
 		start, end := g.Base.EdgeRange(current.idx)
 		for eid := start; eid < end; eid++ {
 			edge := &g.Edges[eid]
-			nextIdx := edge.ToNode
+			nextIdx := edge.DstNode
 			if g.Nodes[nextIdx].CellID != cellID {
 				continue
 			}
@@ -114,7 +114,7 @@ func MultiSourceCellDijkstra(
 		start, end := g.Base.EdgeRange(current.idx)
 		for eid := start; eid < end; eid++ {
 			edge := &g.Edges[eid]
-			nextIdx := edge.ToNode
+			nextIdx := edge.DstNode
 			if g.Nodes[nextIdx].CellID != cellID {
 				continue
 			}

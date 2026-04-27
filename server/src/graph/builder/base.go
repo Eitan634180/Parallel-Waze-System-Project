@@ -37,7 +37,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 	// Compute bounding box from all nodes.
 	bbox := boundingBoxFromNodes(g.Nodes)
 	g.BBox = bbox
-	g.ProjectionRefLat = bbox.CenterLat()
+	g.RefLat = bbox.CenterLat()
 	reprojectNodes(g)
 	log.Printf("%s bounding box: lat [%.4f, %.4f] lon [%.4f, %.4f]",
 		graphBuilderLogPrefix, bbox.MinLat, bbox.MaxLat, bbox.MinLon, bbox.MaxLon)
@@ -117,8 +117,8 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 					localEdges = append(localEdges, pendingEdge{
 						fromIdx: n1idx,
 						e: model.Edge{
-							FromNode:   n1idx,
-							ToNode:     n2idx,
+							SrcNode:    n1idx,
+							DstNode:    n2idx,
 							BaseWeight: weightSec,
 							Length:     distM,
 							SpeedLimit: speedKmh,
@@ -130,8 +130,8 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 						localEdges = append(localEdges, pendingEdge{
 							fromIdx: n2idx,
 							e: model.Edge{
-								FromNode:   n2idx,
-								ToNode:     n1idx,
+								SrcNode:    n2idx,
+								DstNode:    n1idx,
 								BaseWeight: weightSec,
 								Length:     distM,
 								SpeedLimit: speedKmh,
@@ -159,10 +159,18 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 	}
 
 	slices.SortFunc(g.Edges, func(a, b model.Edge) int {
-		if a.FromNode < b.FromNode { return -1 }
-		if a.FromNode > b.FromNode { return 1 }
-		if a.ToNode < b.ToNode { return -1 }
-		if a.ToNode > b.ToNode { return 1 }
+		if a.SrcNode < b.SrcNode {
+			return -1
+		}
+		if a.SrcNode > b.SrcNode {
+			return 1
+		}
+		if a.DstNode < b.DstNode {
+			return -1
+		}
+		if a.DstNode > b.DstNode {
+			return 1
+		}
 		return 0
 	})
 
@@ -181,7 +189,7 @@ func BuildBaseGraph(pr *ParseResult) (*model.Graph, map[NodeRawID]uint32, error)
 func buildCSR(edges []model.Edge, nodeCount int) model.BaseGraph {
 	offsets := make([]uint32, nodeCount+1)
 	for _, e := range edges {
-		offsets[e.FromNode+1]++
+		offsets[e.SrcNode+1]++
 	}
 	for i := 1; i <= nodeCount; i++ {
 		offsets[i] += offsets[i-1]
@@ -194,7 +202,7 @@ func buildCSR(edges []model.Edge, nodeCount int) model.BaseGraph {
 // It also rebuilds the offsets-only BaseGraph CSR.
 func ReorderGraphByCell(g *model.Graph, nodeIdx map[NodeRawID]uint32) {
 	log.Printf("%s reordering graph by cell for cache locality", graphBuilderLogPrefix)
-	
+
 	type sortedNode struct {
 		n       model.Node
 		origIdx uint32
@@ -204,10 +212,18 @@ func ReorderGraphByCell(g *model.Graph, nodeIdx map[NodeRawID]uint32) {
 		sn[i] = sortedNode{n: g.Nodes[i], origIdx: uint32(i)}
 	}
 	slices.SortFunc(sn, func(a, b sortedNode) int {
-		if a.n.CellID < b.n.CellID { return -1 }
-		if a.n.CellID > b.n.CellID { return 1 }
-		if a.origIdx < b.origIdx { return -1 }
-		if a.origIdx > b.origIdx { return 1 }
+		if a.n.CellID < b.n.CellID {
+			return -1
+		}
+		if a.n.CellID > b.n.CellID {
+			return 1
+		}
+		if a.origIdx < b.origIdx {
+			return -1
+		}
+		if a.origIdx > b.origIdx {
+			return 1
+		}
 		return 0
 	})
 
@@ -224,15 +240,23 @@ func ReorderGraphByCell(g *model.Graph, nodeIdx map[NodeRawID]uint32) {
 	}
 
 	for i := range g.Edges {
-		g.Edges[i].FromNode = oldToNew[g.Edges[i].FromNode]
-		g.Edges[i].ToNode = oldToNew[g.Edges[i].ToNode]
+		g.Edges[i].SrcNode = oldToNew[g.Edges[i].SrcNode]
+		g.Edges[i].DstNode = oldToNew[g.Edges[i].DstNode]
 	}
 
 	slices.SortFunc(g.Edges, func(a, b model.Edge) int {
-		if a.FromNode < b.FromNode { return -1 }
-		if a.FromNode > b.FromNode { return 1 }
-		if a.ToNode < b.ToNode { return -1 }
-		if a.ToNode > b.ToNode { return 1 }
+		if a.SrcNode < b.SrcNode {
+			return -1
+		}
+		if a.SrcNode > b.SrcNode {
+			return 1
+		}
+		if a.DstNode < b.DstNode {
+			return -1
+		}
+		if a.DstNode > b.DstNode {
+			return 1
+		}
 		return 0
 	})
 
@@ -275,6 +299,6 @@ func boundingBoxFromNodes(nodes []model.Node) model.BoundingBox {
 func reprojectNodes(g *model.Graph) {
 	for i := range g.Nodes {
 		node := &g.Nodes[i]
-		node.X, node.Y = utilities.ProjectAtReferenceLat(node.Lat, node.Lon, g.ProjectionRefLat)
+		node.X, node.Y = utilities.ProjectAtReferenceLat(node.Lat, node.Lon, g.RefLat)
 	}
 }

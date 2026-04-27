@@ -50,7 +50,7 @@ func BruteForceSnap(g *model.Graph, lat, lon float64) uint32 {
 		return 0
 	}
 
-	qx, qy := utilities.ProjectAtReferenceLat(lat, lon, g.ProjectionRefLat)
+	qx, qy := utilities.ProjectAtReferenceLat(lat, lon, g.RefLat)
 	bestIdx := uint32(0)
 	bestDist := float32(math.MaxFloat32)
 
@@ -100,7 +100,7 @@ func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routingengine.Weight
 		start, end := g.Base.EdgeRange(item.nodeIdx)
 		for eid := start; eid < end; eid++ {
 			edge := &g.Edges[eid]
-			nextIdx := edge.ToNode
+			nextIdx := edge.DstNode
 			nextCost := item.cost + wf(edge)
 			if nextCost < dist[nextIdx] {
 				dist[nextIdx] = nextCost

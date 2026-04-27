@@ -29,8 +29,8 @@ func TestGraphStoreRoundTripPreservesRuntimeCellBoundaries(t *testing.T) {
 	}
 
 	for i := range fixture.Graph.Cells {
-		want := fixture.Graph.Cells[i].GateNodes
-		got := reloaded.Cells[i].GateNodes
+		want := fixture.Graph.Cells[i].Gates
+		got := reloaded.Cells[i].Gates
 		if len(got) != len(want) {
 			t.Fatalf("cell %d gate count changed across save/load: got %d want %d", i, len(got), len(want))
 		}
@@ -55,13 +55,13 @@ func TestGraphStoreRoundTripPreservesNodeToGateMapping(t *testing.T) {
 		t.Fatalf("LoadGraph: %v", err)
 	}
 
-	if len(reloaded.NodeToGate) != len(fixture.Graph.NodeToGate) {
-		t.Fatalf("node-to-gate length changed across save/load: got %d want %d", len(reloaded.NodeToGate), len(fixture.Graph.NodeToGate))
+	if len(reloaded.Gates) != len(fixture.Graph.Gates) {
+		t.Fatalf("node-to-gate length changed across save/load: got %d want %d", len(reloaded.Gates), len(fixture.Graph.Gates))
 	}
 
-	for i := range fixture.Graph.NodeToGate {
-		if reloaded.NodeToGate[i] != fixture.Graph.NodeToGate[i] {
-			t.Fatalf("node %d gate mapping changed across save/load: got %d want %d", i, reloaded.NodeToGate[i], fixture.Graph.NodeToGate[i])
+	for i := range fixture.Graph.Gates {
+		if reloaded.Gates[i] != fixture.Graph.Gates[i] {
+			t.Fatalf("node %d gate mapping changed across save/load: got %d want %d", i, reloaded.Gates[i], fixture.Graph.Gates[i])
 		}
 	}
 }

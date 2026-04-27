@@ -69,7 +69,7 @@ func BuildSnapIndex(g *model.Graph) *SnapIndex {
 
 // Snap returns the internal node index nearest to the given coordinates.
 func (si *SnapIndex) Snap(lat, lon float64) uint32 {
-	qx, qy := utilities.ProjectAtReferenceLat(lat, lon, si.g.ProjectionRefLat)
+	qx, qy := utilities.ProjectAtReferenceLat(lat, lon, si.g.RefLat)
 
 	cellX := clampGridCoord(qx, si.minX, si.cellW)
 	cellY := clampGridCoord(qy, si.minY, si.cellH)

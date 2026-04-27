@@ -111,8 +111,8 @@ func (c *Customizer) Customize(store *Store) {
 			}
 
 			edge := &g.Edges[edgeID]
-			fromCellID := g.Nodes[edge.FromNode].CellID
-			toCellID := g.Nodes[edge.ToNode].CellID
+			fromCellID := g.Nodes[edge.SrcNode].CellID
+			toCellID := g.Nodes[edge.DstNode].CellID
 			if fromCellID == toCellID && int(fromCellID) < len(cellSeen) && !cellSeen[fromCellID] {
 				cellSeen[fromCellID] = true
 				affectedCellIDs = append(affectedCellIDs, fromCellID)
@@ -177,13 +177,13 @@ func computeCellCustomizationUpdates(
 	}
 
 	cell := &g.Cells[cellID]
-	if len(cell.GateNodes) < 2 {
+	if len(cell.Gates) < 2 {
 		return nil
 	}
 
-	updates := make([]overlayWeightUpdate, 0, len(cell.GateNodes))
-	for _, srcIdx := range cell.GateNodes {
-		srcGateIdx := g.NodeToGate[srcIdx]
+	updates := make([]overlayWeightUpdate, 0, len(cell.Gates))
+	for _, srcIdx := range cell.Gates {
+		srcGateIdx := g.Gates[srcIdx]
 		if srcGateIdx == -1 {
 			continue
 		}
@@ -248,14 +248,14 @@ func liveCellDijkstra(
 		start, end := g.Base.EdgeRange(cur.idx)
 		for eid := start; eid < end; eid++ {
 			e := &g.Edges[eid]
-			if g.Nodes[e.ToNode].CellID != cellID {
+			if g.Nodes[e.DstNode].CellID != cellID {
 				continue
 			}
 
 			newCost := best + liveWeightFromSnapshot(weights, eid, e.BaseWeight)
-			if existing, has := scratch.cost(e.ToNode); !has || newCost < existing {
-				scratch.set(e.ToNode, newCost)
-				scratch.heap.Push(livePQItem{idx: e.ToNode, cost: newCost})
+			if existing, has := scratch.cost(e.DstNode); !has || newCost < existing {
+				scratch.set(e.DstNode, newCost)
+				scratch.heap.Push(livePQItem{idx: e.DstNode, cost: newCost})
 			}
 		}
 	}
@@ -302,7 +302,7 @@ func buildCustomizationIndex(g *model.Graph) *customizationIndex {
 			edge := &g.Overlay.Edges[i]
 			if !edge.IsCrossCell {
 				index.targets[currentPos+writeIdx] = shortcutTarget{
-					toIdx:   edge.ToNode,
+					toIdx:   edge.DstNode,
 					edgeIdx: edge.StoreIdx,
 				}
 				writeIdx++

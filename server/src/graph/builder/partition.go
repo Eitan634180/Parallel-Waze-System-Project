@@ -181,7 +181,7 @@ func addUndirectedSubsetEdges(fn *utilities.FlowNet, g *model.Graph, nodeIdxs []
 		u := localIdx[idx]
 		start, end := g.Base.EdgeRange(idx)
 		for eid := start; eid < end; eid++ {
-			toIdx := g.Edges[eid].ToNode
+			toIdx := g.Edges[eid].DstNode
 			v := localIdx[toIdx]
 			if v == -1 || u == v {
 				continue

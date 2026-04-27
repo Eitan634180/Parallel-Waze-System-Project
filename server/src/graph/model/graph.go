@@ -2,16 +2,16 @@ package model
 
 // Graph contains the base graph, partition metadata, and overlay graph.
 type Graph struct {
-	Nodes      []Node
-	Edges      []Edge
-	Cells      []Cell
-	NodeToGate []int32
+	Nodes []Node
+	Edges []Edge
+	Cells []Cell
+	Gates []int32 // maps node index to gate id, -1 if not a gate
 
 	Base    BaseGraph
 	Overlay OverlayGraph
 
-	BBox             BoundingBox
-	ProjectionRefLat float64
+	BBox   BoundingBox
+	RefLat float64
 }
 
 // BaseGraph stores outgoing base-graph edges in CSR form.

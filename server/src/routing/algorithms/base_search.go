@@ -44,7 +44,7 @@ func FullGraphAStar(
 		start, end := g.Base.EdgeRange(current.idx)
 		for eid := start; eid < end; eid++ {
 			edge := &g.Edges[eid]
-			nextIdx := edge.ToNode
+			nextIdx := edge.DstNode
 
 			nextCost := current.g + wf(edge)
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
@@ -93,7 +93,7 @@ func FullGraphDijkstra(
 		for eid := start; eid < end; eid++ {
 			edge := &g.Edges[eid]
 			nextCost := current.cost + wf(edge)
-			nextIdx := edge.ToNode
+			nextIdx := edge.DstNode
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost
 				pred[nextIdx] = BasePredecessor{PrevNodeIdx: current.idx, EdgeID: eid}
@@ -143,7 +143,7 @@ func OverlayAStar(
 			}
 		}
 
-		gateIdx := g.NodeToGate[current.idx]
+		gateIdx := g.Gates[current.idx]
 		if gateIdx == -1 {
 			continue
 		}
@@ -157,7 +157,7 @@ func OverlayAStar(
 				weight *= penalty
 			}
 
-			nextIdx := overlayEdge.ToNode
+			nextIdx := overlayEdge.DstNode
 			nextCost := current.g + weight
 			if best, seen := costs[nextIdx]; !seen || nextCost < best {
 				costs[nextIdx] = nextCost

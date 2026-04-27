@@ -11,21 +11,23 @@ import (
 
 // Store holds the live traffic state for every edge that has been observed.
 type Store struct {
-	metaMu        sync.Mutex
-	baseStore     atomic.Pointer[baseStore]
-	shortcutStore atomic.Pointer[shortcutStore]
+	base     atomic.Pointer[baseStore]
+	shortcut atomic.Pointer[shortcutStore]
 
-	prev        []float32 // multiplier at last propagation snapshot
-	prevDensity []int32   // density at last propagation snapshot
+	prevWeight  []float32 // Weight and density in previous snapshot
+	prevDensity []int32
 
-	dirtyEdges    []model.EdgeID // persistent: edges whose multiplier != 1.0 (for decay)
-	isDirty       []bool
-	pendingEdges  []model.EdgeID // consumable: edges whose weights changed recently (for customization)
-	isPending     []bool
-	activityEdges []model.EdgeID // edges whose density changed since last snapshot
+	dirtyEdges []model.EdgeID // Edges with multiplier != 1.0
+	isDirty    []bool
+
+	pendingEdges []model.EdgeID // Edges with recent weight change
+	isPending    []bool
+
+	activityEdges []model.EdgeID // Edges with recent density change
 	isActive      []bool
 
-	snapshotDedup []bool
+	snapshotDedup []bool // Helper to avoid duplications on snapshot
+	metaMu        sync.Mutex
 }
 
 type baseStore struct {
@@ -62,7 +64,7 @@ func newStoreData(edgeCount int) *baseStore {
 }
 
 func (s *Store) ensureLocked(id model.EdgeID) *baseStore {
-	data := s.baseStore.Load()
+	data := s.base.Load()
 	if data != nil && int(id) < len(data.weight) {
 		return data
 	}
@@ -72,11 +74,11 @@ func (s *Store) ensureLocked(id model.EdgeID) *baseStore {
 		newLen = int(id) + 1
 	}
 	s.resizeLocked(newLen)
-	return s.baseStore.Load()
+	return s.base.Load()
 }
 
 func (s *Store) resizeLocked(newLen int) {
-	current := s.baseStore.Load()
+	current := s.base.Load()
 	currentLen := 0
 	if current != nil {
 		currentLen = len(current.weight)
@@ -92,14 +94,14 @@ func (s *Store) resizeLocked(newLen int) {
 			next.density[i].Store(current.density[i].Load())
 		}
 	}
-	s.baseStore.Store(next)
+	s.base.Store(next)
 
 	newPrev := make([]float32, newLen)
 	for i := range newPrev {
 		newPrev[i] = 1.0
 	}
-	copy(newPrev, s.prev)
-	s.prev = newPrev
+	copy(newPrev, s.prevWeight)
+	s.prevWeight = newPrev
 
 	newPrevDensity := make([]int32, newLen)
 	copy(newPrevDensity, s.prevDensity)

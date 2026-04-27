@@ -25,7 +25,7 @@ func (s *Store) InitOverlayWeights(g *model.Graph) {
 			data.weight[e.StoreIdx].Store(math.Float32bits(e.BaseWeight))
 		}
 	}
-	s.shortcutStore.Store(data)
+	s.shortcut.Store(data)
 }
 
 // OverlayWeight returns the live weight for an overlay edge.
@@ -33,14 +33,14 @@ func (s *Store) InitOverlayWeights(g *model.Graph) {
 // Shortcut edges read from the dedicated shortcut weight array.
 func (s *Store) OverlayWeight(edgeIdx uint32, overlayEdge *model.OverlayEdge) float32 {
 	if overlayEdge.IsCrossCell {
-		data := s.baseStore.Load()
+		data := s.base.Load()
 		return overlayEdge.BaseWeight * loadWeight(data, overlayEdge.StoreIdx)
 	}
-	return loadOverlayWeight(s.shortcutStore.Load(), overlayEdge.StoreIdx, overlayEdge.BaseWeight)
+	return loadOverlayWeight(s.shortcut.Load(), overlayEdge.StoreIdx, overlayEdge.BaseWeight)
 }
 
 func (s *Store) applyOverlayUpdates(updates []overlayWeightUpdate) {
-	data := s.shortcutStore.Load()
+	data := s.shortcut.Load()
 	if data == nil {
 		return
 	}

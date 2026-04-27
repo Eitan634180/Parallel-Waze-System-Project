@@ -186,7 +186,7 @@ func FindEdgeID(tb testing.TB, fixture *BuiltGraphFixture, fromID, toID builder.
 
 	start, end := fixture.Graph.Base.EdgeRange(fromIdx)
 	for eid := start; eid < end; eid++ {
-		if fixture.Graph.Edges[eid].ToNode == toIdx {
+		if fixture.Graph.Edges[eid].DstNode == toIdx {
 			return eid
 		}
 	}

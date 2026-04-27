@@ -24,7 +24,7 @@ func (r *Router) twoLevelSearch(
 		return steps, nil, ok
 	}
 
-	srcGate := g.Cells[srcCellID].GateNodes
+	srcGate := g.Cells[srcCellID].Gates
 	injectionCosts, injectionPred := algorithms.CellDijkstra(g, srcIdx, srcGate, srcCellID, wf, stats)
 
 	overlaySeeds := make(map[uint32]float32, len(srcGate))
@@ -37,7 +37,7 @@ func (r *Router) twoLevelSearch(
 		return nil, nil, false
 	}
 
-	dstGate := g.Cells[dstCellID].GateNodes
+	dstGate := g.Cells[dstCellID].Gates
 	dstGateSet := make(map[uint32]struct{}, len(dstGate))
 	for _, idx := range dstGate {
 		dstGateSet[idx] = struct{}{}
@@ -157,7 +157,7 @@ func baseEdgeBetween(g *model.Graph, fromIdx, toIdx uint32, wf WeightFunc) (mode
 	start, end := g.Base.EdgeRange(fromIdx)
 	for eid := start; eid < end; eid++ {
 		edge := &g.Edges[eid]
-		if edge.ToNode == toIdx {
+		if edge.DstNode == toIdx {
 			return eid, edge.Length, wf(edge)
 		}
 	}

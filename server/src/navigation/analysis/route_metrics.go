@@ -78,7 +78,7 @@ func remainingFractionOnCurrentEdge(route routingentities.Route, stepIdx int, la
 		return 1
 	}
 
-	px, py := utilities.ProjectAtReferenceLat(lastLat, lastLon, g.ProjectionRefLat)
+	px, py := utilities.ProjectAtReferenceLat(lastLat, lastLon, g.RefLat)
 	node := g.Node(step.NodeIdx)
 	if node == nil {
 		return 1

@@ -18,7 +18,6 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		numWorkers = max(runtime.GOMAXPROCS(0), 1)
 	}
 	log.Printf("%s building overlay graph with %d workers", cellBuilderLogPrefix, numWorkers)
-	cellNodes := groupNodesByCell(g)
 
 	type cellResult struct {
 		edges []model.OverlayEdge
@@ -35,7 +34,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 		go func() {
 			defer wg.Done()
 			for ci := range jobs {
-				results <- cellResult{edges: computeCellOverlayEdges(g, model.CellID(ci), &g.Cells[ci], cellNodes[ci])}
+				results <- cellResult{edges: computeCellOverlayEdges(g, model.CellID(ci), &g.Cells[ci])}
 			}
 		}()
 	}
@@ -52,7 +51,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	}()
 
 	gateCount := 0
-	for _, bIdx := range g.NodeToGate {
+	for _, bIdx := range g.Gates {
 		if bIdx != -1 {
 			gateCount++
 		}
@@ -62,7 +61,7 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	totalEdges := 0
 	for result := range results {
 		for _, edge := range result.edges {
-			fromIdx := g.NodeToGate[edge.FromNode]
+			fromIdx := g.Gates[edge.SrcNode]
 			if fromIdx == -1 {
 				continue
 			}
@@ -98,18 +97,6 @@ func BuildOverlayGraph(g *model.Graph, numWorkers int) time.Duration {
 	return elapsed
 }
 
-func groupNodesByCell(g *model.Graph) [][]uint32 {
-	nodesByCell := make([][]uint32, len(g.Cells))
-	for idx := range g.Nodes {
-		cellID := g.Nodes[idx].CellID
-		if int(cellID) >= len(nodesByCell) {
-			continue
-		}
-		nodesByCell[cellID] = append(nodesByCell[cellID], uint32(idx))
-	}
-	return nodesByCell
-}
-
 // DetectGateNodes marks nodes that touch edges crossing a cell gate.
 func DetectGateNodes(g *model.Graph) {
 	log.Printf("%s detecting gate nodes", cellBuilderLogPrefix)
@@ -119,7 +106,7 @@ func DetectGateNodes(g *model.Graph) {
 		fromCellID := g.Nodes[i].CellID
 		start, end := g.Base.EdgeRange(uint32(i))
 		for eid := start; eid < end; eid++ {
-			toIdx := g.Edges[eid].ToNode
+			toIdx := g.Edges[eid].DstNode
 			if g.Nodes[toIdx].CellID != fromCellID {
 				isGate[i] = true
 				isGate[toIdx] = true
@@ -127,9 +114,9 @@ func DetectGateNodes(g *model.Graph) {
 		}
 	}
 
-	g.NodeToGate = make([]int32, len(g.Nodes))
-	for i := range g.NodeToGate {
-		g.NodeToGate[i] = -1
+	g.Gates = make([]int32, len(g.Nodes))
+	for i := range g.Gates {
+		g.Gates[i] = -1
 	}
 	cellGates := make(map[model.CellID][]uint32)
 
@@ -138,13 +125,13 @@ func DetectGateNodes(g *model.Graph) {
 		if !isGate[i] {
 			continue
 		}
-		g.NodeToGate[i] = int32(gateCount)
+		g.Gates[i] = int32(gateCount)
 		gateCount++
 		cellGates[node.CellID] = append(cellGates[node.CellID], uint32(i))
 	}
 
 	for i := range g.Cells {
-		g.Cells[i].GateNodes = cellGates[model.CellID(i)]
+		g.Cells[i].Gates = cellGates[model.CellID(i)]
 	}
 
 	log.Printf("%s detected %d gate nodes", cellBuilderLogPrefix, gateCount)
@@ -153,7 +140,7 @@ func DetectGateNodes(g *model.Graph) {
 func countCrossCell(g *model.Graph, edges []model.OverlayEdge) int {
 	n := 0
 	for _, e := range edges {
-		if g.Nodes[e.FromNode].CellID != g.Nodes[e.ToNode].CellID {
+		if g.Nodes[e.SrcNode].CellID != g.Nodes[e.DstNode].CellID {
 			n++
 		}
 	}
@@ -161,28 +148,28 @@ func countCrossCell(g *model.Graph, edges []model.OverlayEdge) int {
 }
 
 // computeCellOverlayEdges emits cross-cell edges and intra-cell shortcuts for one cell.
-func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Cell, cellNodeIdxs []uint32) []model.OverlayEdge {
+func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Cell) []model.OverlayEdge {
 	var result []model.OverlayEdge
 
-	for _, fromIdx := range cell.GateNodes {
-		if g.NodeToGate[fromIdx] == -1 {
+	for _, fromIdx := range cell.Gates {
+		if g.Gates[fromIdx] == -1 {
 			continue
 		}
 
 		start, end := g.Base.EdgeRange(fromIdx)
 		for eid := start; eid < end; eid++ {
 			e := &g.Edges[eid]
-			toIdx := e.ToNode
+			toIdx := e.DstNode
 
 			if g.Nodes[toIdx].CellID == cellID {
 				continue
 			}
-			if g.NodeToGate[toIdx] == -1 {
+			if g.Gates[toIdx] == -1 {
 				continue
 			}
 			result = append(result, model.OverlayEdge{
-				FromNode:    fromIdx,
-				ToNode:      toIdx,
+				SrcNode:     fromIdx,
+				DstNode:     toIdx,
 				BaseWeight:  e.BaseWeight,
 				StoreIdx:    eid,
 				IsCrossCell: true,
@@ -190,18 +177,9 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 		}
 	}
 
-	if len(cell.GateNodes) < 2 {
-		return result
-	}
-
-	inCell := make([]bool, len(g.Nodes))
-	for _, idx := range cellNodeIdxs {
-		inCell[idx] = true
-	}
-
-	for _, srcIdx := range cell.GateNodes {
-		dists := cellDijkstra(g, srcIdx, cell.GateNodes, inCell)
-		for _, dstIdx := range cell.GateNodes {
+	for _, srcIdx := range cell.Gates {
+		dists := cellDijkstra(g, srcIdx, cellID, cell.Gates)
+		for _, dstIdx := range cell.Gates {
 			if dstIdx == srcIdx {
 				continue
 			}
@@ -210,8 +188,8 @@ func computeCellOverlayEdges(g *model.Graph, cellID model.CellID, cell *model.Ce
 				continue
 			}
 			result = append(result, model.OverlayEdge{
-				FromNode:   srcIdx,
-				ToNode:     dstIdx,
+				SrcNode:    srcIdx,
+				DstNode:    dstIdx,
 				BaseWeight: d.weight,
 			})
 		}
@@ -226,7 +204,7 @@ type distInfo struct {
 
 // cellDijkstra runs Dijkstra inside one cell and returns settled gate
 // distances from the source gate node.
-func cellDijkstra(g *model.Graph, srcIdx uint32, GateNodes []uint32, inCell []bool) map[uint32]distInfo {
+func cellDijkstra(g *model.Graph, srcIdx uint32, cellID model.CellID, GateNodes []uint32) map[uint32]distInfo {
 	dist := make(map[uint32]distInfo)
 	dist[srcIdx] = distInfo{0}
 	targetSet := make(map[uint32]struct{}, len(GateNodes))
@@ -260,8 +238,8 @@ func cellDijkstra(g *model.Graph, srcIdx uint32, GateNodes []uint32, inCell []bo
 		start, end := g.Base.EdgeRange(cur.idx)
 		for eid := start; eid < end; eid++ {
 			e := &g.Edges[eid]
-			toIdx := e.ToNode
-			if !inCell[toIdx] {
+			toIdx := e.DstNode
+			if g.Nodes[toIdx].CellID != cellID {
 				continue
 			}
 			newW := best.weight + e.BaseWeight

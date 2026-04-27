@@ -137,7 +137,7 @@ func flagBetterRouteIfHelpful(s *navigationsessions.Session, improvedEdges []tra
 		return
 	}
 
-	carX, carY := utilities.ProjectAtReferenceLat(snapshot.carLat, snapshot.carLon, g.ProjectionRefLat)
+	carX, carY := utilities.ProjectAtReferenceLat(snapshot.carLat, snapshot.carLon, g.RefLat)
 
 	for _, changed := range improvedEdges {
 		edge, ok := g.Edge(changed.EdgeID)
@@ -145,8 +145,8 @@ func flagBetterRouteIfHelpful(s *navigationsessions.Session, improvedEdges []tra
 			continue
 		}
 
-		fromNode := g.Node(edge.FromNode)
-		toNode := g.Node(edge.ToNode)
+		fromNode := g.Node(edge.SrcNode)
+		toNode := g.Node(edge.DstNode)
 		if fromNode == nil || toNode == nil {
 			continue
 		}
