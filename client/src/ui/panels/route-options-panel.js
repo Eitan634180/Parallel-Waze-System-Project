@@ -1,13 +1,10 @@
 import { formatDuration, getArrivalTime } from '../../utils/formatters.js';
 import { DOM_IDS, PANEL_NUMBERS, UI_KEYS } from '../ui-constants.js';
+import { METERS_PER_KILOMETER } from '../../utils/math.js';
 
 const FASTEST_ROUTE_INDEX = 0;
 const FASTEST_TAG_HTML = '<span class="route-option-tag">Fastest</span>';
 const ROUTE_SEPARATOR_HTML = '<span class="route-sep">|</span>';
-const DISTANCE_CONVERSION = {
-    metersPerKilometer: 1000,
-};
-
 export function renderRouteOptions(routes, onSelectRoute) {
     const container = document.getElementById(DOM_IDS.routeOptionsContainer);
     container.innerHTML = '';
@@ -18,7 +15,7 @@ export function renderRouteOptions(routes, onSelectRoute) {
         div.className = `route-option-card ${idx === FASTEST_ROUTE_INDEX ? 'active' : ''}`;
         div.id = `${UI_KEYS.routeOptionIdPrefix}${idx}`;
 
-        const distKm = (route.distance / DISTANCE_CONVERSION.metersPerKilometer).toFixed(PANEL_NUMBERS.routeOptionDistancePrecision);
+        const distKm = (route.distance / METERS_PER_KILOMETER).toFixed(PANEL_NUMBERS.routeOptionDistancePrecision);
         const duration = formatDuration(route.dynamicETA);
         const arrivalTime = getArrivalTime(route.dynamicETA);
 

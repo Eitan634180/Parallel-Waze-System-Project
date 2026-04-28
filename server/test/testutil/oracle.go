@@ -4,14 +4,14 @@ import (
 	"container/heap"
 	"math"
 
+	"nav-system/src/graph/model"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/src/utilities"
-	"nav-system/src/graph/builder"
-	"nav-system/src/routing"
 )
 
 type OraclePath struct {
 	NodeIdxs []uint32
-	EdgeIDs  []builder.EdgeID
+	EdgeIDs  []model.EdgeID
 	Cost     float32
 	Distance float32
 }
@@ -45,12 +45,12 @@ func (h *oracleHeap) Pop() any {
 	return item
 }
 
-func BruteForceSnap(g *builder.Graph, lat, lon float64) uint32 {
+func BruteForceSnap(g *model.Graph, lat, lon float64) uint32 {
 	if len(g.Nodes) == 0 {
 		return 0
 	}
 
-	qx, qy := utilities.Project(lat, lon)
+	qx, qy := utilities.ProjectAtReferenceLat(lat, lon, g.RefLat)
 	bestIdx := uint32(0)
 	bestDist := float32(math.MaxFloat32)
 
@@ -66,9 +66,9 @@ func BruteForceSnap(g *builder.Graph, lat, lon float64) uint32 {
 	return bestIdx
 }
 
-func ShortestPath(g *builder.Graph, srcIdx, dstIdx uint32, wf routing.WeightFunc) (OraclePath, bool) {
+func ShortestPath(g *model.Graph, srcIdx, dstIdx uint32, wf routingengine.WeightFunc) (OraclePath, bool) {
 	if wf == nil {
-		wf = routing.BaseWeight
+		wf = routingengine.BaseWeight
 	}
 	if srcIdx == dstIdx {
 		return OraclePath{NodeIdxs: []uint32{srcIdx}}, true
@@ -97,14 +97,15 @@ func ShortestPath(g *builder.Graph, srcIdx, dstIdx uint32, wf routing.WeightFunc
 			break
 		}
 
-		for _, edgeID := range g.BaseAdj.Neighbours(item.nodeIdx) {
-			edge := &g.Edges[edgeID]
-			nextIdx := edge.ToNodeIdx
+		start, end := g.Base.EdgeRange(item.nodeIdx)
+		for eid := start; eid < end; eid++ {
+			edge := &g.Edges[eid]
+			nextIdx := edge.DstNode
 			nextCost := item.cost + wf(edge)
 			if nextCost < dist[nextIdx] {
 				dist[nextIdx] = nextCost
 				prevNode[nextIdx] = int(item.nodeIdx)
-				prevEdge[nextIdx] = int(edgeID)
+				prevEdge[nextIdx] = int(eid)
 				heap.Push(&pq, &oracleItem{nodeIdx: nextIdx, cost: nextCost})
 			}
 		}
@@ -115,16 +116,16 @@ func ShortestPath(g *builder.Graph, srcIdx, dstIdx uint32, wf routing.WeightFunc
 	}
 
 	nodeIdxs := []uint32{dstIdx}
-	edgeIDs := make([]builder.EdgeID, 0, len(g.Nodes))
+	edgeIDs := make([]model.EdgeID, 0, len(g.Nodes))
 	var totalDistance float32
 
 	for current := int(dstIdx); current != int(srcIdx); current = prevNode[current] {
 		if current < 0 || prevNode[current] < 0 || prevEdge[current] < 0 {
 			return OraclePath{}, false
 		}
-		edgeID := builder.EdgeID(prevEdge[current])
+		edgeID := model.EdgeID(prevEdge[current])
 		edgeIDs = append(edgeIDs, edgeID)
-		totalDistance += g.Edges[edgeID].DistanceM
+		totalDistance += g.Edges[edgeID].Length
 		nodeIdxs = append(nodeIdxs, uint32(prevNode[current]))
 	}
 
@@ -145,7 +146,7 @@ func reverseUint32s(values []uint32) {
 	}
 }
 
-func reverseEdgeIDs(values []builder.EdgeID) {
+func reverseEdgeIDs(values []model.EdgeID) {
 	for i, j := 0, len(values)-1; i < j; i, j = i+1, j-1 {
 		values[i], values[j] = values[j], values[i]
 	}

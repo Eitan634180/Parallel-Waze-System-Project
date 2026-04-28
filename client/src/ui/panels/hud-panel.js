@@ -1,28 +1,14 @@
 import { formatDuration, getArrivalTime } from '../../utils/formatters.js';
-import { CSS_CLASSES, DOM_IDS, PANEL_TEXT, TRAFFIC_LEVELS } from '../ui-constants.js';
+import { CSS_CLASSES, DOM_IDS, HUD_TURN_ANGLES, PANEL_NUMBERS, PANEL_TEXT, TRAFFIC_LEVELS } from '../ui-constants.js';
 import { getTurnInfo } from '../../features/driving/traffic-model.js';
+import { METERS_PER_KILOMETER } from '../../utils/math.js';
 
 const DISPLAY_STYLES = {
     flex: 'flex',
     none: 'none',
 };
 
-const MATH_CONSTANTS = {
-    metersPerKilometer: 1000,
-    zeroDirection: 0,
-};
-
-const FORMAT_CONFIG = {
-    distanceDecimals: 1,
-    turnDistanceDecimals: 0,
-};
-
-const TURN_ANGLES = {
-    straight: 20,
-    slight: 45,
-    regular: 120,
-    sharp: 160,
-};
+const ZERO_DIRECTION = 0;
 
 const DIRECTIONS = {
     left: 'left',
@@ -58,7 +44,7 @@ export function updateETA(seconds) {
 }
 
 export function updateDistance(meters, elementId = DOM_IDS.distanceValue) {
-    const km = (meters / MATH_CONSTANTS.metersPerKilometer).toFixed(FORMAT_CONFIG.distanceDecimals);
+    const km = (meters / METERS_PER_KILOMETER).toFixed(PANEL_NUMBERS.hudDistancePrecision);
     document.getElementById(elementId).textContent = `${km} km`;
 }
 
@@ -106,7 +92,7 @@ export function updateTurnInfo(distanceLeftOnStep, currentStep, nextStep) {
     const iconEl = document.getElementById(DOM_IDS.turnIcon);
 
     if (distEl) {
-        distEl.textContent = `${distanceLeftOnStep.toFixed(FORMAT_CONFIG.turnDistanceDecimals)} m`;
+        distEl.textContent = `${distanceLeftOnStep.toFixed(PANEL_NUMBERS.hudTurnDistancePrecision)} m`;
     }
 
     if (!currentStep) return;
@@ -125,21 +111,21 @@ export function updateTurnInfo(distanceLeftOnStep, currentStep, nextStep) {
 }
 
 function getTurnInstruction(angle, direction) {
-    const side = direction > MATH_CONSTANTS.zeroDirection ? DIRECTIONS.left : DIRECTIONS.right;
+    const side = direction > ZERO_DIRECTION ? DIRECTIONS.left : DIRECTIONS.right;
 
-    if (angle < TURN_ANGLES.straight) {
+    if (angle < HUD_TURN_ANGLES.straight) {
         return { text: TURN_MESSAGES.straight, icon: TURN_ICONS.straight };
-    } else if (angle < TURN_ANGLES.slight) {
+    } else if (angle < HUD_TURN_ANGLES.slight) {
         return {
             text: TURN_MESSAGES.slight(side),
             icon: side === DIRECTIONS.left ? TURN_ICONS.slightLeft : TURN_ICONS.slightRight
         };
-    } else if (angle < TURN_ANGLES.regular) {
+    } else if (angle < HUD_TURN_ANGLES.regular) {
         return {
             text: TURN_MESSAGES.turn(side),
             icon: side === DIRECTIONS.left ? TURN_ICONS.left : TURN_ICONS.right
         };
-    } else if (angle < TURN_ANGLES.sharp) {
+    } else if (angle < HUD_TURN_ANGLES.sharp) {
         return {
             text: TURN_MESSAGES.sharp(side),
             icon: side === DIRECTIONS.left ? TURN_ICONS.sharpLeft : TURN_ICONS.sharpRight

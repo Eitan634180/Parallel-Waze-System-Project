@@ -2,10 +2,11 @@ package unit_test
 
 import (
 	"math"
+	"sync"
 	"testing"
 
-	"nav-system/src/graph/builder"
-	"nav-system/src/traffic"
+	"nav-system/src/graph/model"
+	trafficstore "nav-system/src/traffic/store"
 )
 
 // ──────────────────────────────────────────────
@@ -13,17 +14,32 @@ import (
 // ──────────────────────────────────────────────
 
 func TestTrafficStoreLiveWeightReturnsBaseWhenUnobserved(t *testing.T) {
-	store := traffic.NewStore()
+	store := trafficstore.NewStore()
 	const base = float32(10.0)
-	got := store.LiveWeight(builder.EdgeID(1), base)
+	got := store.LiveWeight(model.EdgeID(1), base)
 	if got != base {
 		t.Fatalf("LiveWeight unobserved: got %.4f want %.4f", got, base)
 	}
 }
 
+func TestTrafficStoreWithCapacitySupportsInRangeEdgesWithoutWarmup(t *testing.T) {
+	store := trafficstore.NewStoreWithCapacity(4)
+	const edgeID = model.EdgeID(3)
+	const base = float32(10.0)
+
+	if got := store.LiveWeight(edgeID, base); got != base {
+		t.Fatalf("LiveWeight on pre-sized edge: got %.4f want %.4f", got, base)
+	}
+
+	store.RecordObservation(edgeID, base*2, base)
+	if got := store.Multiplier(edgeID); got <= 1.0 {
+		t.Fatalf("expected pre-sized edge multiplier to update, got %.4f", got)
+	}
+}
+
 func TestTrafficStoreRecordObservationAppliesEWMA(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(42)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(42)
 	const base = float32(10.0)
 	const observed = float32(20.0) // 2× base → ratio 2.0
 
@@ -45,8 +61,8 @@ func TestTrafficStoreRecordObservationAppliesEWMA(t *testing.T) {
 }
 
 func TestTrafficStoreRecordObservationIgnoresNonPositiveBase(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(7)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(7)
 	store.RecordObservation(edgeID, 10, 0)
 	store.RecordObservation(edgeID, 10, -1)
 	// Neither call should register an entry.
@@ -55,9 +71,25 @@ func TestTrafficStoreRecordObservationIgnoresNonPositiveBase(t *testing.T) {
 	}
 }
 
+func TestTrafficStoreRecordSpeedSampleDoesNotDropBelowFreeFlow(t *testing.T) {
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(8)
+
+	store.RecordSpeedSample(edgeID, 120, 10, 100)
+
+	if got := store.Multiplier(edgeID); got != 1.0 {
+		t.Fatalf("expected multiplier floor at 1.0, got %.4f", got)
+	}
+	for _, changed := range store.DirtySnapshot() {
+		if changed.EdgeID == edgeID {
+			t.Fatalf("free-flow sample should not produce a dirty snapshot entry: %+v", changed)
+		}
+	}
+}
+
 func TestTrafficStoreMultipleObservationsConverge(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(1)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(1)
 	const base = float32(10.0)
 	const congested = float32(30.0) // ratio 3.0
 
@@ -76,15 +108,15 @@ func TestTrafficStoreMultipleObservationsConverge(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestTrafficStoreIsCongestedReturnsFalseWhenUnobserved(t *testing.T) {
-	store := traffic.NewStore()
-	if store.IsCongested(builder.EdgeID(99)) {
+	store := trafficstore.NewStore()
+	if store.IsCongested(model.EdgeID(99)) {
 		t.Fatal("unobserved edge should not be congested")
 	}
 }
 
 func TestTrafficStoreIsCongestedReturnsTrueAboveThreshold(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(5)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(5)
 	const base = float32(10.0)
 
 	// Force multiplier above CongestionThreshold (1.5) by saturating the EWMA.
@@ -101,8 +133,8 @@ func TestTrafficStoreIsCongestedReturnsTrueAboveThreshold(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestTrafficStoreApplyDecayReducesMultiplierTowardOne(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(10)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(10)
 	const base = float32(10.0)
 
 	// Push multiplier to ~2.0.
@@ -124,8 +156,8 @@ func TestTrafficStoreApplyDecayReducesMultiplierTowardOne(t *testing.T) {
 }
 
 func TestTrafficStoreApplyDecayEventuallyRemovesDirtyEdge(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(3)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(3)
 	const base = float32(5.0)
 
 	store.RecordObservation(edgeID, base*1.5, base) // one small push
@@ -146,8 +178,8 @@ func TestTrafficStoreApplyDecayEventuallyRemovesDirtyEdge(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestTrafficStoreDirtySnapshotReturnsChangedEdges(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(20)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(20)
 	const base = float32(10.0)
 
 	// First snapshot – nothing has changed yet.
@@ -178,8 +210,8 @@ func TestTrafficStoreDirtySnapshotReturnsChangedEdges(t *testing.T) {
 }
 
 func TestTrafficStoreDirtySnapshotClearsActivityAfterCall(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(30)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(30)
 
 	store.EnterEdge(edgeID)
 	first := store.DirtySnapshot()
@@ -207,8 +239,8 @@ func TestTrafficStoreDirtySnapshotClearsActivityAfterCall(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestTrafficStoreDensityTracksEnterLeave(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(50)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(50)
 
 	if got := store.Density(edgeID); got != 0 {
 		t.Fatalf("initial density should be 0, got %d", got)
@@ -232,8 +264,8 @@ func TestTrafficStoreDensityTracksEnterLeave(t *testing.T) {
 }
 
 func TestTrafficStoreLeaveEdgeBelowZeroClipsToZero(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(99)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(99)
 
 	// LeaveEdge on an edge with no sessions should not go negative.
 	store.LeaveEdge(edgeID)
@@ -247,8 +279,8 @@ func TestTrafficStoreLeaveEdgeBelowZeroClipsToZero(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestTrafficStoreRecommendedSpeedReturnBaseWithOneCar(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(60)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(60)
 	const base = float32(90.0)
 	const dist = float32(500.0)
 
@@ -260,8 +292,8 @@ func TestTrafficStoreRecommendedSpeedReturnBaseWithOneCar(t *testing.T) {
 }
 
 func TestTrafficStoreRecommendedSpeedDropsWithHighDensity(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(61)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(61)
 	const base = float32(90.0)
 	const dist = float32(500.0)
 
@@ -280,13 +312,80 @@ func TestTrafficStoreRecommendedSpeedDropsWithHighDensity(t *testing.T) {
 }
 
 func TestTrafficStoreRecommendedSpeedZeroBaseReturnsZero(t *testing.T) {
-	store := traffic.NewStore()
-	const edgeID = builder.EdgeID(62)
+	store := trafficstore.NewStore()
+	const edgeID = model.EdgeID(62)
 	for i := 0; i < 10; i++ {
 		store.EnterEdge(edgeID)
 	}
 	got := store.RecommendedSpeedKmh(edgeID, 0, 500)
 	if got != 0 {
 		t.Fatalf("zero base speed should yield zero, got %.1f", got)
+	}
+}
+
+func TestTrafficStoreConcurrentReadersAndWriters(t *testing.T) {
+	store := trafficstore.NewStore()
+	const edgeCount = 128
+	const iterations = 500
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	run := func(fn func(i int)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for i := 0; i < iterations; i++ {
+				fn(i)
+			}
+		}()
+	}
+
+	run(func(i int) {
+		edgeID := model.EdgeID(i % edgeCount)
+		store.RecordObservation(edgeID, 20, 10)
+		_ = store.LiveWeight(edgeID, 10)
+	})
+
+	run(func(i int) {
+		edgeID := model.EdgeID((i * 7) % edgeCount)
+		store.RecordSpeedSample(edgeID, 45, 10, 100)
+		_ = store.Multiplier(edgeID)
+	})
+
+	run(func(i int) {
+		edgeID := model.EdgeID((i * 11) % edgeCount)
+		store.EnterEdge(edgeID)
+		_ = store.Density(edgeID)
+		store.LeaveEdge(edgeID)
+	})
+
+	run(func(i int) {
+		edgeID := model.EdgeID((i * 13) % edgeCount)
+		_ = store.LiveWeight(edgeID, 10)
+		_ = store.Multiplier(edgeID)
+		_ = store.Density(edgeID)
+	})
+
+	run(func(i int) {
+		dst := make([]float32, 0, edgeCount)
+		_ = store.DirtySnapshot()
+		store.ApplyDecay(0.9, 0.01)
+		_ = store.SwapPending()
+		store.RefillPendingForBenchmarks()
+		_ = store.SnapshotWeightMultipliers(dst, edgeCount)
+	})
+
+	close(start)
+	wg.Wait()
+
+	for edgeID := model.EdgeID(0); edgeID < edgeCount; edgeID++ {
+		if got := store.Density(edgeID); got < 0 {
+			t.Fatalf("density should never be negative for edge %d, got %d", edgeID, got)
+		}
+		if got := store.Multiplier(edgeID); got < 1.0 {
+			t.Fatalf("multiplier should never drop below 1.0 for edge %d, got %.4f", edgeID, got)
+		}
 	}
 }

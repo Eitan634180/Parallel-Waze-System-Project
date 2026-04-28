@@ -4,25 +4,26 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 )
 
 func BenchmarkRouterParallelStatic(b *testing.B) {
 	fixture := mustLoadFixture(b)
-	modes := []routing.RoutingMode{
-		routing.RoutingModeHierarchical,
-		routing.RoutingModeBaseAStar,
+	modes := []routingentities.RoutingMode{
+		routingentities.RoutingModeHierarchical,
+		routingentities.RoutingModeBaseAStar,
 	}
 
 	for _, mode := range modes {
 		b.Run(string(mode), func(b *testing.B) {
-			router := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
-			benchmarkParallelQueries(b, fixture, router, routing.BaseWeight)
+			router := routingengine.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
+			benchmarkParallelQueries(b, fixture, router, routingengine.BaseWeight)
 		})
 	}
 }
 
-func benchmarkParallelQueries(b *testing.B, fixture *Fixture, router *routing.Router, wf routing.WeightFunc) {
+func benchmarkParallelQueries(b *testing.B, fixture *Fixture, router *routingengine.Router, wf routingengine.WeightFunc) {
 	var next atomic.Uint64
 	var visited atomic.Uint64
 

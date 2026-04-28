@@ -1,5 +1,13 @@
-export const SERVER_URL = 'http://localhost:8080';
-export const tick = 100;
-export const pingRate = 1000;
-export const DEFAULT_SPEED_LIMIT = 13.8;
-export const SEARCH_DELAY = 400
+import { CLIENT_RUNTIME_CONFIG } from './runtime-config.js';
+
+export const SERVER_URL = CLIENT_RUNTIME_CONFIG.serverUrl;
+
+export const APP_TIMINGS = {
+  searchDebounceMs: 400,
+  simulationTickMs: 100,
+  websocketPingIntervalMs: 1000,
+};
+
+export const APP_DEFAULTS = {
+  defaultSpeedLimitMps: 13.8,
+};

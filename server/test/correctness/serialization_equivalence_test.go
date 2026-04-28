@@ -3,48 +3,63 @@ package correctness_test
 import (
 	"testing"
 
-	"nav-system/src/graph/builder"
-	"nav-system/src/routing"
+	"nav-system/src/graph/store"
+	routingengine "nav-system/src/routing/engine"
 	"nav-system/test/testutil"
 )
 
 func TestSerializationRoundTripPreservesRoutingResults(t *testing.T) {
-	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
-	routeCase := testutil.LoadRouteCases(t, "diamond_cases.json")[0]
-
-	before := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
-	if len(before) != 1 {
-		t.Fatalf("expected 1 route before save, got %d", len(before))
+	corpora := []struct {
+		graph string
+		cases string
+		size  int
+	}{
+		{graph: "diamond_graph.json", cases: "diamond_cases.json", size: 2},
+		{graph: "one_way_detour_graph.json", cases: "one_way_detour_cases.json", size: 2},
+		{graph: "disconnected_graph.json", cases: "disconnected_cases.json", size: 2},
 	}
 
-	dir := t.TempDir()
-	if err := builder.SaveGraph(fixture.Graph, dir); err != nil {
-		t.Fatalf("SaveGraph: %v", err)
-	}
+	for _, corpus := range corpora {
+		corpus := corpus
+		t.Run(corpus.graph, func(t *testing.T) {
+			fixture := testutil.BuildGraphFixture(t, corpus.graph, corpus.size)
+			routeCase := testutil.LoadRouteCases(t, corpus.cases)[0]
 
-	reloadedGraph, err := builder.LoadGraph(dir)
-	if err != nil {
-		t.Fatalf("LoadGraph: %v", err)
-	}
-	reloadedRouter := routing.NewRouter(reloadedGraph, routing.BuildSnapIndex(reloadedGraph))
+			before := fixture.Router.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routingengine.BaseWeight)
+			if len(before) != 1 {
+				t.Fatalf("expected 1 route before save, got %d", len(before))
+			}
 
-	after := reloadedRouter.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routing.BaseWeight)
-	if len(after) != 1 {
-		t.Fatalf("expected 1 route after load, got %d", len(after))
-	}
+			dir := t.TempDir()
+			if err := store.SaveGraph(fixture.Graph, dir); err != nil {
+				t.Fatalf("SaveGraph: %v", err)
+			}
 
-	beforeValidated := testutil.AssertRouteValid(t, fixture.Graph, before[0], routing.BaseWeight)
-	afterValidated := testutil.AssertRouteValid(t, reloadedGraph, after[0], routing.BaseWeight)
+			reloadedGraph, err := store.LoadGraph(dir)
+			if err != nil {
+				t.Fatalf("LoadGraph: %v", err)
+			}
+			reloadedRouter := routingengine.NewRouter(reloadedGraph, routingengine.BuildSnapIndex(reloadedGraph))
 
-	if beforeValidated.SourceID != afterValidated.SourceID || beforeValidated.TargetID != afterValidated.TargetID {
-		t.Fatalf("route endpoints changed across save/load: before=%d->%d after=%d->%d", beforeValidated.SourceID, beforeValidated.TargetID, afterValidated.SourceID, afterValidated.TargetID)
-	}
-	if len(beforeValidated.EdgeIDs) != len(afterValidated.EdgeIDs) {
-		t.Fatalf("edge count changed across save/load: before=%d after=%d", len(beforeValidated.EdgeIDs), len(afterValidated.EdgeIDs))
-	}
-	for i := range beforeValidated.EdgeIDs {
-		if beforeValidated.EdgeIDs[i] != afterValidated.EdgeIDs[i] {
-			t.Fatalf("edge %d changed across save/load: before=%d after=%d", i, beforeValidated.EdgeIDs[i], afterValidated.EdgeIDs[i])
-		}
+			after := reloadedRouter.Compute(routeCase.Src.Lat, routeCase.Src.Lon, routeCase.Dst.Lat, routeCase.Dst.Lon, 1, routingengine.BaseWeight)
+			if len(after) != 1 {
+				t.Fatalf("expected 1 route after load, got %d", len(after))
+			}
+
+			beforeValidated := testutil.AssertRouteValid(t, fixture.Graph, before[0], routingengine.BaseWeight)
+			afterValidated := testutil.AssertRouteValid(t, reloadedGraph, after[0], routingengine.BaseWeight)
+
+			if beforeValidated.SourceIdx != afterValidated.SourceIdx || beforeValidated.TargetIdx != afterValidated.TargetIdx {
+				t.Fatalf("route endpoints changed across save/load: before=%d->%d after=%d->%d", beforeValidated.SourceIdx, beforeValidated.TargetIdx, afterValidated.SourceIdx, afterValidated.TargetIdx)
+			}
+			if len(beforeValidated.EdgeIDs) != len(afterValidated.EdgeIDs) {
+				t.Fatalf("edge count changed across save/load: before=%d after=%d", len(beforeValidated.EdgeIDs), len(afterValidated.EdgeIDs))
+			}
+			for i := range beforeValidated.EdgeIDs {
+				if beforeValidated.EdgeIDs[i] != afterValidated.EdgeIDs[i] {
+					t.Fatalf("edge %d changed across save/load: before=%d after=%d", i, beforeValidated.EdgeIDs[i], afterValidated.EdgeIDs[i])
+				}
+			}
+		})
 	}
 }

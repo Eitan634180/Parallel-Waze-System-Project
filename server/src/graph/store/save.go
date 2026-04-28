@@ -1,0 +1,213 @@
+package store
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"nav-system/src/graph"
+	"nav-system/src/graph/model"
+
+	"golang.org/x/sync/errgroup"
+)
+
+// SaveGraph writes all graph data to the given directory.
+func SaveGraph(g *model.Graph, dir string) error {
+	log.Printf("%s writing graph to %s", graphStoreLogPrefix, dir)
+
+	if err := os.MkdirAll(dir, graphDataDirPerm); err != nil {
+		return err
+	}
+
+	eg := new(errgroup.Group)
+
+	eg.Go(func() error {
+		if err := saveNodes(g, filepath.Join(dir, nodesFileName)); err != nil {
+			return fmt.Errorf("nodes: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveEdges(g, filepath.Join(dir, edgesFileName)); err != nil {
+			return fmt.Errorf("edges: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveBaseAdj(g, filepath.Join(dir, baseAdjFileName)); err != nil {
+			return fmt.Errorf("base_adj: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveCells(g, filepath.Join(dir, cellsFileName)); err != nil {
+			return fmt.Errorf("cells: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveOverlayAdj(g, filepath.Join(dir, overlayAdjFileName)); err != nil {
+			return fmt.Errorf("overlay_adj: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		if err := saveMeta(g, filepath.Join(dir, metaFileName)); err != nil {
+			return fmt.Errorf("meta: %w", err)
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	log.Printf("%s graph write complete", graphStoreLogPrefix)
+	return nil
+}
+
+func saveNodes(g *model.Graph, path string) error {
+	f, err := createFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
+
+	if err := writeHeader(bw, uint64(len(g.Nodes))); err != nil {
+		return err
+	}
+	for i := range g.Nodes {
+		n := &g.Nodes[i]
+		if err := writeFixed(bw, nodeBin{n.Lat, n.Lon, n.X, n.Y, n.CellID}); err != nil {
+			return err
+		}
+	}
+	return bw.Flush()
+}
+
+func saveEdges(g *model.Graph, path string) error {
+	f, err := createFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
+
+	if err := writeHeader(bw, uint64(len(g.Edges))); err != nil {
+		return err
+	}
+	for i := range g.Edges {
+		e := &g.Edges[i]
+		if err := writeFixed(bw, edgeBin{
+			ID:         e.ID,
+			SrcNode:    e.SrcNode,
+			DstNode:    e.DstNode,
+			BaseWeight: e.BaseWeight,
+			Length:     e.Length,
+			SpeedLimit: e.SpeedLimit,
+			Flags:      e.Flags,
+		}); err != nil {
+			return err
+		}
+	}
+	return bw.Flush()
+}
+
+func saveBaseAdj(g *model.Graph, path string) error {
+	f, err := createFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
+
+	if err := writeHeader(bw, uint64(len(g.Base.Offsets))); err != nil {
+		return err
+	}
+	for _, o := range g.Base.Offsets {
+		if err := writeUint32(bw, o); err != nil {
+			return err
+		}
+	}
+	return bw.Flush()
+}
+
+func saveCells(g *model.Graph, path string) error {
+	f, err := createFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
+
+	if err := writeHeader(bw, uint64(len(g.Cells))); err != nil {
+		return err
+	}
+	for i := range g.Cells {
+		c := &g.Cells[i]
+		if err := writeUint32(bw, uint32(len(c.Gates))); err != nil {
+			return err
+		}
+		for _, idx := range c.Gates {
+			if err := writeUint32(bw, idx); err != nil {
+				return err
+			}
+		}
+	}
+	return bw.Flush()
+}
+
+func saveOverlayAdj(g *model.Graph, path string) error {
+	f, err := createFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
+
+	if err := writeHeader(bw, uint64(len(g.Overlay.Offsets))); err != nil {
+		return err
+	}
+	for _, o := range g.Overlay.Offsets {
+		if err := writeUint32(bw, o); err != nil {
+			return err
+		}
+	}
+	if err := writeUint64(bw, uint64(len(g.Overlay.Edges))); err != nil {
+		return err
+	}
+	for _, e := range g.Overlay.Edges {
+		isCrossCell := uint8(0)
+		if e.IsCrossCell {
+			isCrossCell = 1
+		}
+		if err := writeFixed(bw, overlayEdgeBin{
+			SrcNode:     e.SrcNode,
+			DstNode:     e.DstNode,
+			Weight:      e.BaseWeight,
+			StoreIdx:    e.StoreIdx,
+			IsCrossCell: isCrossCell,
+		}); err != nil {
+			return err
+		}
+	}
+
+	return bw.Flush()
+}
+
+func saveMeta(g *model.Graph, path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	bw := bufio.NewWriterSize(f, graph.FileBufferSize)
+	if err := json.NewEncoder(bw).Encode(graphMeta{BBox: g.BBox}); err != nil {
+		return err
+	}
+	return bw.Flush()
+}

@@ -11,12 +11,12 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"nav-system/src/routing"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/test/testutil"
 )
 
 type routeResponse struct {
-	Routes []routing.Route `json:"routes"`
+	Routes []routingentities.Route `json:"routes"`
 }
 
 type sessionResponse struct {
@@ -118,4 +118,22 @@ func wsDialerWithTimeout(d time.Duration) *websocket.Dialer {
 	return &websocket.Dialer{
 		HandshakeTimeout: d,
 	}
+}
+
+func waitForWSMessage(t *testing.T, conn *websocket.Conn, timeout time.Duration, label string, predicate func(map[string]any) bool) map[string]any {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		var message map[string]any
+		if err := readWSJSON(conn, &message); err != nil {
+			t.Fatalf("%s: read websocket message: %v", label, err)
+		}
+		if predicate(message) {
+			return message
+		}
+	}
+
+	t.Fatalf("%s: did not receive expected websocket message in time", label)
+	return nil
 }

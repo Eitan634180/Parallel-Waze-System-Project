@@ -3,28 +3,29 @@ package benchmark_test
 import (
 	"testing"
 
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 )
 
 func BenchmarkRouterCompareStatic(b *testing.B) {
 	fixture := mustLoadFixture(b)
-	modes := []routing.RoutingMode{
-		routing.RoutingModeHierarchical,
-		routing.RoutingModeBaseAStar,
-		routing.RoutingModeBaseDijkstra,
+	modes := []routingentities.RoutingMode{
+		routingentities.RoutingModeHierarchical,
+		routingentities.RoutingModeBaseAStar,
+		routingentities.RoutingModeBaseDijkstra,
 	}
 
 	for _, mode := range modes {
 		b.Run(string(mode), func(b *testing.B) {
-			router := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
-			benchmarkCorpusQueries(b, fixture, router, routing.BaseWeight)
+			router := routingengine.NewRouterWithMode(fixture.Graph, fixture.Snap, mode)
+			benchmarkCorpusQueries(b, fixture, router, routingengine.BaseWeight)
 		})
 	}
 }
 
-func benchmarkCorpusQueries(b *testing.B, fixture *Fixture, router *routing.Router, wf routing.WeightFunc) {
+func benchmarkCorpusQueries(b *testing.B, fixture *Fixture, router *routingengine.Router, wf routingengine.WeightFunc) {
 	cases := fixture.Corpus
-	var total routing.SearchStats
+	var total routingentities.SearchStats
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -1,56 +1,25 @@
 param(
-    [Parameter(Mandatory = $true)][string]$ServerExe,
-    [Parameter(Mandatory = $true)][string]$ServerWorkdir,
-    [Parameter(Mandatory = $true)][string]$ServerAddr,
-    [Parameter(Mandatory = $true)][string]$ServerData,
-    [Parameter(Mandatory = $true)][string]$RoutingMode,
-    [Parameter(Mandatory = $true)][int]$GOMAXPROCS,
-    [Parameter(Mandatory = $true)][int]$StartupWaitSec,
-    [Parameter(Mandatory = $true)][string]$LoadbenchExe,
-    [Parameter(Mandatory = $true)][string]$ServerURL,
-    [Parameter(Mandatory = $true)][string]$Cases,
-    [Parameter(Mandatory = $true)][int]$Concurrency,
-    [Parameter(Mandatory = $true)][int]$Requests,
-    [Parameter(Mandatory = $true)][int]$Warmup,
-    [Parameter(Mandatory = $true)][string]$Out
+    [Parameter(Mandatory)][string]$ServerExe, [Parameter(Mandatory)][string]$ServerWorkdir,
+    [Parameter(Mandatory)][int]$GOMAXPROCS, [Parameter(Mandatory)][int]$StartupWaitSec,
+    [Parameter(Mandatory)][string]$BenchmarkExe, [Parameter(Mandatory)][string]$Out
 )
 
 $ErrorActionPreference = 'Stop'
 
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $ServerExe
-$psi.WorkingDirectory = $ServerWorkdir
-$psi.UseShellExecute = $false
-$psi.Arguments = ('--addr "{0}" --data "{1}" --routing-mode "{2}"' -f $ServerAddr, $ServerData, $RoutingMode)
-$psi.EnvironmentVariables['GOMAXPROCS'] = [string]$GOMAXPROCS
+$psi = [System.Diagnostics.ProcessStartInfo]@{ FileName=$ServerExe; WorkingDirectory=$ServerWorkdir; UseShellExecute=$false }
+$psi.EnvironmentVariables['GOMAXPROCS'] = $GOMAXPROCS
+$psi.EnvironmentVariables['NAV_SERVER_ADDR'] = "$($env:TEST_HOST):$($env:TEST_BENCH_SERVER_PORT)"
 
-$serverProc = [System.Diagnostics.Process]::Start($psi)
-if (-not $serverProc) {
-    throw 'failed to start server process'
-}
+$srv = [System.Diagnostics.Process]::Start($psi)
+if (-not $srv) { throw "Failed to start server process" }
 
-Start-Sleep -Seconds $StartupWaitSec
-if ($serverProc.HasExited) {
-    throw "server exited before benchmark with code $($serverProc.ExitCode)"
-}
+Start-Sleep $StartupWaitSec
+if ($srv.HasExited) { throw "Server exited before benchmark with code $($srv.ExitCode)" }
 
-$benchExit = 0
 try {
-    & $LoadbenchExe `
-        --server $ServerURL `
-        --cases $Cases `
-        --concurrency $Concurrency `
-        --requests $Requests `
-        --warmup $Warmup `
-        --routing-mode $RoutingMode `
-        --target-gomaxprocs $GOMAXPROCS `
-        --out $Out
-    $benchExit = $LASTEXITCODE
+    & $BenchmarkExe route-load --target-gomaxprocs $GOMAXPROCS --out $Out
+    exit $LASTEXITCODE
 }
 finally {
-    if ($serverProc -and -not $serverProc.HasExited) {
-        Stop-Process -Id $serverProc.Id -Force
-    }
+    if (-not $srv.HasExited) { $srv.Kill() }
 }
-
-exit $benchExit

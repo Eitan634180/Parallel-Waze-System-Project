@@ -1,0 +1,5 @@
+export const RADIANS_PER_DEGREE = Math.PI / 180;
+export const DEGREES_PER_RADIAN = 180 / Math.PI;
+export const METERS_PER_KILOMETER = 1000;
+export const KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND = 3.6;
+export const METERS_PER_DEGREE_LATITUDE = 111320;

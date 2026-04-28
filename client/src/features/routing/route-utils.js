@@ -1,5 +1,6 @@
-import { DEFAULT_SPEED_LIMIT } from '../../app/app-config.js';
+import { APP_DEFAULTS } from '../../app/app-config.js';
 import { distanceBetweenLatLngM } from '../../utils/geo.js';
+import { KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND } from '../../utils/math.js';
 
 export function processRawRoute(route) {
     const steps = route.steps || [];
@@ -10,14 +11,14 @@ export function processRawRoute(route) {
         const current = steps[i];
         const distance = Math.max(0, (current.distance_m || 0) - (prev.distance_m || 0));
         const duration = Math.max(0, (current.base_time_sec || 0) - (prev.base_time_sec || 0));
-        const speedMs = duration > 0 ? distance / duration : DEFAULT_SPEED_LIMIT;
+        const speedMs = duration > 0 ? distance / duration : APP_DEFAULTS.defaultSpeedLimitMps;
 
         segments.push({
             from_node: [prev.lon, prev.lat],
             to_node: [current.lon, current.lat],
             base_length: distance,
             duration_sec: duration,
-            speed_limit: Math.round(speedMs * 3.6),
+            speed_limit: Math.round(speedMs * KILOMETERS_PER_HOUR_TO_METERS_PER_SECOND),
             edge_id: current.edge_id ?? null,
         });
     }

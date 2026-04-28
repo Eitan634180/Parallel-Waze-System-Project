@@ -7,8 +7,8 @@ import { sendLocationPing } from '../../services/ws/socket-client.js';
 import { processRawRoute, projectPositionOntoRoute } from '../routing/route-utils.js';
 import { createDriverProfile, createMotionState } from './traffic-model.js';
 import { DOM_IDS, PANEL_TEXT } from '../../ui/ui-constants.js';
+import { SECONDS_PER_MINUTE } from '../../utils/time.js';
 
-const SECONDS_PER_MINUTE = 60;
 const DEFAULT_REROUTE_REASON = 'traffic';
 const OFF_ROUTE_REASON = 'off_route';
 const STEP_INDEX_OFFSET = 1;

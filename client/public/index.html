@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parallel navigation system</title>
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/navigation.css">
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <div id="sidebar">
+        <div id="search-panel">
+            <div class="panel-header">
+                <div class="logo">
+                    <img src="assets/route.png" class="logo-icon w-8 h-8" />
+                    <span>Search route</span>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="input-wrapper">
+                    <span class="input-dot source-dot"></span>
+                    <input type="text" id="source-input" placeholder="Starting point..." autocomplete="off" />
+                    <div id="source-suggestions" class="suggestions-dropdown"></div>
+                </div>
+
+                <div class="input-connector"></div>
+
+                <div class="input-wrapper">
+                    <span class="input-dot dest-dot"></span>
+                    <input type="text" id="dest-input" placeholder="Destination..." autocomplete="off" />
+                    <div id="dest-suggestions" class="suggestions-dropdown"></div>
+                </div>
+            </div>
+
+            <button id="navigate-btn" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                </svg>
+                Navigate
+            </button>
+        </div>
+
+        <div id="route-panel" class="hidden">
+            <div class="route-header">
+                <h3>Route Info</h3>
+                <button id="close-route" title="Close">&times;</button>
+            </div>
+
+            <div class="route-stats">
+                <div class="stat">
+                    <span class="stat-label">ETA</span>
+                    <span class="stat-value" id="eta-value">--</span>
+                </div>
+
+                <div class="stat">
+                    <span class="stat-label">Distance</span>
+                    <span class="stat-value" id="distance-value">--</span>
+                </div>
+
+                <div class="stat">
+                    <span class="stat-label">Traffic</span>
+                    <span class="stat-value" id="traffic-status">Normal</span>
+                </div>
+            </div>
+
+            <div id="route-options-container" class="route-options"></div>
+
+            <button id="start-drive-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Start Driving
+            </button>
+        </div>
+    </div>
+
+    <div id="alert-toast" class="hidden">
+        <div class="alert-icon">🚗</div>
+        <div class="alert-content">
+            <div class="alert-title" id="alert-title">Rerouting...</div>
+            <div class="alert-message" id="alert-message"></div>
+        </div>
+    </div>
+
+    <div id="driving-hud" class="hidden">
+        <div class="hud-trip">
+            <div class="trip-line">
+                <span class="trip-dot src"></span>
+                <span id="hud-src-name">--</span>
+            </div>
+
+            <div class="trip-line">
+                <span class="trip-dot dst"></span>
+                <span id="hud-dst-name">--</span>
+            </div>
+        </div>
+
+        <div class="hud-metrics">
+            <div class="hud-eta">
+                <span class="hud-label">ETA</span>
+                <span class="hud-value" id="hud-eta">--</span>
+            </div>
+
+            <div class="hud-distance">
+                <span class="hud-label">DISTANCE</span>
+                <span class="hud-value" id="hud-distance-left">--</span>
+            </div>
+
+            <div class="hud-arrival">
+                <span class="hud-label">ARRIVAL</span>
+                <span class="hud-value" id="hud-arrival-time">--</span>
+            </div>
+
+            <div class="hud-speed">
+                <span class="hud-label">SPEED</span>
+                <span class="hud-value" id="hud-speed">--</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="turn-banner">
+        <div class="turn-icon-box">
+            <span id="turn-icon"></span>
+        </div>
+        <div class="turn-info">
+            <div class="turn-distance" id="turn-distance">---</div>
+            <div class="turn-details">
+                <span class="turn-action" id="turn-action">---</span>
+            </div>
+        </div>
+    </div>
+
+    <button id="stop-drive-btn" title="Stop navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="6" y="6" width="12" height="12"></rect>
+        </svg>
+    </button>
+
+    <button id="debug-toggle-btn" title="Open debug tools">Debug</button>
+
+    <div id="debug-panel" class="hidden">
+        <div class="debug-header">
+            <h3>Debug Tools</h3>
+            <button id="close-debug" title="Close">&times;</button>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-section-title">Route Inspector</div>
+            <button id="toggle-route-inspector-btn" class="debug-tool-btn">
+                Inspect Route Edges
+            </button>
+            <div id="debug-edge-info" class="debug-edge-info">
+                Click an edge to see its details.
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-section-title">Simulation Cars</div>
+            <div class="debug-spawn-controls">
+                <label class="debug-input-group">
+                    <span>Count</span>
+                    <input id="debug-car-count" type="number" />
+                </label>
+                <button id="debug-add-car-btn" class="debug-tool-btn">Add Cars</button>
+                <button id="debug-random-traffic-btn" class="debug-tool-btn">Random Traffic</button>
+                <button id="debug-clear-cars-btn" class="debug-tool-btn danger">Clear Cars</button>
+            </div>
+            <button id="toggle-debug-cars-btn" class="debug-tool-btn debug-secondary-btn">
+                Hide Test Cars
+            </button>
+            <div id="debug-car-status" class="debug-status">
+                No extra debug cars.
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <div class="debug-section-title">Drive Simulation</div>
+            <button id="debug-drift-btn" class="debug-tool-btn">
+                Force Off-Route
+            </button>
+            <div id="debug-main-status" class="debug-status">
+                Start driving to inspect the main car session.
+            </div>
+        </div>
+    </div>
+
+    <script src="runtime-config.js"></script>
+    <script type="module" src="../src/app/bootstrap.js"></script>
+</body>
+
+</html>

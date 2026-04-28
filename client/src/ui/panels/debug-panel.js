@@ -33,8 +33,8 @@ export function renderEdgeDebugInfo(edge) {
     el.innerHTML = `
         <strong>Edge ${edge.edgeId ?? EDGE_ID_FALLBACK} | Segment ${edge.index + 1}</strong>
         <div class="debug-status-grid">
-            <div><strong>From</strong><br>${edge.fromNodeId}</div>
-            <div><strong>To</strong><br>${edge.toNodeId}</div>
+            <div><strong>From</strong><br>${edge.fromNodeIdx}</div>
+            <div><strong>To</strong><br>${edge.toNodeIdx}</div>
             <div><strong>Distance</strong><br>${(edge.distanceM || 0).toFixed(PANEL_NUMBERS.edgeInfoDistancePrecision)} m</div>
             <div><strong>Base time</strong><br>${(edge.durationSec || 0).toFixed(PANEL_NUMBERS.edgeInfoDurationPrecision)} s</div>
             <div><strong>Speed limit</strong><br>${edge.speedLimitKmh || EMPTY_VALUE} km/h</div>

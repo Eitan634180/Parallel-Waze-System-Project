@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"nav-system/src/graph/builder"
-	"nav-system/src/routing"
+	"nav-system/src/graph/model"
+	"nav-system/src/graph/store"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/src/utilities"
 )
 
@@ -20,6 +22,7 @@ type CorpusSpec struct {
 	Count           int     `json:"count"`
 	MinNodeIndexGap int     `json:"min_node_index_gap"`
 	MinDistanceM    float64 `json:"min_distance_m"`
+	MaxDistanceM    float64 `json:"max_distance_m"`
 	MaxAttempts     int     `json:"max_attempts"`
 }
 
@@ -35,8 +38,8 @@ type CorpusCase struct {
 
 type Fixture struct {
 	Region string
-	Graph  *builder.Graph
-	Snap   *routing.SnapIndex
+	Graph  *model.Graph
+	Snap   *routingengine.SnapIndex
 	Corpus []CorpusCase
 }
 
@@ -46,7 +49,7 @@ func LoadFixture(corpusName string) (*Fixture, error) {
 		return nil, err
 	}
 
-	graph, err := builder.LoadGraph(filepath.Join(moduleRoot(), "data", "map", corpusSpec.Region))
+	graph, err := store.LoadGraph(filepath.Join(moduleRoot(), "data", "map", corpusSpec.Region))
 	if err != nil {
 		return nil, fmt.Errorf("load graph %q: %w", corpusSpec.Region, err)
 	}
@@ -59,12 +62,12 @@ func LoadFixture(corpusName string) (*Fixture, error) {
 	return &Fixture{
 		Region: corpusSpec.Region,
 		Graph:  graph,
-		Snap:   routing.BuildSnapIndex(graph),
+		Snap:   routingengine.BuildSnapIndex(graph),
 		Corpus: corpus,
 	}, nil
 }
 
-func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
+func BuildCorpus(g *model.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 	if spec.Count <= 0 {
 		return nil, fmt.Errorf("corpus count must be positive")
 	}
@@ -78,7 +81,7 @@ func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 	}
 
 	rng := rand.New(rand.NewSource(spec.Seed))
-	router := routing.NewRouterWithMode(g, nil, routing.RoutingModeBaseAStar)
+	router := routingengine.NewRouterWithMode(g, nil, routingentities.RoutingModeBaseAStar)
 	seen := make(map[[2]uint32]struct{}, spec.Count)
 	cases := make([]CorpusCase, 0, spec.Count)
 
@@ -99,10 +102,11 @@ func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 			}
 		}
 
+		src := g.Nodes[srcIdx]
+		dst := g.Nodes[dstIdx]
+		dist := utilities.HaversineM(src.Lat, src.Lon, dst.Lat, dst.Lon)
 		if spec.MinDistanceM > 0 {
-			src := g.Nodes[srcIdx]
-			dst := g.Nodes[dstIdx]
-			if utilities.HaversineM(src.Lat, src.Lon, dst.Lat, dst.Lon) < spec.MinDistanceM {
+			if dist < spec.MinDistanceM || dist > spec.MaxDistanceM {
 				continue
 			}
 		}
@@ -112,13 +116,11 @@ func BuildCorpus(g *builder.Graph, spec CorpusSpec) ([]CorpusCase, error) {
 			continue
 		}
 
-		routes := router.ComputeFromIndices(srcIdx, dstIdx, 1, routing.BaseWeight)
+		routes := router.ComputeFromIndices(srcIdx, dstIdx, 1, routingengine.BaseWeight)
 		if len(routes) == 0 {
 			continue
 		}
 
-		src := g.Nodes[srcIdx]
-		dst := g.Nodes[dstIdx]
 		cases = append(cases, CorpusCase{
 			Name:   fmt.Sprintf("case-%03d", len(cases)+1),
 			SrcIdx: srcIdx,

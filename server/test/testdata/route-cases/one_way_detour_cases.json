@@ -1,0 +1,22 @@
+[
+  {
+    "name": "west_to_east_top_lane",
+    "src": { "lat": 32.0000, "lon": 34.0000 },
+    "dst": { "lat": 32.0000, "lon": 34.0020 }
+  },
+  {
+    "name": "east_to_west_requires_detour",
+    "src": { "lat": 32.0000, "lon": 34.0020 },
+    "dst": { "lat": 32.0000, "lon": 34.0000 }
+  },
+  {
+    "name": "bottom_west_to_east_requires_top_lane",
+    "src": { "lat": 32.0010, "lon": 34.0000 },
+    "dst": { "lat": 32.0010, "lon": 34.0020 }
+  },
+  {
+    "name": "northwest_to_southeast",
+    "src": { "lat": 32.0000, "lon": 34.0000 },
+    "dst": { "lat": 32.0010, "lon": 34.0020 }
+  }
+]

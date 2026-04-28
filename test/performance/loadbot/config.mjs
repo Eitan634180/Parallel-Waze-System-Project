@@ -2,10 +2,13 @@ import { testConfig } from '../../config/test-config.mjs';
 
 export function loadConfig(argv) {
   const args = parseArgs(argv);
+  const clientPort = readInteger(args['client-port'], testConfig.loadbot.clientPort, 1);
   return {
     server: args.server || testConfig.server.url,
     clientHost: testConfig.host,
-    clientPort: readInteger(args['client-port'], testConfig.loadbot.clientPort, 1),
+    clientPort,
+    clientEntryPath: testConfig.loadbot.entryPath,
+    clientURL: `http://${testConfig.host}:${clientPort}${testConfig.loadbot.entryPath}`,
     clients: readInteger(args.clients, testConfig.loadbot.clients, 1),
     headless: readBoolean(args.headless, testConfig.loadbot.headless),
     commuteDegrees: readFloat(args['commute-deg'], testConfig.loadbot.commuteDegrees, 0.01),

@@ -1,7 +1,7 @@
 package main
 
-import "nav-system/src/regionpicker"
+import "nav-system/cmd/region-picker/internal"
 
 func main() {
-	regionpicker.Run()
+	picker.Run()
 }

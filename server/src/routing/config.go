@@ -1,7 +1,10 @@
 package routing
 
+import "nav-system/src/utilities"
+
 const (
-	gridSize                = 500
-	maxSearchSpeedMps       = 120.0 / 3.6
-	alternativeRoutePenalty = float32(5.0)
+	MaxSearchSpeedMps              = 250.0 / utilities.KilometersPerHourToMps
+	AlternativeRoutePenalty        = float32(5.0)
+	FullGraphSearchMapCapacity     = 256
+	MultiSourceSearchCapacitySlack = 16
 )

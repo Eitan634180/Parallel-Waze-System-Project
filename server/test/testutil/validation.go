@@ -4,26 +4,27 @@ import (
 	"math"
 	"testing"
 
-	"nav-system/src/graph/builder"
-	"nav-system/src/routing"
+	"nav-system/src/graph/model"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 )
 
 const FloatTolerance = float32(0.001)
 
 type ValidatedRoute struct {
-	EdgeIDs   []builder.EdgeID
+	EdgeIDs   []model.EdgeID
 	Cost      float32
 	Distance  float32
-	SourceID  builder.NodeID
-	TargetID  builder.NodeID
-	FinalStep routing.Step
+	SourceIdx uint32
+	TargetIdx uint32
+	FinalStep routingentities.Step
 }
 
-func AssertRouteValid(tb testing.TB, g *builder.Graph, route routing.Route, wf routing.WeightFunc) ValidatedRoute {
+func AssertRouteValid(tb testing.TB, g *model.Graph, route routingentities.Route, wf routingengine.WeightFunc) ValidatedRoute {
 	tb.Helper()
 
 	if wf == nil {
-		wf = routing.BaseWeight
+		wf = routingengine.BaseWeight
 	}
 	if len(route.Steps) < 2 {
 		tb.Fatalf("route must contain at least 2 steps, got %d", len(route.Steps))
@@ -34,7 +35,7 @@ func AssertRouteValid(tb testing.TB, g *builder.Graph, route routing.Route, wf r
 
 	var cumulativeDistance float32
 	var cumulativeCost float32
-	edgeIDs := make([]builder.EdgeID, 0, len(route.Steps)-1)
+	edgeIDs := make([]model.EdgeID, 0, len(route.Steps)-1)
 
 	for i := 1; i < len(route.Steps); i++ {
 		prev := route.Steps[i-1]
@@ -43,16 +44,16 @@ func AssertRouteValid(tb testing.TB, g *builder.Graph, route routing.Route, wf r
 			tb.Fatalf("step %d missing edge id", i)
 		}
 
-		edgeID := builder.EdgeID(*cur.EdgeID)
+		edgeID := model.EdgeID(*cur.EdgeID)
 		if int(edgeID) >= len(g.Edges) {
 			tb.Fatalf("step %d edge %d is out of range", i, edgeID)
 		}
 		edge := &g.Edges[edgeID]
-		if edge.FromNodeID != prev.NodeID || edge.ToNodeID != cur.NodeID {
-			tb.Fatalf("step %d edge %d does not connect %d -> %d", i, edgeID, prev.NodeID, cur.NodeID)
+		if edge.SrcNode != prev.NodeIdx || edge.DstNode != cur.NodeIdx {
+			tb.Fatalf("step %d edge %d does not connect %d -> %d", i, edgeID, prev.NodeIdx, cur.NodeIdx)
 		}
 
-		cumulativeDistance += edge.DistanceM
+		cumulativeDistance += edge.Length
 		cumulativeCost += wf(edge)
 		edgeIDs = append(edgeIDs, edgeID)
 
@@ -71,13 +72,13 @@ func AssertRouteValid(tb testing.TB, g *builder.Graph, route routing.Route, wf r
 		EdgeIDs:   edgeIDs,
 		Cost:      cumulativeCost,
 		Distance:  cumulativeDistance,
-		SourceID:  route.Steps[0].NodeID,
-		TargetID:  route.Steps[len(route.Steps)-1].NodeID,
+		SourceIdx: route.Steps[0].NodeIdx,
+		TargetIdx: route.Steps[len(route.Steps)-1].NodeIdx,
 		FinalStep: route.Steps[len(route.Steps)-1],
 	}
 }
 
-func AssertRouteMatchesOracle(tb testing.TB, g *builder.Graph, route routing.Route, oracle OraclePath, wf routing.WeightFunc) {
+func AssertRouteMatchesOracle(tb testing.TB, g *model.Graph, route routingentities.Route, oracle OraclePath, wf routingengine.WeightFunc) {
 	tb.Helper()
 
 	validated := AssertRouteValid(tb, g, route, wf)
@@ -85,11 +86,11 @@ func AssertRouteMatchesOracle(tb testing.TB, g *builder.Graph, route routing.Rou
 		tb.Fatalf("oracle path is empty")
 	}
 
-	if validated.SourceID != g.Nodes[oracle.NodeIdxs[0]].ID {
-		tb.Fatalf("route source %d does not match oracle source %d", validated.SourceID, g.Nodes[oracle.NodeIdxs[0]].ID)
+	if validated.SourceIdx != oracle.NodeIdxs[0] {
+		tb.Fatalf("route source %d does not match oracle source %d", validated.SourceIdx, oracle.NodeIdxs[0])
 	}
-	if validated.TargetID != g.Nodes[oracle.NodeIdxs[len(oracle.NodeIdxs)-1]].ID {
-		tb.Fatalf("route target %d does not match oracle target %d", validated.TargetID, g.Nodes[oracle.NodeIdxs[len(oracle.NodeIdxs)-1]].ID)
+	if validated.TargetIdx != oracle.NodeIdxs[len(oracle.NodeIdxs)-1] {
+		tb.Fatalf("route target %d does not match oracle target %d", validated.TargetIdx, oracle.NodeIdxs[len(oracle.NodeIdxs)-1])
 	}
 
 	assertApprox32(tb, validated.Cost, oracle.Cost, "route cost mismatch against oracle")

@@ -2,7 +2,7 @@ import { clearMapLayers, clearRouteLayers, drawAlternatives, drawEndpointMarkers
 import { clearDebugCars, removeDebugCar, setDebugCarsVisible, syncDebugCars, upsertDebugCar } from './layers/debug-cars-layer.js';
 import { refreshRouteInspector } from './layers/route-inspector.js';
 import { initCarMarker, removeCarMarker, updateCarPositionAndRotation } from './layers/vehicle-layer.js';
-import { MAP_DEFAULTS, MAP_TILES } from './map-config.js';
+import { MAP_DEFAULTS, MAP_LAYER_STYLE, MAP_TILES } from './map-config.js';
 
 function hasValidBoundingBox(systemInfo) {
     if (!systemInfo?.bbox) return false;
@@ -17,7 +17,7 @@ function hasValidBoundingBox(systemInfo) {
 }
 
 function insetBoundingBox(bbox, fraction) {
-    const safeFraction = Math.max(0, Math.min(0.49, fraction));
+    const safeFraction = Math.max(0, Math.min(MAP_DEFAULTS.maxBBoxInsetFraction, fraction));
     const latInset = (bbox.max_lat - bbox.min_lat) * safeFraction;
     const lonInset = (bbox.max_lon - bbox.min_lon) * safeFraction;
 
@@ -74,7 +74,7 @@ class MapManager {
         }).addTo(this.map);
 
         if (hasValidBoundingBox(systemInfo)) {
-            const viewBox = insetBoundingBox(systemInfo.bbox, MAP_DEFAULTS.initialBBoxInsetFraction || 0);
+            const viewBox = insetBoundingBox(systemInfo.bbox, MAP_DEFAULTS.initialBBoxInsetFraction);
             const { min_lat, max_lat, min_lon, max_lon } = viewBox;
             this.map.fitBounds(
                 [[min_lat, min_lon], [max_lat, max_lon]],
@@ -101,7 +101,7 @@ class MapManager {
         this.routeInspector.enabled = enabled;
         this.routeInspector.onEdgeClick = onEdgeClick;
         if (this.layers.route) {
-            this.layers.route.setStyle({ opacity: enabled ? 0 : 0.9 });
+            this.layers.route.setStyle({ opacity: enabled ? MAP_LAYER_STYLE.hiddenRouteOpacity : MAP_LAYER_STYLE.primaryRouteOpacity });
         }
         this.refreshRouteInspector();
     }

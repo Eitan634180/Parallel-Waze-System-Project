@@ -1,13 +1,10 @@
 import { formatDuration } from '../../utils/formatters.js';
-import { CSS_CLASSES, DOM_IDS, PANEL_TEXT, UI_TIMINGS } from '../ui-constants.js';
+import { CSS_CLASSES, DOM_IDS, PANEL_NUMBERS, PANEL_TEXT, UI_TIMINGS } from '../ui-constants.js';
+import { METERS_PER_KILOMETER } from '../../utils/math.js';
 
 const ANIMATIONS = {
     toastIn: 'toastIn 0.3s ease forwards',
     toastOut: 'toastOut 0.3s ease forwards',
-};
-
-const DISTANCE_CONVERSION = {
-    metersPerKilometer: 1000,
 };
 
 export function showAlert(title, message) {
@@ -36,7 +33,7 @@ export function onArrival(distance, eta) {
             <div class="arrival-stats">
                 <div class="a-stat">
                     <span class="a-label">Total Distance</span>
-                    <span class="a-val">${(distance / DISTANCE_CONVERSION.metersPerKilometer).toFixed(1)} km</span>
+                    <span class="a-val">${(distance / METERS_PER_KILOMETER).toFixed(PANEL_NUMBERS.arrivalDistancePrecision)} km</span>
                 </div>
                 <div class="a-stat">
                     <span class="a-label">Driving Time</span>

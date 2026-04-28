@@ -3,17 +3,18 @@ package benchmark_test
 import (
 	"testing"
 
-	"nav-system/src/routing"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 )
 
 func TestBenchmarkCorpusMatchesBaseAStarStatic(t *testing.T) {
 	fixture := mustLoadFixture(t)
-	hierarchical := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, routing.RoutingModeHierarchical)
-	baseAStar := routing.NewRouterWithMode(fixture.Graph, fixture.Snap, routing.RoutingModeBaseAStar)
+	hierarchical := routingengine.NewRouterWithMode(fixture.Graph, fixture.Snap, routingentities.RoutingModeHierarchical)
+	baseAStar := routingengine.NewRouterWithMode(fixture.Graph, fixture.Snap, routingentities.RoutingModeBaseAStar)
 
 	for _, query := range fixture.Corpus {
-		hierarchicalRoutes := hierarchical.ComputeFromIndices(query.SrcIdx, query.DstIdx, 1, routing.BaseWeight)
-		baseRoutes := baseAStar.ComputeFromIndices(query.SrcIdx, query.DstIdx, 1, routing.BaseWeight)
+		hierarchicalRoutes := hierarchical.ComputeFromIndices(query.SrcIdx, query.DstIdx, 1, routingengine.BaseWeight)
+		baseRoutes := baseAStar.ComputeFromIndices(query.SrcIdx, query.DstIdx, 1, routingengine.BaseWeight)
 		if len(hierarchicalRoutes) != 1 || len(baseRoutes) != 1 {
 			t.Fatalf("%s: expected one route from both modes, got hierarchical=%d base=%d", query.Name, len(hierarchicalRoutes), len(baseRoutes))
 		}

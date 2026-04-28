@@ -4,81 +4,84 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
-	"nav-system/src/api"
-	"nav-system/src/graph/builder"
-	"nav-system/src/mapstore"
-	"nav-system/src/routing"
-	"nav-system/src/session"
+	"nav-system/src/graph/model"
+	graphstore "nav-system/src/graph/store"
+	navigationsessions "nav-system/src/navigation/sessions"
+	navigationworkers "nav-system/src/navigation/workers"
+	routingengine "nav-system/src/routing/engine"
+	routingentities "nav-system/src/routing/entities"
 	"nav-system/src/simulation"
-	"nav-system/src/traffic"
+	trafficstore "nav-system/src/traffic/store"
+	"nav-system/src/transport"
+	"nav-system/src/utilities"
 )
 
 const serverLogPrefix = "server:"
 
 func main() {
 	dataDir := flag.String("data", "", "Directory containing binary graph files")
-	addr := flag.String("addr", ":8080", "HTTP listen address")
-	routingModeFlag := flag.String("routing-mode", string(routing.RoutingModeHierarchical), "Routing mode: hierarchical|base-astar|base-dijkstra")
+	addr := flag.String("addr", "", "HTTP listen address")
+	routingModeFlag := flag.String("routing-mode", "", "Routing mode: hierarchical|base-astar|base-dijkstra")
 	flag.Parse()
 
-	routingMode, err := routing.ParseRoutingMode(*routingModeFlag)
+	resolvedAddr, err := resolveListenAddr(*addr)
+	if err != nil {
+		log.Fatalf("%s resolve listen addr: %v", serverLogPrefix, err)
+	}
+
+	routingMode, err := routingentities.ParseRoutingMode(resolveRoutingMode(*routingModeFlag))
 	if err != nil {
 		log.Fatalf("ParseRoutingMode: %v", err)
 	}
 
-	if *dataDir == "" {
-		mapRoot := filepath.Join(".", "data", "map")
-		regions, err := mapstore.ListReady(mapRoot)
-		if err != nil {
-			log.Fatalf("scanning map directory: %v", err)
-		}
-		switch len(regions) {
-		case 0:
-			log.Fatalf("%s no preprocessed regions found in %s. Run region-picker first.", serverLogPrefix, mapRoot)
-		case 1:
-			*dataDir = regions[0].Dir
-			log.Printf("%s auto-selected region: %s", serverLogPrefix, regions[0].ID)
-		default:
-			log.Printf("%s multiple regions available in %s:", serverLogPrefix, mapRoot)
-			for _, r := range regions {
-				log.Printf("%s   %s", serverLogPrefix, r.ID)
-			}
-			log.Fatalf("%s specify --data <dir> to choose a region", serverLogPrefix)
-		}
+	resolvedDataDir, err := resolveDataDir(*dataDir)
+	if err != nil {
+		log.Fatalf("%s resolve data dir: %v", serverLogPrefix, err)
 	}
 
-	log.Printf("%s loading graph from %s", serverLogPrefix, *dataDir)
+	log.Printf("%s loading graph from %s", serverLogPrefix, resolvedDataDir)
 	t := time.Now()
-	g, err := builder.LoadGraph(*dataDir)
+	g, err := graphstore.LoadGraph(resolvedDataDir)
 	if err != nil {
 		log.Fatalf("LoadGraph: %v", err)
 	}
-	log.Printf("%s graph ready in %s (%d nodes, %d edges, %d cells, %d boundary nodes, %d overlay edges)",
+	log.Printf("%s graph ready in %s (%d nodes, %d edges, %d cells, %d gate nodes, %d overlay edges)",
 		serverLogPrefix,
 		time.Since(t).Round(time.Millisecond),
 		len(g.Nodes), len(g.Edges), len(g.Cells),
-		len(g.BoundaryNodes), len(g.OverlayAdj.OverlayEdges))
+		len(g.Overlay.Offsets)-1, len(g.Overlay.Edges))
 
 	log.Printf("%s building snap index", serverLogPrefix)
 	t = time.Now()
-	si := routing.BuildSnapIndex(g)
+	si := routingengine.BuildSnapIndex(g)
 	log.Printf("%s snap index ready in %s", serverLogPrefix, time.Since(t).Round(time.Millisecond))
 
-	store := traffic.NewStore()
-	mgr := session.NewManager()
-	sim := simulation.NewManager(g, store)
-	router := routing.NewRouterWithMode(g, si, routingMode)
+	store := trafficstore.NewStoreWithCapacity(len(g.Edges))
+	store.InitOverlayWeights(g)
+	customizer := trafficstore.NewCustomizer(g)
+	mgr := navigationsessions.NewManager()
+	router := routingengine.NewRouterWithMode(g, si, routingMode)
+	router.SetOverlayWeightFunc(func(edgeIdx uint32, overlayEdge *model.OverlayEdge) float32 {
+		return store.OverlayWeight(edgeIdx, overlayEdge)
+	})
+	sim := simulation.NewManager(g, store, router, func() routingengine.WeightFunc {
+		return func(e *model.Edge) float32 {
+			return store.LiveWeight(e.ID, e.BaseWeight)
+		}
+	})
 	log.Printf("%s routing mode: %s", serverLogPrefix, routingMode)
-	traffic.CustomizeOverlayWeights(g, store)
-	srv := api.NewServer(g, store, mgr, router, sim)
+	customizer.Customize(store)
+	srv := transport.NewServer(g, store, mgr, router, sim)
 
 	warmCtx, warmCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	if err := srv.WarmSearch(warmCtx); err != nil {
@@ -91,21 +94,21 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go traffic.Worker(ctx, store)
-	go traffic.RunCustomization(ctx, g, store)
+	go trafficstore.Worker(ctx, store)
+	go customizer.Run(ctx, store)
 	go mgr.RunExpiry(ctx)
-	go mgr.RunPropagation(ctx, store, g)
+	go navigationworkers.RunPropagation(ctx, mgr, store, g)
 	go srv.RunOptimizationSweep(ctx)
 	go srv.RunRouteCacheGC(ctx)
 	go sim.Run(ctx)
 
 	httpSrv := &http.Server{
-		Addr:    *addr,
+		Addr:    resolvedAddr,
 		Handler: srv,
 	}
 
 	go func() {
-		log.Printf("%s listening on %s", serverLogPrefix, *addr)
+		log.Printf("%s listening on %s", serverLogPrefix, resolvedAddr)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("ListenAndServe: %v", err)
 		}
@@ -121,4 +124,70 @@ func main() {
 	defer shutCancel()
 	_ = httpSrv.Shutdown(shutCtx)
 	log.Printf("%s stopped", serverLogPrefix)
+}
+
+func resolveListenAddr(flagValue string) (string, error) {
+	addr := ""
+	if value := strings.TrimSpace(flagValue); value != "" {
+		addr = value
+	} else if value, ok := utilities.LookupEnvTrimmed("NAV_SERVER_ADDR"); ok {
+		addr = value
+	} else {
+		host, ok := utilities.LookupEnvTrimmed("TEST_HOST")
+		if !ok {
+			return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+		}
+		if port, ok := utilities.LookupEnvTrimmed("TEST_BENCH_SERVER_PORT"); ok {
+			addr = net.JoinHostPort(host, port)
+		} else if port, ok := utilities.LookupEnvTrimmed("TEST_SERVER_PORT"); ok {
+			addr = net.JoinHostPort(host, port)
+		} else {
+			return "", fmt.Errorf("NAV_SERVER_ADDR must be set, or TEST_HOST with TEST_SERVER_PORT/TEST_BENCH_SERVER_PORT must be configured")
+		}
+	}
+
+	if !strings.Contains(addr, ":") {
+		if _, err := net.LookupPort("tcp", addr); err == nil {
+			addr = ":" + addr
+		}
+	}
+
+	return addr, nil
+}
+
+func resolveRoutingMode(flagValue string) string {
+	if value := strings.TrimSpace(flagValue); value != "" {
+		return value
+	}
+	if value, ok := utilities.LookupAnyEnvTrimmed(
+		"NAV_SERVER_ROUTING_MODE",
+		"DEV_ROUTING_MODE",
+		"TEST_BENCH_ROUTING_MODE",
+		"TEST_ROUTING_MODE",
+	); ok {
+		return value
+	}
+	return string(routingentities.RoutingModeHierarchical)
+}
+
+func resolveDataDir(flagValue string) (string, error) {
+	if value := strings.TrimSpace(flagValue); value != "" {
+		return utilities.ResolveModulePath(value)
+	}
+	if value, ok := utilities.LookupEnvTrimmed("NAV_SERVER_DATA_DIR"); ok {
+		return utilities.ResolveModulePath(value)
+	}
+	if value, ok := utilities.LookupAnyEnvTrimmed("DEV_REGION_DIR", "TEST_REGION_DIR"); ok {
+		mapRoot, err := resolveMapRoot()
+		if err != nil {
+			return "", err
+		}
+		return utilities.ResolveMapPath(mapRoot, value), nil
+	}
+	return "", fmt.Errorf("NAV_SERVER_DATA_DIR or DEV_REGION_DIR or TEST_REGION_DIR must be set")
+}
+
+func resolveMapRoot() (string, error) {
+	mapRoot := utilities.RequireEnv("NAV_MAP_ROOT")
+	return utilities.ResolveModulePath(mapRoot)
 }

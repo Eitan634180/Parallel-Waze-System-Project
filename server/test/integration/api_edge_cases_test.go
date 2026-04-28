@@ -33,7 +33,6 @@ func TestDeleteNonExistentSessionIsIdempotent(t *testing.T) {
 	if resp.StatusCode >= http.StatusInternalServerError {
 		t.Fatalf("deleting unknown session should not return 5xx, got %d", resp.StatusCode)
 	}
-	// The API is idempotent: it returns 204 even if the session doesn't exist.
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE unknown session: got %d, want 204 NoContent", resp.StatusCode)
 	}
@@ -50,8 +49,8 @@ func TestRouteEndpointRejectsMissingFields(t *testing.T) {
 	rec := httptest.NewRecorder()
 	fixture.Server.ServeHTTP(rec, req)
 
-	if rec.Code >= http.StatusInternalServerError {
-		t.Fatalf("missing dst coords should not cause 5xx, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing dst coords: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 
@@ -64,8 +63,22 @@ func TestRouteEndpointRejectsWrongMethod(t *testing.T) {
 	rec := httptest.NewRecorder()
 	fixture.Server.ServeHTTP(rec, req)
 
-	if rec.Code >= http.StatusInternalServerError {
-		t.Fatalf("GET /route should not return 5xx, got %d", rec.Code)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /route: got %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestRouteEndpointRejectsOutOfRangeCoordinates(t *testing.T) {
+	fixture := testutil.BuildServerFixture(t, "diamond_graph.json", 2)
+
+	req := httptest.NewRequest(http.MethodPost, "/route",
+		strings.NewReader(`{"src_lat":95.0,"src_lon":34.0,"dst_lat":32.0,"dst_lon":34.1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	fixture.Server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("out-of-range coordinates: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 
@@ -77,7 +90,7 @@ func TestWebSocketConnectionToNonExistentSessionFailsGracefully(t *testing.T) {
 	server := httptestServer(t, fixture)
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/session/no-such-session/ws"
-	_, resp, _ := wsDialerWithTimeout(2 * time.Second).Dial(wsURL, nil)
+	_, resp, _ := wsDialerWithTimeout(2*time.Second).Dial(wsURL, nil)
 	if resp != nil {
 		defer resp.Body.Close()
 		if resp.StatusCode >= http.StatusInternalServerError {
@@ -140,8 +153,62 @@ func TestSimulationEndpointRejectsEmptyRouteList(t *testing.T) {
 	rec := httptest.NewRecorder()
 	fixture.Server.ServeHTTP(rec, req)
 
-	if rec.Code >= http.StatusInternalServerError {
-		t.Fatalf("empty route_ids should not return 5xx, got %d", rec.Code)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty route_ids: got %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestCreateSessionRejectsMissingRouteID(t *testing.T) {
+	fixture := testutil.BuildServerFixture(t, "diamond_graph.json", 2)
+
+	req := httptest.NewRequest(http.MethodPost, "/session", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	fixture.Server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing route_id: got %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestCreateSessionRejectsUnknownRouteID(t *testing.T) {
+	fixture := testutil.BuildServerFixture(t, "diamond_graph.json", 2)
+
+	req := httptest.NewRequest(http.MethodPost, "/session", strings.NewReader(`{"route_id":"missing-route"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	fixture.Server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown route_id: got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestRouteEndpointReturnsNotFoundWhenNoPathExists(t *testing.T) {
+	fixture := testutil.BuildServerFixture(t, "disconnected_graph.json", 2)
+
+	req := httptest.NewRequest(http.MethodPost, "/route",
+		strings.NewReader(`{"src_lat":32.0000,"src_lon":34.0000,"dst_lat":32.0110,"dst_lon":34.0110}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	fixture.Server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("no-path route request: got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestSimulationEndpointRejectsNegativeMinStepIndex(t *testing.T) {
+	fixture := testutil.BuildServerFixture(t, "diamond_graph.json", 2)
+
+	req := httptest.NewRequest(http.MethodPost, "/simulation",
+		strings.NewReader(`{"route_ids":["route-1"],"count":1,"min_step_index":-1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	fixture.Server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("negative min_step_index: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 
@@ -182,21 +249,37 @@ func TestMultipleSessionsReceiveIndependentETAUpdates(t *testing.T) {
 		t.Fatalf("WriteJSON connB: %v", err)
 	}
 
-	awaitETA := func(conn *websocket.Conn, label string) {
+	awaitOwnedSessionUpdates := func(conn *websocket.Conn, label, expectedSessionID string) {
 		t.Helper()
-		deadline := time.Now().Add(3 * time.Second)
-		for time.Now().Before(deadline) {
+		var sawETA bool
+		var sawDebug bool
+		deadline := time.Now().Add(4 * time.Second)
+		for time.Now().Before(deadline) && (!sawETA || !sawDebug) {
 			var msg map[string]any
 			if err := readWSJSON(conn, &msg); err != nil {
-				return
+				t.Fatalf("%s: read websocket message: %v", label, err)
 			}
-			if msg["type"] == "eta_update" {
-				return
+
+			switch msg["type"] {
+			case "eta_update":
+				sawETA = true
+			case "debug_update":
+				debug, ok := msg["debug"].(map[string]any)
+				if !ok {
+					t.Fatalf("%s: debug_update missing debug payload: %+v", label, msg)
+				}
+				if debug["session_id"] != expectedSessionID {
+					t.Fatalf("%s: debug_update belonged to session %v, want %s", label, debug["session_id"], expectedSessionID)
+				}
+				sawDebug = true
 			}
 		}
-		t.Errorf("%s: did not receive eta_update in time", label)
+
+		if !sawETA || !sawDebug {
+			t.Fatalf("%s: expected eta and owned debug updates, sawETA=%v sawDebug=%v", label, sawETA, sawDebug)
+		}
 	}
 
-	awaitETA(connA, "session-A")
-	awaitETA(connB, "session-B")
+	awaitOwnedSessionUpdates(connA, "session-A", sessionA)
+	awaitOwnedSessionUpdates(connB, "session-B", sessionB)
 }

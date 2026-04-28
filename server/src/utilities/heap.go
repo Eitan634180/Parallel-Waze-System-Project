@@ -16,6 +16,11 @@ func (h *Heap[T]) Len() int {
 	return len(h.items)
 }
 
+// Reset keeps the allocated storage but removes all items from the heap.
+func (h *Heap[T]) Reset() {
+	h.items = h.items[:0]
+}
+
 // Push inserts x into the heap.
 func (h *Heap[T]) Push(x T) {
 	h.items = append(h.items, x)

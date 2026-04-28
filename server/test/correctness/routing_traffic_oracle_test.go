@@ -3,22 +3,27 @@ package correctness_test
 import (
 	"testing"
 
-	"nav-system/src/graph/builder"
-	"nav-system/src/traffic"
+	"nav-system/src/graph/model"
+	trafficstore "nav-system/src/traffic/store"
 	"nav-system/test/testutil"
 )
 
 func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	fixture := testutil.BuildGraphFixture(t, "diamond_graph.json", 2)
-	store := traffic.NewStore()
+	store := trafficstore.NewStoreWithCapacity(len(fixture.Graph.Edges))
+	store.InitOverlayWeights(fixture.Graph)
+	fixture.Router.SetOverlayWeightFunc(func(edgeIdx uint32, overlayEdge *model.OverlayEdge) float32 {
+		return store.OverlayWeight(edgeIdx, overlayEdge)
+	})
+	customizer := trafficstore.NewCustomizer(fixture.Graph)
 
-	congestedEdge := testutil.FindEdgeID(t, fixture.Graph, 2, 4)
-	baseWeight := fixture.Graph.Edges[congestedEdge].Weight
+	congestedEdge := testutil.FindEdgeID(t, fixture, 2, 4)
+	baseWeight := fixture.Graph.Edges[congestedEdge].BaseWeight
 	store.RecordObservation(congestedEdge, baseWeight*40, baseWeight)
-	traffic.CustomizeOverlayWeights(fixture.Graph, store)
+	customizer.Customize(store)
 
-	liveWeight := func(edge *builder.Edge) float32 {
-		return store.LiveWeight(edge.ID, edge.Weight)
+	liveWeight := func(edge *model.Edge) float32 {
+		return store.LiveWeight(edge.ID, edge.BaseWeight)
 	}
 
 	routeCase := testutil.LoadRouteCases(t, "diamond_cases.json")[0]
@@ -35,7 +40,7 @@ func TestTwoLevelRouterMatchesTrafficWeightedOracle(t *testing.T) {
 	}
 
 	testutil.AssertRouteMatchesOracle(t, fixture.Graph, routes[0], oracle, liveWeight)
-	if len(routes[0].Steps) < 3 || routes[0].Steps[1].NodeID != 3 {
+	if len(routes[0].Steps) < 3 || routes[0].Steps[1].NodeIdx != fixture.NodeIdx[3] {
 		t.Fatalf("expected congestion to divert route through node 3, got %+v", routes[0].Steps)
 	}
 }
