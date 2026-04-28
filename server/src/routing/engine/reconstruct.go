@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"math"
 	"nav-system/src/graph/model"
 	"nav-system/src/routing/algorithms"
 	"nav-system/src/routing/entities"
@@ -43,9 +44,10 @@ func (r *Router) twoLevelSearch(
 		dstGateSet[idx] = struct{}{}
 	}
 
+	cosDstLat := math.Cos(dstNode.Lat * utilities.DegreesToRadians)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / r.config.MaxSearchSpeedMps
+		return utilities.FastHeuristicDistanceM(node.Lat, node.Lon, dstNode.Lat, dstNode.Lon, cosDstLat) / r.config.MaxSearchSpeedMps
 	}
 
 	overlayCosts, overlayPred := algorithms.OverlayAStar(g, overlaySeeds, dstGateSet, heuristic, r.overlayWeight, overlayPenalties, stats)

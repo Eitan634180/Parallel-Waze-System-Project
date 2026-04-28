@@ -131,7 +131,12 @@ func (r *Router) computeFromIndices(srcIdx, dstIdx uint32, k int, wf WeightFunc,
 			break
 		}
 
-		routes = append(routes, r.normalizeRouteCosts(stepsToRoute(steps), wf))
+		route := stepsToRoute(steps)
+		if i > 0 {
+			route = r.normalizeRouteCosts(route, wf)
+		}
+		routes = append(routes, route)
+		
 		for _, step := range steps {
 			if step.EdgeID != nil {
 				penalties[model.EdgeID(*step.EdgeID)] = r.config.AlternativeRoutePenalty

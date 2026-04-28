@@ -1,6 +1,7 @@
 package algorithms
 
 import (
+	"math"
 	"nav-system/src/graph/model"
 	"nav-system/src/routing"
 	"nav-system/src/routing/entities"
@@ -20,9 +21,10 @@ func FullGraphAStar(
 	pred := make(map[uint32]BasePredecessor, routing.FullGraphSearchMapCapacity)
 	costs[srcIdx] = 0
 
+	cosDstLat := math.Cos(dstNode.Lat * utilities.DegreesToRadians)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
+		return utilities.FastHeuristicDistanceM(node.Lat, node.Lon, dstNode.Lat, dstNode.Lon, cosDstLat) / maxSearchSpeedMps
 	}
 
 	pq := utilities.NewHeap(func(a, b astarItem) bool { return a.f < b.f })

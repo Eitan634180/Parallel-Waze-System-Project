@@ -33,6 +33,13 @@ func HaversineM(lat1, lon1, lat2, lon2 float64) float64 {
 	return float64(EarthRadiusM) * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }
 
+// FastHeuristicDistanceM is a fast approximation of HaversineM
+func FastHeuristicDistanceM(lat1, lon1, lat2, lon2 float64, cosLat float64) float32 {
+	dLat := (lat2 - lat1) * DegreesToRadians
+	dLon := (lon2 - lon1) * DegreesToRadians * cosLat
+	return float32(math.Sqrt(dLat*dLat+dLon*dLon) * EarthRadiusMeters)
+}
+
 func Distance(ax, ay, bx, by float32) float32 {
 	return float32(math.Sqrt(float64(DistanceSquared(ax, ay, bx, by))))
 }

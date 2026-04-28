@@ -1,6 +1,7 @@
 package algorithms
 
 import (
+	"math"
 	"nav-system/src/graph/model"
 	"nav-system/src/routing/entities"
 	"nav-system/src/utilities"
@@ -22,9 +23,10 @@ func LocalRepairOverlay(
 
 	costs := make(map[uint32]float32)
 	pred := make(map[uint32]OverlayPredecessor)
+	cosDstLat := math.Cos(dstNode.Lat * utilities.DegreesToRadians)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
+		return utilities.FastHeuristicDistanceM(node.Lat, node.Lon, dstNode.Lat, dstNode.Lon, cosDstLat) / maxSearchSpeedMps
 	}
 
 	costs[srcIdx] = 0
@@ -102,9 +104,10 @@ func LocalRepairOriginal(
 
 	costs := make(map[uint32]float32)
 	pred := make(map[uint32]BasePredecessor)
+	cosDstLat := math.Cos(dstNode.Lat * utilities.DegreesToRadians)
 	heuristic := func(idx uint32) float32 {
 		node := &g.Nodes[idx]
-		return utilities.Distance(node.X, node.Y, dstNode.X, dstNode.Y) / maxSearchSpeedMps
+		return utilities.FastHeuristicDistanceM(node.Lat, node.Lon, dstNode.Lat, dstNode.Lon, cosDstLat) / maxSearchSpeedMps
 	}
 
 	costs[srcIdx] = 0
