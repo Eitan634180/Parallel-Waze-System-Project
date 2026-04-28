@@ -42,7 +42,7 @@ goto :run_go
 
 :server-race
 set "CGO_ENABLED=1"
-set "GO_ARGS=-race ./src/graph/... ./src/navigation/... ./src/routing/... ./src/simulation/... ./src/traffic/... ./src/transport/... ./src/utilities/... ./test/component ./test/correctness ./test/external ./test/integration ./test/unit"
+set "GO_ARGS=-race ./src/... ./test/..."
 
 :run_go
 pushd "%SERVER_DIR%"
