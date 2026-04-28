@@ -17,7 +17,7 @@ const (
 	MaxSpeedMultiplier         = float32(1.1)
 	DefaultCount               = 1
 	DefaultRouteAlternatives   = 1
-	MaxCount                   = 1000
+	MaxCount                   = 10000
 	MinWorkers                 = 1
 	RandomRouteAttemptFactor   = 6
 	MinRandomRouteDistanceSq   = 0.0004
