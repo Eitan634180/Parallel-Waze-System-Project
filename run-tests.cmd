@@ -18,31 +18,26 @@ echo.
 echo =======================================
 echo          Select a Test Target
 echo =======================================
-echo   1. all         - Run server, server-race, client and end2end
-echo   2. server      - Run Go server package tests
-echo   3. server-race - Run race-enabled Go tests
-echo   4. client      - Run client tests
-echo   5. end2end     - Run Playwright smoke tests
-echo   6. loadbot     - Run browser load tests
+echo   1. all     - Run server, client and end2end
+echo   2. server  - Run Go server package tests
+echo   3. client  - Run client tests
+echo   4. end2end - Run Playwright smoke tests
+echo   5. loadbot - Run browser load tests
 echo =======================================
 echo.
-choice /C 123456 /N /M "Enter your choice (1-6): "
+choice /C 12345 /N /M "Enter your choice (1-5): "
 
-if errorlevel 6 goto :loadbot
-if errorlevel 5 goto :end2end
-if errorlevel 4 goto :client
-if errorlevel 3 goto :server-race
+if errorlevel 5 goto :loadbot
+if errorlevel 4 goto :end2end
+if errorlevel 3 goto :client
 if errorlevel 2 goto :server
 if errorlevel 1 goto :all
 
 :server
+:: To run with race detection, change GO_ARGS to: set "GO_ARGS=-race ./src/... ./test/..."
 set "GO_ARGS=./..."
 set "CGO_ENABLED=1"
 goto :run_go
-
-:server-race
-set "CGO_ENABLED=1"
-set "GO_ARGS=-race ./src/... ./test/..."
 
 :run_go
 pushd "%SERVER_DIR%"
@@ -107,7 +102,6 @@ exit /b %ERR%
 
 :all
 call :server || exit /b 1
-call :server-race || exit /b 1
 call :client || exit /b 1
 call :end2end || exit /b 1
 exit /b 0
