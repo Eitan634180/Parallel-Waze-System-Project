@@ -106,14 +106,49 @@ func (m *Manager) UpdateRoute(s *Session, newRoute routingentities.Route) {
 
 // UpdateRouteAtStep replaces a session's route and keeps progress at stepIdx.
 func (m *Manager) UpdateRouteAtStep(s *Session, newRoute routingentities.Route, stepIdx int) {
+	m.replaceRouteAtStep(s, newRoute, stepIdx, nil)
+}
+
+func (m *Manager) UpdateRouteAtStepIfCurrent(
+	s *Session,
+	newRoute routingentities.Route,
+	stepIdx int,
+	expectedStepIdx int,
+	expectedRouteRevision uint64,
+) (oldEdgeID, newEdgeID *uint32, ok bool) {
+	expected := routeVersionExpectation{
+		stepIdx:       expectedStepIdx,
+		routeRevision: expectedRouteRevision,
+	}
+	return m.replaceRouteAtStep(s, newRoute, stepIdx, &expected)
+}
+
+type routeVersionExpectation struct {
+	stepIdx       int
+	routeRevision uint64
+}
+
+func (m *Manager) replaceRouteAtStep(
+	s *Session,
+	newRoute routingentities.Route,
+	stepIdx int,
+	expected *routeVersionExpectation,
+) (oldEdgeID, newEdgeID *uint32, ok bool) {
 	s.Mu.Lock()
-	oldSteps := append([]routingentities.Step(nil), s.Route.Steps[s.StepIdx:]...)
+	if expected != nil && (s.StepIdx != expected.stepIdx || s.RouteRevision != expected.routeRevision) {
+		s.Mu.Unlock()
+		return nil, nil, false
+	}
+
+	oldSteps := remainingStepsFrom(s.Route, s.StepIdx)
+	oldEdgeID = cloneEdgeID(s.CurrentEdgeID)
 	s.Route = newRoute
 	s.RouteRevision++
 	s.StepIdx = normalizeStepIndex(stepIdx, len(newRoute.Steps))
 	s.CurrentEdgeID = newRoute.CurrentEdge(s.StepIdx)
 	s.CurrentEdgeAt = now()
-	newSteps := append([]routingentities.Step(nil), s.Route.Steps[s.StepIdx:]...)
+	newEdgeID = cloneEdgeID(s.CurrentEdgeID)
+	newSteps := remainingStepsFrom(s.Route, s.StepIdx)
 	sessionID := s.ID
 	s.Mu.Unlock()
 
@@ -122,6 +157,7 @@ func (m *Manager) UpdateRouteAtStep(s *Session, newRoute routingentities.Route, 
 
 	m.unsubscribeEdges(sessionID, oldSteps)
 	m.subscribeEdges(sessionID, newSteps)
+	return oldEdgeID, newEdgeID, true
 }
 
 func (m *Manager) ActiveSessions() []*Session {
@@ -190,4 +226,12 @@ func normalizeStepIndex(stepIdx, stepCount int) int {
 		return stepCount - 1
 	}
 	return stepIdx
+}
+
+func cloneEdgeID(edgeID *uint32) *uint32 {
+	if edgeID == nil {
+		return nil
+	}
+	value := *edgeID
+	return &value
 }

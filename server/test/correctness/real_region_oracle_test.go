@@ -2,7 +2,9 @@ package correctness_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"math/rand"
 	"os"
@@ -190,7 +192,7 @@ func loadRealRegionGraph(tb testing.TB, region string) *model.Graph {
 
 	graph, err := store.LoadGraph(filepath.Join(realRegionModuleRoot(), "data", "map", region))
 	if err != nil {
-		if os.IsNotExist(err) || strings.Contains(strings.ToLower(err.Error()), "cannot find the file specified") {
+		if isMissingRealRegionData(err) {
 			tb.Skipf("real-region map data for %s is not built locally: %v", region, err)
 		}
 		if strings.Contains(err.Error(), "unsupported graph format version") {
@@ -199,6 +201,16 @@ func loadRealRegionGraph(tb testing.TB, region string) *model.Graph {
 		tb.Fatalf("LoadGraph(%s): %v", region, err)
 	}
 	return graph
+}
+
+func isMissingRealRegionData(err error) bool {
+	if errors.Is(err, fs.ErrNotExist) || os.IsNotExist(err) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "cannot find the file specified") ||
+		strings.Contains(message, "cannot find the path specified") ||
+		strings.Contains(message, "no such file or directory")
 }
 
 func realRegionTestdataRoot() string {

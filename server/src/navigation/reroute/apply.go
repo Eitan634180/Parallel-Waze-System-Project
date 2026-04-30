@@ -66,6 +66,10 @@ func ApplyRouteUpdate(
 	newETA *float32,
 	expectedVersion *SessionVersion,
 ) routingentities.Route {
+	if sessionVersionChanged(s, expectedVersion) {
+		return routingentities.Route{}
+	}
+
 	candidate.CongestionAhead, candidate.CongestedEdges = navigationanalysis.RouteCongestionSummary(candidate, store, g)
 	route := prepareRoute(candidate)
 	if sessionVersionChanged(s, expectedVersion) {
@@ -77,7 +81,9 @@ func ApplyRouteUpdate(
 		stepIdx = expectedVersion.StepIdx
 	}
 
-	replaceSessionRoute(s, route, stepIdx, store, mgr, now, reason)
+	if !replaceSessionRoute(s, route, stepIdx, store, mgr, now, reason, expectedVersion) {
+		return routingentities.Route{}
+	}
 	sendRerouteMessage(s, route, reason, oldETA, newETA)
 	sendCurrentSpeedHints(s, store, g)
 
@@ -94,23 +100,49 @@ func sessionVersionChanged(s *navigationsessions.Session, expected *SessionVersi
 	return s.StepIdx != expected.StepIdx || s.RouteRevision != expected.RouteRevision
 }
 
-func replaceSessionRoute(s *navigationsessions.Session, route routingentities.Route, stepIdx int, store *trafficstore.Store, mgr *navigationsessions.Manager, now time.Time, reason string) {
-	s.Mu.RLock()
-	currentEdgeID := s.CurrentEdgeID
-	s.Mu.RUnlock()
-	if currentEdgeID != nil {
-		store.LeaveEdge(model.EdgeID(*currentEdgeID))
+func replaceSessionRoute(
+	s *navigationsessions.Session,
+	route routingentities.Route,
+	stepIdx int,
+	store *trafficstore.Store,
+	mgr *navigationsessions.Manager,
+	now time.Time,
+	reason string,
+	expectedVersion *SessionVersion,
+) bool {
+	var oldEdgeID, newEdgeID *uint32
+	var ok bool
+	if expectedVersion != nil {
+		oldEdgeID, newEdgeID, ok = mgr.UpdateRouteAtStepIfCurrent(
+			s,
+			route,
+			stepIdx,
+			expectedVersion.StepIdx,
+			expectedVersion.RouteRevision,
+		)
+	} else {
+		s.Mu.RLock()
+		currentStepIdx := s.StepIdx
+		currentRouteRevision := s.RouteRevision
+		s.Mu.RUnlock()
+		oldEdgeID, newEdgeID, ok = mgr.UpdateRouteAtStepIfCurrent(s, route, stepIdx, currentStepIdx, currentRouteRevision)
+	}
+	if !ok {
+		return false
 	}
 
-	mgr.UpdateRouteAtStep(s, route, stepIdx)
+	if oldEdgeID != nil {
+		store.LeaveEdge(model.EdgeID(*oldEdgeID))
+	}
+	if newEdgeID != nil {
+		store.EnterEdge(model.EdgeID(*newEdgeID))
+	}
 
 	s.Mu.Lock()
-	if s.CurrentEdgeID != nil {
-		store.EnterEdge(model.EdgeID(*s.CurrentEdgeID))
-	}
 	s.ETA = route.TotalTimeSec
 	s.LastReroute = now
 	s.LastRerouteReason = reason
 	s.OffRouteViolations = 0
 	s.Mu.Unlock()
+	return true
 }
