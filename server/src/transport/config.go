@@ -20,6 +20,8 @@ const (
 
 	SearchDefaultLimit    = 5
 	SearchDefaultLanguage = ""
+	SearchDefaultUpstream = "https://nominatim.openstreetmap.org/search"
+	SearchDefaultAgent    = "navigation-prototype/1.0"
 )
 
 type SearchConfig struct {
@@ -35,10 +37,16 @@ func LoadSearchConfigFromEnv() SearchConfig {
 	cfg := SearchConfig{
 		Limit:       SearchDefaultLimit,
 		Language:    SearchDefaultLanguage,
-		UpstreamURL: utilities.RequireEnv("NAV_SEARCH_UPSTREAM_URL"),
-		UserAgent:   utilities.RequireEnv("NAV_SEARCH_USER_AGENT"),
+		UpstreamURL: SearchDefaultUpstream,
+		UserAgent:   SearchDefaultAgent,
 	}
 
+	if v, ok := utilities.LookupEnvTrimmed("NAV_SEARCH_UPSTREAM_URL"); ok {
+		cfg.UpstreamURL = v
+	}
+	if v, ok := utilities.LookupEnvTrimmed("NAV_SEARCH_USER_AGENT"); ok {
+		cfg.UserAgent = v
+	}
 	if v := strings.TrimSpace(os.Getenv("NAV_SEARCH_LIMIT")); v != "" {
 		if limit, err := strconv.Atoi(v); err == nil && limit > 0 {
 			cfg.Limit = limit

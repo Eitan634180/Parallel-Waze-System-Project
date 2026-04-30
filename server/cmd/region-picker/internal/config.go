@@ -10,6 +10,7 @@ const (
 	indexMaxAge          = 168 * time.Hour
 	indexRequestTimeout  = 30 * time.Second
 	serverSearchMaxDepth = 6
+	defaultGeofabrikURL  = "https://download.geofabrik.de/index-v1.json"
 )
 
 func DefaultGeofabrikCacheFile() string {
@@ -17,5 +18,8 @@ func DefaultGeofabrikCacheFile() string {
 }
 
 func GeofabrikIndexURL() string {
-	return utilities.RequireEnv("NAV_GEOFABRIK_INDEX_URL")
+	if value, ok := utilities.LookupEnvTrimmed("NAV_GEOFABRIK_INDEX_URL"); ok {
+		return value
+	}
+	return defaultGeofabrikURL
 }
