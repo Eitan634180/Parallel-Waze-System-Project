@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 const testDir = path.resolve(__dirname, '..');
 const rootDir = path.resolve(testDir, '..');
 const serverDir = path.join(rootDir, 'server');
-const envFilePath = path.join(rootDir, 'project.env.test');
+const envFilePath = path.join(rootDir, 'scripts', 'project.env.test');
 
 loadEnvFile(envFilePath);
 

@@ -1,9 +1,11 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-set "ROOT=%~dp0"
-if not exist "%ROOT%project.env.test" (echo Env file not found: %ROOT%project.env.test & exit /b 1)
-for /f "usebackq eol=# tokens=1* delims==" %%A in ("%ROOT%project.env.test") do if not "%%~A"=="" set "%%~A=%%~B"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT=%%~fI\"
+set "ENV_FILE=%SCRIPT_DIR%project.env.test"
+if not exist "%ENV_FILE%" (echo Env file not found: %ENV_FILE% & exit /b 1)
+for /f "usebackq eol=# tokens=1* delims==" %%A in ("%ENV_FILE%") do if not "%%~A"=="" set "%%~A=%%~B"
 
 set "SERVER_DIR=%ROOT%server"
 set "BIN_DIR=%ROOT%bin"
@@ -12,7 +14,7 @@ set "BUILD_WORK_DIR=%ROOT%tmp\bench-build"
 set "SERVER_EXE=%BIN_DIR%\server-bench.exe"
 set "BENCHMARK_EXE=%BIN_DIR%\benchmark.exe"
 set "BUILDER_EXE=%BIN_DIR%\map-builder-bench.exe"
-set "SERVER_SCALE_SCRIPT=%ROOT%server-scale.ps1"
+set "SERVER_SCALE_SCRIPT=%SCRIPT_DIR%server-scale.ps1"
 
 for %%D in ("%BIN_DIR%" "%OUT_DIR%" "%OUT_DIR%\server-scale" "%OUT_DIR%\build-scale" "%OUT_DIR%\overlay-scale" "%OUT_DIR%\customization-scale" "%BUILD_WORK_DIR%") do if not exist "%%~D" mkdir "%%~D"
 

@@ -2,8 +2,9 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 set "ROOT=%~dp0"
-if not exist "%ROOT%project.env.development" (echo Env file not found: %ROOT%project.env.development & pause & exit /b 1)
-for /f "usebackq eol=# tokens=1* delims==" %%A in ("%ROOT%project.env.development") do if not "%%~A"=="" set "%%~A=%%~B"
+set "ENV_FILE=%ROOT%scripts\project.env.development"
+if not exist "%ENV_FILE%" (echo Env file not found: %ENV_FILE% & pause & exit /b 1)
+for /f "usebackq eol=# tokens=1* delims==" %%A in ("%ENV_FILE%") do if not "%%~A"=="" set "%%~A=%%~B"
 
 set "SERVER_DIR=%ROOT%server"
 set "CLIENT_DIR=%ROOT%client"

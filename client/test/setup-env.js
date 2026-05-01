@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const envFilePath = path.resolve(__dirname, '..', '..', 'project.env.test');
+const envFilePath = path.resolve(__dirname, '..', '..', 'scripts', 'project.env.test');
 
 if (existsSync(envFilePath)) {
   const contents = readFileSync(envFilePath, 'utf8');
