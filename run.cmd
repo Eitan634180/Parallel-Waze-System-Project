@@ -2,6 +2,22 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 set "ROOT=%~dp0"
+set "USE_ISRAEL_DEMO="
+
+:parse_args
+if "%~1"=="" goto :args_done
+if /I "%~1"=="--israel" (
+  set "USE_ISRAEL_DEMO=1"
+) else (
+  echo Unknown argument: %~1
+  echo Usage: run.cmd [--israel]
+  pause
+  exit /b 1
+)
+shift
+goto :parse_args
+
+:args_done
 set "ENV_FILE=%ROOT%scripts\project.env.development"
 if not exist "%ENV_FILE%" (echo Env file not found: %ENV_FILE% & pause & exit /b 1)
 for /f "usebackq eol=# tokens=1* delims==" %%A in ("%ENV_FILE%") do if not "%%~A"=="" set "%%~A=%%~B"
@@ -31,6 +47,21 @@ popd
 
 echo Writing client runtime config...
 node "%CLIENT_DIR%\scripts\runtime-config.mjs" || (echo Client runtime config generation failed. & pause & exit /b 1)
+
+if defined USE_ISRAEL_DEMO (
+  echo.
+  echo Preparing Israel demo map...
+  set "DATA_DIR="
+  for /f "delims=" %%D in ('"%PICKER_EXE%" --region israel-and-palestine --keep-pbf=false') do set "DATA_DIR=%%D"
+  
+  if "!DATA_DIR!"=="" (
+    echo.
+    echo Israel demo map setup failed.
+    pause
+    exit /b 1
+  )
+  set "NAV_SERVER_DATA_DIR=!DATA_DIR!"
+)
 
 if not defined NAV_SERVER_DATA_DIR if not defined DEV_REGION_DIR (
   echo.
