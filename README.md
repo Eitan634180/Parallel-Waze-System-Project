@@ -1,15 +1,15 @@
-# 🚗 Parallel Waze System - Executive Project Presentation
+# <img src="client/public/assets/logo.png" width="30" height="30"> Parallel Waze System - Executive Project Presentation
 
 Welcome to the **Parallel Waze System**, a high-performance, real-time navigation and traffic simulation engine built from the ground up. This document is designed as a comprehensive presentation guide, detailing every aspect of the project's architecture, features, and underlying algorithms.
 
 ---
 
-## 🌟 1. System Overview: What the System Does
+## 🌟 1. System Overview
 The Parallel Waze System is a custom-built, full-stack navigation platform that simulates a highly active road network. It goes beyond simple point-A to point-B routing by introducing **real-time traffic dynamics, live driver feedback loops, customizable planning, and concurrent background rerouting**. 
 
 **Primary Objective:** To demonstrate advanced backend concurrency, efficient spatial graph algorithms, and real-time bidirectional WebSocket communication in a complex, live environment.
 
-### 🎯 Key Capabilities:
+### Key Capabilities:
 * **Interactive Navigation Dashboard:** A sleek Web UI allowing users to set routes, observe simulated drivers, and alter global traffic.
 * **Intelligent Route Planning:** Calculates the most efficient path utilizing highly optimized mapping data extracted directly from OpenStreetMap (OSM).
 * **Live Traffic Propagation:** As cars "drive" through the simulation, their real-time speeds dynamically alter the "weight" (ETA) of the roads they use, propagating traffic jams across the network organically.
@@ -126,7 +126,7 @@ Routing algorithms are computationally heavy. If the main server thread halted t
 
 ---
 
-## 🚀 4. Getting Started / How to Run
+## 🚀 4. How to Run
 
 Launching the entire system (Building the map, compiling the server, and serving the client) is fully automated.
 
